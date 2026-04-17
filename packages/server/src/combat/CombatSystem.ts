@@ -568,13 +568,19 @@ export class CombatSystem {
     const allFlees: FleeResult[] = [];
     const endedEncounterIds: string[] = [];
     const allTelegraphs: TelegraphBroadcast[] = [];
+    const newEncounterRoomIds: string[] = [];
 
     for (const [encId, encounter] of this.encounters) {
+      // Track encounters entering their first tick
+      const isFirstTick = encounter.tickCount === 0;
       const result = this.resolveEncounterTick(encounter);
       allEvents.push(...result.events);
       allFlees.push(...result.fleeResults);
       if (result.telegraphs) {
         allTelegraphs.push(...result.telegraphs);
+      }
+      if (isFirstTick) {
+        newEncounterRoomIds.push(encounter.roomId);
       }
       if (result.ended) {
         endedEncounterIds.push(encId);
@@ -586,7 +592,7 @@ export class CombatSystem {
       this.cleanupEncounter(encId);
     }
 
-    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs };
+    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs, newEncounterRoomIds };
   }
 
   private resolveEncounterTick(encounter: CombatEncounter): {
@@ -1155,6 +1161,11 @@ export class CombatSystem {
     // 10. Clear queued actions for next tick
     for (const c of combatants) {
       this.queuedActions.delete(c.id);
+    }
+
+    // Stamp round number on all events for display grouping
+    for (const e of events) {
+      e.roundNumber = encounter.tickCount;
     }
 
     return { events, fleeResults, ended, telegraphs };

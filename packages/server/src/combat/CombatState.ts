@@ -192,6 +192,8 @@ export interface CombatEvent {
   breakdown?: import('./damage.js').DamageBreakdown;
   /** Room where this event occurred — used for room-scoped delivery. */
   roomId?: string;
+  /** Encounter round number (1-based) — used for round separator display. */
+  roundNumber?: number;
 }
 
 export interface FleeResult {
@@ -215,6 +217,8 @@ export interface TickResult {
   fleeResults: FleeResult[];
   endedEncounterIds: string[];
   telegraphs?: TelegraphBroadcast[];
+  /** Room IDs of encounters that just started (first tick). */
+  newEncounterRoomIds: string[];
 }
 
 /** No-op tick result when there's no active combat. */
@@ -223,6 +227,7 @@ export const EMPTY_TICK_RESULT: TickResult = {
   fleeResults: [],
   endedEncounterIds: [],
   telegraphs: [],
+  newEncounterRoomIds: [],
 };
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */

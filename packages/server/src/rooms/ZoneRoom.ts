@@ -1479,6 +1479,26 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Send "combat begins" intro for newly started encounters
+    if (tickResult.newEncounterRoomIds.length > 0) {
+      const introMsg = {
+        text: '⚔️ Combat begins!',
+        type: 'combat' as const,
+        timestamp: Date.now(),
+      } satisfies NarrateMessage;
+      for (const roomId of tickResult.newEncounterRoomIds) {
+        for (const [sid, ps] of this.players) {
+          if (ps.currentRoomId !== roomId) continue;
+          if (this.downingSystem.isPlayerDowned(sid)) continue;
+          if (this.pendingDeathTeleport.has(sid)) continue;
+          const client = this.findClient(sid);
+          if (client) {
+            this.sendNarrate(client, introMsg);
+          }
+        }
+      }
+    }
+
     // Classify and batch events per GDD §6.6
     const classifiedEvents = tickResult.events.map(event => {
       const isPlayerActor = this.players.has(event.actorId);
@@ -1493,9 +1513,35 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send batched combat narrations scoped by room (Bug 1/6 fix).
     // Only players in the same room as the encounter see the events.
     // Downed players are excluded to prevent post-death combat bleed.
+    // Track which room+round combos have had a round separator sent.
+    const sentRoundSeparators = new Set<string>();
+
     for (const batched of batchedEvents) {
       const narrationText = narrateBatchedEvent(batched);
       const eventRoomId = batched.event.roomId;
+      const roundNumber = batched.event.roundNumber;
+
+      // Send round separator before the first event of each room+round
+      if (eventRoomId && roundNumber != null) {
+        const headerKey = `${eventRoomId}:${roundNumber}`;
+        if (!sentRoundSeparators.has(headerKey)) {
+          sentRoundSeparators.add(headerKey);
+          const roundMsg = {
+            text: '──────────',
+            type: 'combat' as const,
+            timestamp: Date.now(),
+          } satisfies NarrateMessage;
+          for (const [sid, ps] of this.players) {
+            if (ps.currentRoomId !== eventRoomId) continue;
+            if (this.downingSystem.isPlayerDowned(sid)) continue;
+            if (this.pendingDeathTeleport.has(sid)) continue;
+            const client = this.findClient(sid);
+            if (client) {
+              this.sendNarrate(client, roundMsg);
+            }
+          }
+        }
+      }
       const msg = {
         text: narrationText,
         type: 'combat' as const,
