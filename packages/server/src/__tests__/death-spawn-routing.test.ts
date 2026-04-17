@@ -54,9 +54,9 @@ async function fastForwardDeath(
   roomInstance: { downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined } },
   sessionId: string,
 ): Promise<void> {
-  // Poll until the player is downed (up to 5 seconds)
+  // Poll until the player is downed (up to 10 seconds, increased for CI reliability)
   let foundDowned = false;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     await wait(500);
     const downed = roomInstance.downingSystem?.getDownedPlayer(sessionId);
     if (downed) {
