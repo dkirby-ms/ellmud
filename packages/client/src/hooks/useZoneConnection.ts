@@ -257,12 +257,12 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           || msg.target === 'zone:the-reliquary'
           || msg.target === 'zone:the-bloom-observatory'
           || msg.target === 'zone:the-carrion-court';
+        dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         if (switchingToHub) {
           if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             dispatch({ type: 'CLEAR_MESSAGES' });
           }
           dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
           // Don't overwrite death or permadeath state — overlays must stay visible
           if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             updateOverlay(INITIAL_OVERLAY);
@@ -385,6 +385,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         // Ensure inCombat is set when we receive combatant data
         if (msg.combatants.length > 0) {
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+        } else {
+          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {

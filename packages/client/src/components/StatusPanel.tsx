@@ -319,7 +319,7 @@ function EnvironmentTab({
             availableTargets={
               combatCombatants.length > 0
                 ? combatCombatants
-                    .filter(c => combatHostileIds.includes(c.id))
+                    .filter(c => combatHostileIds.includes(c.id) && c.status === 'fighting')
                     .map(c => ({ id: c.id, name: c.name, hp: c.hp, maxHp: c.maxHp }))
                 : roomOccupants.creatures
                     .filter((c) => c.aggressive)
