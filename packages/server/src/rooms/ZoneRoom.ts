@@ -21,6 +21,9 @@ import {
   type EffectiveStatsMessage,
   type TelegraphMessage,
   type ZoneTransferMessage,
+  type CombatStateMessage,
+  type CombatantSnapshot,
+  type CombatantStatus,
   type ExploredRoomData,
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
@@ -916,6 +919,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
       this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
+      this.broadcastCombatState(tickResult);
       this.recordCombatMetrics(tickResult);
 
       // Award use-based skill XP from combat actions (#457)
@@ -1628,6 +1632,76 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           this.broadcastCreatureMovement(creature, flee.fromRoomId, flee.toRoomId);
           creature.currentRoomId = flee.toRoomId;
         }
+      }
+    }
+  }
+
+  // ─── Combat State Broadcast (#467) ─────────────────────────────────────────
+
+  /**
+   * Broadcast COMBAT_STATE snapshots to each player in active encounters.
+   * Unicast per player so hostileIds / playerTargetId are perspective-correct.
+   * Skips ended encounters (already cleaned up by resolveTick).
+   */
+  private broadcastCombatState(tickResult: TickResult): void {
+    const endedSet = new Set(tickResult.endedEncounterIds);
+
+    for (const encounter of this.combatSystem.getActiveEncounters()) {
+      if (endedSet.has(encounter.id)) continue;
+
+      const combatants = this.combatSystem.getEncounterCombatants(encounter.id);
+      if (combatants.length === 0) continue;
+
+      // Build snapshots once per encounter (shared across all recipients)
+      const snapshots: CombatantSnapshot[] = combatants.map(c => {
+        let status: CombatantStatus = 'fighting';
+        if (c.hp <= 0) {
+          status = this.downingSystem.isPlayerDowned(c.id) ? 'downed' : 'dead';
+        }
+
+        const snapshot: CombatantSnapshot = {
+          id: c.id,
+          name: c.name,
+          hp: c.hp,
+          maxHp: c.maxHp,
+          isPlayer: c.isPlayer,
+          isNPC: !c.isPlayer,
+          status,
+          currentTarget: c.currentTarget,
+        };
+
+        if (c.windUp) {
+          snapshot.telegraphedAction = {
+            abilityName: c.windUp.abilityName,
+            remainingTicks: c.windUp.remainingTicks,
+            targetId: c.windUp.targetId,
+          };
+        }
+
+        return snapshot;
+      });
+
+      // Unicast to each player in the encounter's room
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId !== encounter.roomId) continue;
+        if (this.downingSystem.isPlayerDowned(sid)) continue;
+        if (this.pendingDeathTeleport.has(sid)) continue;
+
+        const client = this.findClient(sid);
+        if (!client) continue;
+
+        const hostileIds = this.combatSystem.getHostilesInEncounter(sid)
+          .map(h => h.id);
+
+        const playerCombatant = this.combatSystem.getCombatant(sid);
+
+        client.send(MessageTypes.COMBAT_STATE, {
+          encounterId: encounter.id,
+          tick: encounter.tickCount,
+          combatants: snapshots,
+          hostileIds,
+          playerTargetId: playerCombatant?.currentTarget,
+        } satisfies CombatStateMessage);
       }
     }
   }
