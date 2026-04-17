@@ -123,13 +123,14 @@ export function createCombatant(
     shieldBlock?: number;
     dodge?: number;
     level?: number;
+    currentHp?: number;
   },
 ): Combatant {
   const maxHp = opts?.maxHp ?? DEFAULT_PLAYER_STATS.maxHp;
   return {
     id,
     name,
-    hp: maxHp,
+    hp: opts?.currentHp ?? maxHp,
     maxHp,
     attack: opts?.attack ?? DEFAULT_PLAYER_STATS.unarmed,
     armour: opts?.armour ?? DEFAULT_PLAYER_STATS.armour,
@@ -219,6 +220,12 @@ export interface TickResult {
   telegraphs?: TelegraphBroadcast[];
   /** Room IDs of encounters that just started (first tick). */
   newEncounterRoomIds: string[];
+  /** Data from encounters that ended this tick, captured before cleanup. */
+  endedEncounterData: Array<{
+    encounterId: string;
+    roomId: string;
+    playerCombatantHps: Array<{ id: string; hp: number; maxHp: number }>;
+  }>;
 }
 
 /** No-op tick result when there's no active combat. */
@@ -228,6 +235,7 @@ export const EMPTY_TICK_RESULT: TickResult = {
   endedEncounterIds: [],
   telegraphs: [],
   newEncounterRoomIds: [],
+  endedEncounterData: [],
 };
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */

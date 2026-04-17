@@ -194,6 +194,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private playerBaseStatsCache = new Map<string, import('../character/CharacterRepository.js').PlayerCombatStats>();
   /** Cached banked stat points for each player (#457). */
   private playerStatPointsCache = new Map<string, number>();
+  /** Cached player HP from ended encounters so HP persists between fights. */
+  private playerCurrentHp = new Map<string, number>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
   /** Maps playerId → starting zone slug for death respawn fallback (cached on join). */
@@ -699,9 +701,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     });
 
     // Send initial player state (HP, stamina, status effects, posture)
-    // Combatant doesn't exist yet, so we use default stats
+    // Combatant doesn't exist yet, so we use cached HP or default stats
     client.send(MessageTypes.PLAYER_STATE, {
-      hp: 100, // DEFAULT_PLAYER_STATS.maxHp
+      hp: this.playerCurrentHp.get(playerId) ?? 100, // DEFAULT_PLAYER_STATS.maxHp
       maxHp: 100,
       stamina: 0,
       maxStamina: 0,
@@ -808,6 +810,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
       this.pendingDeathTeleport.delete(playerId);
+      this.playerCurrentHp.delete(playerId);
       this.updateMetadata();
     }
     // Clean up follow relationships on disconnect (#403)
@@ -921,6 +924,17 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverCombatResults(tickResult);
       this.broadcastCombatState(tickResult);
       this.recordCombatMetrics(tickResult);
+
+      // Cache surviving player HP from ended encounters so HP persists (#471)
+      for (const ended of tickResult.endedEncounterData) {
+        for (const ph of ended.playerCombatantHps) {
+          if (ph.hp > 0) {
+            this.playerCurrentHp.set(ph.id, ph.hp);
+          } else {
+            this.playerCurrentHp.delete(ph.id);
+          }
+        }
+      }
 
       // Award use-based skill XP from combat actions (#457)
       this.processCombatXp(tickResult);
@@ -1704,6 +1718,25 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         } satisfies CombatStateMessage);
       }
     }
+
+    // Send terminal empty COMBAT_STATE to players in ended encounters (#471)
+    for (const ended of tickResult.endedEncounterData) {
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId !== ended.roomId) continue;
+        if (this.pendingDeathTeleport.has(sid)) continue;
+
+        const client = this.findClient(sid);
+        if (!client) continue;
+
+        client.send(MessageTypes.COMBAT_STATE, {
+          encounterId: ended.encounterId,
+          tick: 0,
+          combatants: [],
+          hostileIds: [],
+          playerTargetId: undefined,
+        } satisfies CombatStateMessage);
+      }
+    }
   }
 
   // ─── Follow System (#403 Phase 1) ─────────────────────────────────────────
@@ -2246,8 +2279,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             const playerOpts = eff
               ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
               : undefined;
+            const cachedHp = this.playerCurrentHp.get(player.sessionId);
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, {
+                ...playerOpts,
+                currentHp: cachedHp,
+              }),
             );
           }
         }
@@ -2291,8 +2328,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             const playerOpts = eff
               ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
               : undefined;
+            const cachedHp = this.playerCurrentHp.get(player.sessionId);
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, {
+                ...playerOpts,
+                currentHp: cachedHp,
+              }),
             );
           }
         }
@@ -3211,7 +3252,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const playerOpts = eff
         ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
         : undefined;
-      const combatant = createCombatant(playerId, displayName, roomId, true, playerOpts);
+      const cachedHp = this.playerCurrentHp.get(playerId);
+      const combatant = createCombatant(playerId, displayName, roomId, true, {
+        ...playerOpts,
+        currentHp: cachedHp,
+      });
       combatant.hp = 1;
 
       // Check if any hostile creatures are still in combat in this room
@@ -3938,7 +3983,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const combatant = this.combatSystem.getCombatant(playerId);
     client.send(MessageTypes.PLAYER_STATE, {
-      hp: combatant?.hp ?? 100,
+      hp: combatant?.hp ?? this.playerCurrentHp.get(playerId) ?? 100,
       maxHp: combatant?.maxHp ?? 100,
       stamina: 0,
       maxStamina: 0,
