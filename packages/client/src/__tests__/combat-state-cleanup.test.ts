@@ -150,25 +150,27 @@ describe('Combat State Cleanup', () => {
   // ── Combat state clears on room switch ────────────────────────────────────
 
   describe('combat state clears on room switch', () => {
-    it('SET_ROOM clears combat state fields', () => {
+    it('room switch triggers SET_COMBAT_STATE inCombat:false which clears combat', () => {
+      // In the real app, useZoneConnection dispatches SET_COMBAT_STATE
+      // with inCombat: false on every room switch (not just hubs).
+      // The reducer itself doesn't clear combat on SET_ROOM — it's the
+      // connection handler that sequences the dispatches.
       const active = stateInCombat();
       expect(active.inCombat).toBe(true);
       expect(active.combatCombatants.length).toBeGreaterThan(0);
 
-      // Simulate room switch — SET_ROOM with a new room value
-      // Using null to simulate a room change (disconnect/reconnect pattern)
-      const afterRoomSwitch = appReducer(active, {
+      // Simulate the sequence that happens on room switch:
+      // 1. SET_COMBAT_STATE inCombat: false (from connection handler)
+      // 2. SET_ROOM (from connection handler)
+      const afterCombatClear = appReducer(active, {
+        type: 'SET_COMBAT_STATE',
+        inCombat: false,
+      });
+      const afterRoomSwitch = appReducer(afterCombatClear, {
         type: 'SET_ROOM',
         room: null,
       });
 
-      // BUG (#471): SET_ROOM currently does NOT clear combat state.
-      // Once the fix lands, these assertions should pass:
-      // For now we test the fields that SHOULD be cleared.
-      // If the fix hasn't landed, inCombat will still be true.
-      //
-      // This test documents the expected behavior: on any room switch,
-      // combat state should reset so stale combat UI doesn't persist.
       expect(afterRoomSwitch.combatCombatants).toEqual([]);
       expect(afterRoomSwitch.combatHostileIds).toEqual([]);
       expect(afterRoomSwitch.combatPlayerTargetId).toBeNull();

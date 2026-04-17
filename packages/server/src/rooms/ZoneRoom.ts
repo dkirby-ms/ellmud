@@ -2620,6 +2620,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         continue;
       }
 
+      // Clear cached HP so respawn starts at full (#471)
+      this.playerCurrentHp.delete(playerId);
+
       // Enter downed state instead of dying immediately
       this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
       this.log(`Player ${this.playerTag(playerId)} downed in ${roomId}`);

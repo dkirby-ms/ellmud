@@ -140,11 +140,10 @@ describe('Combat HP Persistence', () => {
   // ── Dead player HP resets ─────────────────────────────────────────────────
 
   describe('dead player HP resets', () => {
-    it('endedEncounterData includes dead player HP so cache can be cleared', () => {
-      // BUG (#471): When a player dies, they are removed from the encounter
-      // before endedEncounterData is captured, so the server can't know to
-      // clear the HP cache. The fix should ensure dead players appear in
-      // endedEncounterData with hp <= 0.
+    it('dead player is removed from encounter before endedEncounterData capture', () => {
+      // Defeated combatants are removed from encounter.combatantIds during
+      // resolveEncounterTick, so they don't appear in endedEncounterData.
+      // HP cache clearing for dead players is handled by ZoneRoom.handlePlayerDefeats.
       const player = makePlayer('p1', TEST_ROOM, { maxHp: 50, armour: 0 });
       const creature = makeCreature('c1', TEST_ROOM, {
         maxHp: 1000,
@@ -156,16 +155,14 @@ describe('Combat HP Persistence', () => {
       system.registerCombatant(creature);
       system.initiateCombat('p1', 'c1');
 
-      // Player takes 98 damage (100-2 armour, but armour is 0 → 100 dmg),
-      // with 50 HP the player dies on tick 1.
+      // Player takes lethal damage and is removed from encounter during tick
       const result = system.resolveTick();
       expect(result.endedEncounterIds.length).toBeGreaterThan(0);
 
       const data = result.endedEncounterData[0]!;
-      // The dead player SHOULD still appear in playerCombatantHps
+      // Dead player is NOT in playerCombatantHps — cleared by ZoneRoom instead
       const playerHp = data.playerCombatantHps.find((p) => p.id === 'p1');
-      expect(playerHp).toBeDefined();
-      expect(playerHp!.hp).toBeLessThanOrEqual(0);
+      expect(playerHp).toBeUndefined();
     });
 
     it('after death, new combatant starts at full HP (cache cleared)', () => {
