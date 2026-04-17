@@ -38,4 +38,15 @@
 
 **Full Specification:** See `.squad/decisions/decisions.md` (merged from inbox)
 
-**Status:** Ready for implementation
+**Status:** ✅ Completed — PR #469
+
+## Learnings
+
+### Architecture: Message handler wiring pattern
+- Message handlers live in `useZoneConnection.ts`, NOT `ZoneExploration.tsx` (history had wrong file)
+- `connection.ts` has a `MessageHandlers` interface — new messages need: import type, add to interface, wire in both `connect()` and `switchRoom()`
+- Existing `SET_COMBAT_STATE` action only toggles `inCombat` boolean — I added `SET_COMBAT_COMBATANTS` as a separate action to avoid overloading it
+- Jarlaxle's shared types use `CombatantSnapshot` (not `CombatantInfo`) with richer telegraph structure (`{abilityName, remainingTicks, targetId}`)
+- Shared `MessageTypes` count is tested — update `types.test.ts` when adding new message types
+- CombatHUD gets data through prop drilling: store → StatusPanel → EnvironmentTab → CombatHUD
+- Graceful fallback: when no COMBAT_STATE has been received yet, the aggressive creature list is used with placeholder HP (100/100)

@@ -32,4 +32,16 @@
 
 **Full Specification:** See `.squad/decisions/decisions.md` (merged from inbox)
 
-**Status:** Ready for implementation
+**Status:** ✅ Implemented — PR #469
+
+## Learnings
+
+### COMBAT_STATE Implementation (2026-04-17)
+
+- **Unicast pattern**: COMBAT_STATE is sent per-player (not broadcast) so `hostileIds` and `playerTargetId` are perspective-correct. Same pattern used for EFFECTIVE_STATS.
+- **Broadcast timing**: `broadcastCombatState()` runs in `update()` right after `deliverCombatResults()`, inside the `hasActiveEncounters()` guard — no broadcast when combat is idle.
+- **CombatSystem accessors added**: `getActiveEncounters()` and `getEncounterCombatants(encounterId)` — these iterate the private maps without exposing internals.
+- **Status derivation**: Combatant status (`fighting`/`downed`/`dead`) is derived from `hp <= 0` + `downingSystem.isPlayerDowned()`. Downed players and pending-death-teleport players are excluded from receiving the message.
+- **Shared types location**: `packages/shared/src/index.ts` — all message interfaces and `MessageTypes` constant live here. Build with `npm run build` in `packages/shared` before server compilation.
+- **Key files**: `ZoneRoom.ts:broadcastCombatState()`, `CombatSystem.ts:getActiveEncounters/getEncounterCombatants`, `shared/index.ts:CombatStateMessage`
+- **Tests**: 156 server test files (3280 tests) all pass. E2e tests require a running server and fail independently.
