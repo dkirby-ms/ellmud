@@ -2378,3 +2378,113 @@ Audit other integration tests for similar timeout issues, especially:
 
 *Decisions merged from inbox on 2026-04-17T15:01:00Z. No duplicates found.*
 >>>>>>> 447f49c (feat: COMBAT_STATE message + CombatHUD wiring (#467))
+
+---
+
+## PR #470 Review — COMBAT_STATE Message + CombatHUD Wiring — Elminster
+
+**Date:** 2026-04-17  
+**PR:** #470 (re-PR of #469, targeting `dev`)  
+**Authors:** Jarlaxle (server), Regis (client), Minsc (tests)  
+**Verdict:** ✅ APPROVE — No revisions requested
+
+### Executive Summary
+
+Elminster completed comprehensive architecture review of Phase A implementation (issue #467). PR #470 implements a clean, server-authoritative COMBAT_STATE message with correct unicast-per-player design. 17 tests verified. No architectural concerns, no implementation issues, no cherry-pick artifacts. Cherry-pick strategy (revert on prod, cherry-pick to dev) worked cleanly.
+
+### Key Approvals
+
+**Server-Side Design (Jarlaxle)**
+- `ZoneRoom.broadcastCombatState()` correctly implements unicast-per-player pattern
+- Each player receives perspective-correct message with player-specific `hostileIds` and `playerTargetId`
+- Proper filtering: skips ended encounters, downed players, pending death teleports
+- `CombatSystem.getActiveEncounters()` and `getEncounterCombatants(encounterId)` safe and clean
+
+**Shared Types**
+- `CombatantStatus`, `CombatantSnapshot`, `CombatStateMessage` well-defined
+- Snapshot contains display-only data (no internal IDs or state)
+- `isPlayer`/`isNPC` mirror existing narration patterns
+- `telegraphedAction` follows GDD §6.5 telegraph contract
+
+**Client-Side State Management (Regis)**
+- New store fields: `combatCombatants`, `combatHostileIds`, `combatPlayerTargetId`
+- `SET_COMBAT_COMBATANTS` action dispatches all three fields atomically
+- Cleanup on combat end: `SET_COMBAT_STATE` with `inCombat: false` clears arrays
+- CombatHUD fallback to `roomOccupants.creatures` preserved for graceful behavior
+- `useZoneConnection` handler properly wired in `connect()` and `switchRoom()`
+
+**Test Coverage (Minsc)**
+- 11 server tests validating `buildCombatStateForPlayer()` contract (snapshot structure, HP updates per tick, combat end cleanup)
+- 6 client tests (3 active + 3 TODO) validating reducer behavior
+- Minor improvement: `fastForwardDeath()` timeout increased 10→20 iterations (5s→10s) for CI reliability
+- No risk: Does not weaken test validity
+
+**Type Safety**
+- All imports use correct `@ellmud/shared` paths
+- No unused imports (lint passes)
+- `MessageTypes` count updated 33→34
+- `types.test.ts` assertion updated to match new count
+
+**Cherry-Pick Verification**
+- Merge conflicts resolved correctly (kept incoming changes)
+- No orphaned code, duplicate logic, or stale references
+- Agent history files updated appropriately
+
+### Architectural Pattern Established
+
+**Per-player unicast with perspective-specific fields** (`hostileIds`, `playerTargetId`) is the correct model for server-authoritative state sync. This pattern should be applied to future state messages.
+
+### Message Flow
+
+```
+Server: resolveTick() → syncCreaturesAfterCombat() → deliverCombatResults()
+                      → broadcastCombatState()  <-- NEW
+                      → recordCombatMetrics()
+
+Per-player unicast: COMBAT_STATE → useZoneConnection.onCombatState()
+                                 → dispatch(SET_COMBAT_COMBATANTS)
+                                 → dispatch(SET_COMBAT_TICK)
+                                 → dispatch(SET_ENEMY_STATUS) [if target exists]
+                                 → dispatch(SET_COMBAT_STATE, inCombat: true)
+
+UI: StatusPanel → CombatHUD → availableTargets from combatCombatants
+                            → enemyStatus from target in combatCombatants
+```
+
+### Risk Assessment
+
+**✅ No Breaking Changes**
+- Existing combat flow unchanged (`broadcastCombatState()` is additive)
+- CombatHUD fallback to `roomOccupants.creatures` preserved
+- No changes to combat resolution logic, downing system, or teleportation
+
+**✅ No Performance Concerns**
+- Snapshot building O(combatants) per encounter — acceptable
+- Unicast loop O(players_in_room) — typical 1-4 players
+- No unnecessary allocations or repeated queries
+
+**✅ No Type Safety Regressions**
+- All new code uses `satisfies` assertions for message types
+- No `any` types introduced
+- Shared types exported correctly
+
+### Recommendations for Follow-Up
+
+1. **Phase B:** Add combatant list to CombatHUD (player + hostile sections) — see issue #467 acceptance criteria
+2. **Future:** Consider rate-limiting COMBAT_STATE if tick rate increases (current 1s/tick is fine)
+3. **Future:** If encounter size grows >20 combatants, consider paginated snapshots (unlikely with current content)
+
+### Team Patterns Validated
+
+- **Test approach:** Minsc's proactive test-writing (with TODO markers) works well — actual implementation matched test expectations perfectly
+- **Quality bar:** No architectural concerns, no implementation issues, no cherry-pick artifacts — this is the expected standard for all PRs
+
+### Next Steps
+
+1. ✅ Merge PR #470 to `dev`
+2. Proceed with Phase B (combatant list UI in CombatHUD)
+3. Monitor production telemetry for COMBAT_STATE message rate (~1 msg/player/second during combat)
+
+---
+
+*Decision merged from inbox on 2026-04-17T19:39:00Z. No duplicates found.*

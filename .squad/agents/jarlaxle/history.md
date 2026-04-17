@@ -471,3 +471,22 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - **Shared types location**: `packages/shared/src/index.ts` — all message interfaces and `MessageTypes` constant live here. Build with `npm run build` in `packages/shared` before server compilation.
 - **Key files**: `ZoneRoom.ts:broadcastCombatState()`, `CombatSystem.ts:getActiveEncounters/getEncounterCombatants`, `shared/index.ts:CombatStateMessage`
 - **Tests**: 156 server test files (3280 tests) all pass. E2e tests require a running server and fail independently.
+
+---
+
+### COMBAT_STATE PR #470 Review — Approved by Elminster (2026-04-17)
+
+**Status:** ✅ APPROVED — No revisions requested
+
+Elminster completed comprehensive architecture review of PR #470 (re-PR of #469 targeting `dev`). No architectural concerns, no implementation issues, no cherry-pick artifacts.
+
+**Review Details:**
+- `ZoneRoom.broadcastCombatState()` correctly implements unicast-per-player pattern with perspective-correct messages
+- `CombatSystem.getActiveEncounters()` and `getEncounterCombatants(encounterId)` safe and clean — no internal state exposure
+- Cherry-pick merge conflicts resolved correctly
+- All 17 tests verified passing
+- Pattern established: Per-player unicast with perspective-specific fields (`hostileIds`, `playerTargetId`) is the correct model for server-authoritative state sync
+
+**No revisions requested. Ready to merge to `dev`.**
+
+See `.squad/decisions/decisions.md` for full review details.

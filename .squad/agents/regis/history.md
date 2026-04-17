@@ -343,3 +343,23 @@ Additionally, ghost rooms (rooms not on current floor) showed spurious badges, a
 - Shared `MessageTypes` count is tested — update `types.test.ts` when adding new message types
 - CombatHUD gets data through prop drilling: store → StatusPanel → EnvironmentTab → CombatHUD
 - Graceful fallback: when no COMBAT_STATE has been received yet, the aggressive creature list is used with placeholder HP (100/100)
+
+---
+
+### COMBAT_STATE PR #470 Review — Approved by Elminster (2026-04-17)
+
+**Status:** ✅ APPROVED — No revisions requested
+
+Elminster completed comprehensive architecture review of PR #470 (re-PR of #469 targeting `dev`). No architectural concerns, no implementation issues, no cherry-pick artifacts.
+
+**Review Details:**
+- Client-side state management (`SET_COMBAT_COMBATANTS` action, atomic dispatch) correctly implemented
+- `useZoneConnection` handler properly wired for both `connect()` and `switchRoom()`
+- CombatHUD fallback to `roomOccupants.creatures` preserves graceful behavior during initial tick
+- Cleanup on combat end (`SET_COMBAT_STATE` with `inCombat: false` clears arrays) works correctly
+- All 6 client tests verified + 11 server tests verified passing
+- Message handler wiring pattern validated as correct
+
+**No revisions requested. Ready to merge to `dev`.**
+
+See `.squad/decisions/decisions.md` for full review details.
