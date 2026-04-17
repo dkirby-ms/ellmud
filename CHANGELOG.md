@@ -1,3 +1,10 @@
+# [0.2.0-dev.55](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.54...v0.2.0-dev.55) (2026-04-17)
+
+
+### Features
+
+* COMBAT_STATE message + CombatHUD wiring ([#467](https://github.com/dkirby-ms/ellmud/issues/467)) ([9b7a2a6](https://github.com/dkirby-ms/ellmud/commit/9b7a2a6b68ccaa7b5e78af29860a9cc7568666f1))
+
 # [0.2.0-dev.54](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.53...v0.2.0-dev.54) (2026-04-17)
 
 
