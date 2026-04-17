@@ -29,6 +29,7 @@ import type {
   InventoryUpdateMessage,
   HelpDataMessage,
   EffectiveStatsMessage,
+  CombatStateMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -342,6 +343,48 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onEffectiveStats: (msg: EffectiveStatsMessage) => {
         if (!disposed) {
           dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
+          if (msg.baseStats) {
+            dispatch({
+              type: 'SET_BASE_STATS',
+              baseStats: msg.baseStats,
+              statPointsAvailable: msg.statPointsAvailable ?? 0,
+            });
+          }
+        }
+      },
+      onCombatState: (msg: CombatStateMessage) => {
+        if (disposed) return;
+        dispatch({
+          type: 'SET_COMBAT_COMBATANTS',
+          combatants: msg.combatants,
+          hostileIds: msg.hostileIds,
+          playerTargetId: msg.playerTargetId,
+        });
+        dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
+        // Derive enemy status from the player's current target
+        if (msg.playerTargetId) {
+          const target = msg.combatants.find(c => c.id === msg.playerTargetId);
+          if (target) {
+            const telegraphText = target.telegraphedAction
+              ? (typeof target.telegraphedAction === 'string'
+                  ? target.telegraphedAction
+                  : target.telegraphedAction.abilityName)
+              : null;
+            dispatch({
+              type: 'SET_ENEMY_STATUS',
+              status: {
+                name: target.name,
+                hp: target.hp,
+                maxHp: target.maxHp,
+                hpTier: getHpTier(target.hp, target.maxHp),
+                telegraphedAction: telegraphText,
+              },
+            });
+          }
+        }
+        // Ensure inCombat is set when we receive combatant data
+        if (msg.combatants.length > 0) {
+          dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {
