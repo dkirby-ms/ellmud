@@ -8,7 +8,7 @@ import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
   EquipmentSlots, DisplayItem, CharacterSummary, UserRole, Posture,
-  BaseStatsMessage,
+  BaseStatsMessage, CombatantSnapshot,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
@@ -122,6 +122,10 @@ export interface AppState {
   effectiveStats: EffectiveStats | null;
   baseStats: BaseStatsMessage | null;
   statPointsAvailable: number;
+  /** Live combatant snapshots from COMBAT_STATE messages (#467) */
+  combatCombatants: CombatantSnapshot[];
+  combatHostileIds: string[];
+  combatPlayerTargetId: string | null;
 }
 
 export const initialState: AppState = {
@@ -169,6 +173,9 @@ export const initialState: AppState = {
   effectiveStats: null,
   baseStats: null,
   statPointsAvailable: 0,
+  combatCombatants: [],
+  combatHostileIds: [],
+  combatPlayerTargetId: null,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -201,7 +208,8 @@ export type AppAction =
   | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] }
   | { type: 'SET_COMBAT_STATS'; stats: CombatStats }
   | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats }
-  | { type: 'SET_BASE_STATS'; baseStats: BaseStatsMessage; statPointsAvailable: number };
+  | { type: 'SET_BASE_STATS'; baseStats: BaseStatsMessage; statPointsAvailable: number }
+  | { type: 'SET_COMBAT_COMBATANTS'; combatants: CombatantSnapshot[]; hostileIds: string[]; playerTargetId?: string };
 
 const MAX_MESSAGES = 500;
 
@@ -236,7 +244,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, soundCues: cues.length > MAX_SOUND_CUES ? cues.slice(cues.length - MAX_SOUND_CUES) : cues };
     }
     case 'SET_COMBAT_STATE':
-      return { ...state, inCombat: action.inCombat, ...(action.inCombat ? {} : { enemyStatus: null, combatTick: 0, pendingCombatAction: null }) };
+      return { ...state, inCombat: action.inCombat, ...(action.inCombat ? {} : { enemyStatus: null, combatTick: 0, pendingCombatAction: null, combatCombatants: [], combatHostileIds: [], combatPlayerTargetId: null }) };
     case 'SET_COMBAT_TICK':
       return { ...state, combatTick: action.tick };
     case 'SET_ENEMY_STATUS':
@@ -273,6 +281,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, effectiveStats: action.stats };
     case 'SET_BASE_STATS':
       return { ...state, baseStats: action.baseStats, statPointsAvailable: action.statPointsAvailable };
+    case 'SET_COMBAT_COMBATANTS':
+      return {
+        ...state,
+        combatCombatants: action.combatants,
+        combatHostileIds: action.hostileIds,
+        combatPlayerTargetId: action.playerTargetId ?? state.combatPlayerTargetId,
+      };
     default:
       return state;
   }

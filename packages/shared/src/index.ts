@@ -275,6 +275,40 @@ export interface TelegraphMessage {
   telegraphText: string;
 }
 
+// ─── Combat State Snapshot (Issue #467) ──────────────────────────────────────
+
+/** Status of a combatant in an active encounter. */
+export type CombatantStatus = 'fighting' | 'downed' | 'dead';
+
+/** Per-combatant snapshot sent to the client each combat tick. */
+export interface CombatantSnapshot {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  isPlayer: boolean;
+  isNPC: boolean;
+  status: CombatantStatus;
+  currentTarget?: string;
+  /** Active telegraph wind-up (GDD §6.5). */
+  telegraphedAction?: {
+    abilityName: string;
+    remainingTicks: number;
+    targetId: string;
+  };
+}
+
+/** Server → Client: Full combatant snapshot broadcast each combat tick (#467). */
+export interface CombatStateMessage {
+  encounterId: string;
+  tick: number;
+  combatants: CombatantSnapshot[];
+  /** IDs of combatants hostile to the receiving player. */
+  hostileIds: string[];
+  /** The receiving player's current auto-attack target. */
+  playerTargetId?: string;
+}
+
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
 
 /** Summary of a character for list/select screens. */
@@ -388,6 +422,7 @@ export const MessageTypes = {
   ROOM_OCCUPANTS: 'room_occupants',
   FLAG_STATE: 'flag_state',
   EFFECTIVE_STATS: 'effective_stats',
+  COMBAT_STATE: 'combat_state',
 
   // Client → Server: who list
   REQUEST_PLAYER_LIST: 'request_player_list',
