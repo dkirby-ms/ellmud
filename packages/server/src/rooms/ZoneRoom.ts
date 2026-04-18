@@ -1113,6 +1113,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
+    // Creature assist: if player attacked a creature, check for assisting creatures.
+    // Use direct currentTarget lookup instead of iterating creatures (O(1), correct
+    // even when player is already in a multi-creature encounter).
+    if (verb === 'attack' && this.combatSystem.isInCombat(playerId)) {
+      const playerCombatant = this.combatSystem.getCombatant(playerId);
+      const targetId = playerCombatant?.currentTarget;
+      if (targetId) {
+        const targetCombatant = this.combatSystem.getCombatant(targetId);
+        if (targetCombatant && !targetCombatant.isPlayer) {
+          this.resolveCreatureAssist(targetId, playerId);
+        }
+      }
+    }
+
     // Record loot pickup metrics for newly acquired items (non-blocking)
     if (trackLoot && prevInventoryIds) {
       for (const [itemId, entry] of player.inventory) {
@@ -2298,6 +2312,47 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const combatantsInCombat = new Set<string>();
     return { playersInRoom, roomExits, noisyRooms, combatantsInCombat };
+  }
+
+  /**
+   * Resolve creature assist after a player attacks a creature.
+   * Finds idle creatures in the same room that should join the fight.
+   */
+  private resolveCreatureAssist(attackedCreatureId: string, attackerPlayerId: string): void {
+    const attackedCreature = this.creatureManager.getCreature(attackedCreatureId);
+    if (!attackedCreature) return;
+
+    const roomCreatures = this.creatureManager.getLivingCreatures()
+      .filter(c => c.currentRoomId === attackedCreature.currentRoomId && c.behaviorState !== 'fleeing')
+      .map(c => ({
+        id: c.id,
+        type: c.type,
+        roomId: c.currentRoomId,
+        assist: c.assist,
+      }));
+
+    const assists = this.combatSystem.resolveAssist(
+      attackedCreatureId,
+      attackerPlayerId,
+      roomCreatures,
+    );
+
+    for (const { assistCreatureId, targetPlayerId } of assists) {
+      const assistCreature = this.creatureManager.getCreature(assistCreatureId);
+      if (!assistCreature) continue;
+
+      // Register assisting creature as combatant if needed
+      if (!this.combatSystem.getCombatant(assistCreatureId)) {
+        const positionType = this.creatureManager.getCreaturePositionType(assistCreatureId);
+        this.combatSystem.registerCombatant(
+          this.creatureManager.toCombatant(assistCreature),
+          positionType,
+        );
+      }
+
+      // Initiate combat between assisting creature and player
+      this.combatSystem.initiateCombat(assistCreatureId, targetPlayerId);
+    }
   }
 
   private processCreatureAction(action: CreatureAction): void {

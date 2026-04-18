@@ -483,21 +483,227 @@ describe('Encounter Joining Logic', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('Creature Assist', () => {
-  test.todo('creature with sameType: true assists when same-type ally attacked');
+  let system: CombatSystem;
 
-  test.todo('creature with all: true assists any creature attacked');
+  beforeEach(() => {
+    system = new CombatSystem(testExitResolver);
+  });
 
-  test.todo('creature with groupTag assists matching tag');
+  test('creature with sameType: true assists when same-type ally attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
 
-  test.todo('creature already in combat does NOT assist');
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+    ];
 
-  test.todo('creature with no assist config does NOT assist');
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
 
-  test.todo('chain assist prevention — A assists B, C does not cascade-assist A');
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
 
-  test.todo('assist only triggers for idle creatures in same room (not adjacent rooms)');
+  test('creature with all: true assists any creature attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
 
-  test.todo('multiple creatures assist simultaneously when ally attacked');
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM },
+      { id: 'c2', type: 'drowned_revenant', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
+
+  test('creature with groupTag assists matching tag', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'groupTag' as const, groupTag: 'pack-alpha' } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'groupTag' as const, groupTag: 'pack-alpha' } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
+
+  test('creature already in combat does NOT assist', () => {
+    const player1 = makePlayer('p1');
+    const player2 = makePlayer('p2');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player1);
+    system.registerCombatant(player2);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    // Put creature2 in combat first
+    const enc1 = system.initiateCombat('p2', 'c2');
+    expect(enc1).toBeDefined();
+
+    // Now attack creature1
+    const enc2 = system.initiateCombat('p1', 'c1');
+    expect(enc2).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('creature with no assist config does NOT assist', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('chain assist prevention — A assists B, C does not cascade-assist A', () => {
+    const player = makePlayer('p1');
+    const creatureA = makeCreature('cA');
+    const creatureB = makeCreature('cB');
+    const creatureC = makeCreature('cC');
+    system.registerCombatant(player);
+    system.registerCombatant(creatureA);
+    system.registerCombatant(creatureB);
+    system.registerCombatant(creatureC);
+
+    const roomCreatures = [
+      { id: 'cA', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'cB', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'cC', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    // Player attacks B
+    const enc1 = system.initiateCombat('p1', 'cB');
+    expect(enc1).toBeDefined();
+
+    // Resolve assists - Both A and C should assist B (since both are idle and have assist: all)
+    const result1 = system.resolveAssist('cB', 'p1', roomCreatures);
+    expect(result1).toBeDefined();
+    expect(result1.length).toBe(2);
+    
+    const assistIds = result1.map(r => r.assistCreatureId).sort();
+    expect(assistIds).toEqual(['cA', 'cC']);
+
+    // Now put A and C into combat
+    system.initiateCombat('cA', 'p1');
+    system.initiateCombat('cC', 'p1');
+
+    // At this point, all three creatures are in combat
+    // If we resolve assists again for B, should get EMPTY because A and C are already in combat
+    const result2 = system.resolveAssist('cB', 'p1', roomCreatures);
+    expect(result2).toBeDefined();
+    expect(result2.length).toBe(0);
+  });
+
+  test('assist only triggers for idle creatures in same room (not adjacent rooms)', () => {
+    const player = makePlayer('p1', TEST_ROOM);
+    const creature1 = makeCreature('c1', TEST_ROOM);
+    const creature2 = makeCreature('c2', ADJACENT_ROOM);
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: ADJACENT_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('multiple creatures assist simultaneously when ally attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    const creature3 = makeCreature('c3');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+    system.registerCombatant(creature3);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c3', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(2);
+    
+    const assistCreatureIds = result.map(r => r.assistCreatureId).sort();
+    expect(assistCreatureIds).toEqual(['c2', 'c3']);
+    
+    result.forEach(r => {
+      expect(r.targetPlayerId).toBe('p1');
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
