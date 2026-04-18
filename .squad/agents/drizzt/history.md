@@ -218,3 +218,99 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - MudPrompt (client) re-renders reactively on PLAYER_STATE, but the scroll log needs explicit narrate messages for status echoes.
 - handlePlayerDeath() is async but called fire-and-forget from tick handlers. Any synchronous state mutations (like deathPenalty) must happen BEFORE the first await to be visible to same-tick observers.
 - death-spawn-routing.test.ts needs polling patterns (not single checks) for async state because Colyseus integration tests share resources under parallel vitest execution.
+
+### 2026-07-23: Reconnection Bug Investigation — Downed Player Browser Refresh
+
+**Bug:** Player refreshes browser while downed → respawns at inn instead of restoring combat state; stale copy left in combat room.
+
+**Root Cause — Two interacting race conditions in ZoneRoom.ts:**
+
+1. **Death-during-disconnect race (primary cause of inn respawn):**
+   - Downed player refreshes → WS disconnects → `onLeave` starts `allowReconnection(client, 30s)`
+   - Game ticks continue: `tickDowningSystem()` keeps draining bleed-out HP for disconnected player
+   - Bleed-out completes → `handlePlayerDeath()` fires → schedules 3s ROOM_SWITCH (to disconnected client — goes nowhere)
+   - 3s timeout: `this.players.delete(playerId)` — player fully removed from server state
+   - New browser connection arrives → `onJoin` → `this.players.has(playerId)` is **FALSE**
+   - Falls through to zone start room logic → loads `lastInn` → player spawns at inn with HP 100
+   - Death state (downed, penalty) effectively lost
+
+2. **Duplicate-join state overwrite (cause of stale copy):**
+   - If new connection arrives BEFORE bleed-out death: `onJoin` detects duplicate, preserves `preservedRoomId`
+   - Creates fresh `PlayerState` with HP 100 at combat room — `this.players.set(playerId, newState)`
+   - Old `onLeave`'s `allowReconnection` throws → catch cleanup runs: `this.downingSystem.removePlayer()`, `this.players.delete()`, decrements `playerCount`
+   - Result: playerCount off by 1, downed state silently cleared, player appears alive in combat room
+
+3. **Missing room occupants broadcast in death handler:**
+   - `handlePlayerDeath`'s 3s delayed cleanup (L2967-2972) deletes player from `this.players` but NEVER calls `broadcastRoomOccupantsUpdate(roomId)`
+   - Other players in room are not notified the dead player left
+   - Stale occupant entry persists in other clients' UI until next room event triggers a refresh
+
+**Key Files Needing Changes:**
+- `packages/server/src/rooms/ZoneRoom.ts`:
+  - `onJoin` (L484-724): Duplicate join path must check/restore downed state from DowningSystem
+  - `onLeave` (L726-820): Cleanup must guard against concurrent `handlePlayerDeath` having already removed the player
+  - `handlePlayerDeath` (L2748-2979): Delayed cleanup must broadcast room occupants update; must handle disconnected player (no client to send ROOM_SWITCH to)
+  - `tickDowningSystem` (L2629): Should pause bleed-out for disconnected players OR handle death-while-disconnected gracefully
+- `packages/server/src/systems/DowningSystem.ts`: May need a `pauseBleedOut()` or `isDisconnected` flag
+
+**Recommended Fix Strategy:**
+- Option A: Pause bleed-out timer while player is disconnected (preserves downed state for reconnection)
+- Option B: On duplicate join, detect if player was downed and restore downed state instead of creating fresh state
+- Both options need: `handlePlayerDeath` must broadcast `broadcastRoomOccupantsUpdate(roomId)` in delayed cleanup, and guard against `this.players` already being deleted by concurrent `onLeave` cleanup
+
+---
+
+### 2026-04-18: Reconnect-While-Downed Bug Investigation (DELIVERED)
+
+**Task:** Investigate browser refresh while downed — reconnection/session management focus.
+
+**Outcome:** ✅ DELIVERED — Root cause identified, decision proposal written to inbox.
+
+**Coordination:** Parallel investigation with Jarlaxle (Systems Dev). Both agents independently identified the same three core failures:
+1. Bleed-out ticking on disconnected players
+2. Missing room occupants broadcast in death cleanup
+3. Downed state not restored on duplicate-join reconnect
+
+**Drizzt Focus:** Reconnection/session handling perspective
+- Decision proposal recommending **Approach A** (pause bleed-out on disconnect)
+- Simplest fix, aligns with `allowReconnection` grace window, avoids new DB state
+- 30s reconnection timeout already limits freeze window
+
+**Jarlaxle Focus:** Combat/death state systems perspective
+- Detailed root cause analysis with 3 interacting failures
+- Test coverage gaps identified
+- Priority fix sequence: broadcast fix → downed-timeout→death → reconnect-restore
+
+**Deliverables:**
+- `.squad/orchestration-log/2026-04-18T09-46-drizzt.md` — Orchestration summary
+- `.squad/decisions/decisions.md` — Both proposals merged (deduplicated)
+- `.squad/log/2026-04-18T09-46-reconnect-downed-bug.md` — Session log
+
+See Jarlaxle's analysis for deeper systems-level breakdown and test strategy.
+
+### 2026-04-18: Disconnect-While-Downed Bug Fix Implementation (COMPLETE)
+
+**Outcome:** ✅ IMPLEMENTED by Jarlaxle (Systems Dev) and Minsc (Tester)
+
+**What was fixed:**
+Jarlaxle implemented 3 fixes in ZoneRoom.ts per the bleed-out-continuation user directive (dkirby-ms, 2026-04-18T10:30):
+1. **Early return for downed players in `onLeave`** — Downed players skip full cleanup on disconnect; bleed-out continues (no free pass)
+2. **Disconnected death cleanup in `handlePlayerDeath`** — New `else` branch handles death while disconnected: full state cleanup (profile save, cache purge, broadcast)
+3. **`cleanupPlayerCaches` helper** — DRYs 9+ cache deletions shared between `onLeave` and `handlePlayerDeath`
+
+All 68 tests passing (40 downing + 23 death-spawn). New test file created with 5 unit tests + 4 integration stubs.
+
+**Significance for Engine Dev:**
+- ZoneRoom.ts is the central combat room coordinator — this fix ensures downed/death flows are symmetric for both connected and disconnected players
+- No API or client changes required — fix scoped to server-side state management
+- `broadcastRoomOccupantsUpdate()` now called from both connected and disconnected death paths — ensures stale occupant lists never persist
+
+**Files modified:**
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+**Orchestration:**
+- `.squad/orchestration-log/2026-04-18T10-38-jarlaxle.md` — Implementation summary
+- `.squad/orchestration-log/2026-04-18T10-38-minsc.md` — Test coverage summary
+- `.squad/decisions.md` — 2 new decisions merged: User directive + implementation strategy
+- `.squad/log/2026-04-18T10-38-disconnect-downed-fix.md` — Session log

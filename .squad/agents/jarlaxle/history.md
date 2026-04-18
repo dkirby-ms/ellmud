@@ -42,6 +42,12 @@
 - Tests serve as regression protection for future changes
 
 ### Learnings
+- **Downed-state disconnect bug (investigated):** When a downed player refreshes their browser, three interacting failures cause them to respawn at the inn with a stale ghost entity left in the combat room. See decisions/inbox/jarlaxle-downed-disconnect-bug.md for full root cause analysis.
+- DowningSystem state is purely in-memory (Map<string, DownedPlayer>) — not persisted to DB, not restored on reconnect
+- Downed players are already removed from CombatSystem (line 2621), so onLeave's `isInCombat` check returns false — combat disconnect marking is skipped
+- onLeave cleanup (lines 787-818) never broadcasts a room occupants update — stale entities remain visible
+- Duplicate-join path (onJoin lines 498-513) creates fresh PlayerState but doesn't check or restore DowningSystem state
+- handleReconnectionTimeout (line 826) has no awareness of downed state — treats downed players like normal disconnects
 - Reusing container infrastructure simpler than custom loot distribution logic
 - Player agency improves with explicit take commands over auto-distribution
 - Corpse item pattern aligns with thematic game feel (visible death consequences)
@@ -50,6 +56,9 @@
 - Flee already updates combatant.roomId in CombatSystem (line 1007); other movement paths need defensive sync via updateCombatantRoom
 - Player movement points to sync: handleCommandMessage goto, moveFollowers, admin teleport
 - Post-combat cooldown (POST_COMBAT_COOLDOWN_TICKS=3) removed — looting now uses corpse containers, so no need to keep combat alive after all enemies die. Combat ends immediately when one side is eliminated.
+- **Disconnect-while-downed fix:** Three-part fix in ZoneRoom.ts — (1) handlePlayerDeath else-branch cleans up disconnected players with full cache/state cleanup + broadcastRoomOccupantsUpdate, (2) onLeave catch block returns early for downed players so bleed-out continues ticking, (3) cleanupPlayerCaches helper DRYs cache deletion shared between onLeave and handlePlayerDeath
+- cleanupPlayerCaches consolidates 9 cache maps + follow/group cleanup — reused in onLeave, handlePlayerDeath connected timeout, and handlePlayerDeath disconnected path
+- broadcastRoomOccupantsUpdate was missing from both connected and disconnected death paths — ghost entities persisted in room occupant lists
 
 ### 2026-04-13: Permadeath Death Handler Implementation
 **Status:** ✅ Complete
@@ -490,3 +499,73 @@ Elminster completed comprehensive architecture review of PR #470 (re-PR of #469 
 **No revisions requested. Ready to merge to `dev`.**
 
 See `.squad/decisions/decisions.md` for full review details.
+
+---
+
+### 2026-04-18: Reconnect-While-Downed Bug Investigation (DELIVERED)
+
+**Task:** Investigate browser refresh while downed — combat/death state focus.
+
+**Outcome:** ✅ DELIVERED — Root cause analysis with 3 interacting failures, decision proposal written to inbox.
+
+**Coordination:** Parallel investigation with Drizzt (Engine Dev). Both agents independently identified the same three core failures:
+1. Bleed-out ticking on disconnected players
+2. Missing room occupants broadcast in death cleanup
+3. Downed state not restored on duplicate-join reconnect
+
+**Jarlaxle Focus:** Combat/death state systems perspective
+- **Failure 1:** onLeave cleanup never broadcasts room occupants update (L786-818)
+- **Failure 2:** Downed players invisible to combat disconnect handling (L730, 743-745) — bleed-out keeps ticking
+- **Failure 3:** Downed state not restored on duplicate-join reconnect (L498-513, 620-628)
+- Test coverage gaps identified: disconnect-during-downed, downed-reconnect-restore, room-broadcast on disconnect
+- Priority fix sequence: broadcast fix (all scenarios) → downed-timeout→death → reconnect-restore
+
+**Drizzt Focus:** Reconnection/session handling perspective
+- Decision proposal recommending **Approach A** (pause bleed-out on disconnect)
+- Simplest fix, aligns with `allowReconnection` grace window, avoids new DB state
+
+**Deliverables:**
+- `.squad/orchestration-log/2026-04-18T09-46-jarlaxle.md` — Orchestration summary
+- `.squad/decisions/decisions.md` — Both proposals merged (deduplicated)
+- `.squad/log/2026-04-18T09-46-reconnect-downed-bug.md` — Session log
+
+See Drizzt's orchestration log for engine/session perspective on recommended fix approach.
+
+### 2026-04-18: Disconnect-While-Downed Bug Fix Implementation (COMPLETE)
+
+**Task:** Implement 3 fixes in ZoneRoom.ts per user directive: bleed-out continuation on disconnect, disconnected death cleanup, cache helper consolidation.
+
+**Outcome:** ✅ COMPLETE — All 68 tests passing (40 downing + 23 death-spawn).
+
+**Implementations:**
+
+1. **Early return for downed players in `onLeave`** (L~2930)
+   - Downed players skip full cleanup on disconnect
+   - Bleed-out continues ticking while disconnected (no free pass per user directive)
+   - Prevents erroneous death penalties or duplicate cleanup calls
+
+2. **Disconnected death cleanup in `handlePlayerDeath`** (L~2710)
+   - New `else` branch: When `findClient(playerId)` returns null, player is confirmed disconnected
+   - Executes full state cleanup: profile save, cache purge, occupant broadcast
+   - Symmetric to connected path — both paths now call `broadcastRoomOccupantsUpdate()`
+
+3. **`cleanupPlayerCaches` helper** (new, L~2750)
+   - DRYs 9+ cache map deletions + follow/group cleanup shared between `onLeave` and `handlePlayerDeath`
+   - Reduces duplication, improves maintainability
+
+**Testing & Verification:**
+- Created test file: `packages/server/src/__tests__/disconnect-while-downed.test.ts`
+- 5 unit tests: bleed-out continuation, death cleanup execution, ghost entity removal, reconnect-after-downed, cache cleanup
+- 4 integration test stubs: full lifecycle, multi-player disconnect, fast reconnect cycling, death penalty persistence
+- All 68 tests in ZoneRoom test suite passing
+- ESLint compliance verified
+
+**Files Modified:**
+- `packages/server/src/rooms/ZoneRoom.ts` (3 fixes)
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+**Related Orchestration:**
+- `.squad/orchestration-log/2026-04-18T10-38-jarlaxle.md` — Implementation orchestration
+- `.squad/orchestration-log/2026-04-18T10-38-minsc.md` — Test orchestration
+- `.squad/log/2026-04-18T10-38-disconnect-downed-fix.md` — Session log
+- `.squad/decisions.md` — 2 new decisions merged (User directive + implementation strategy)
