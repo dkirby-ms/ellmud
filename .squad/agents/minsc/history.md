@@ -16,6 +16,27 @@
 
 **Recent Work (Last 30 Lines):**
 
+### 2026-04-18: Disconnect-While-Downed Tests
+**Status:** ✅ Complete
+
+**What was done:**
+- Created `packages/server/src/__tests__/disconnect-while-downed.test.ts` for the disconnect-while-downed bug fix
+- Group 1: 5 unit tests covering DowningSystem behavior for disconnected players (all passing)
+  - Bleed-out continues without client interaction (fires player_bleed_out after BLEED_OUT_TICKS)
+  - Exact tick timing verified (no early/late bleed-out)
+  - isPlayerDowned lifecycle: true during bleed-out, false after death
+  - removePlayer stops bleed-out and cleans up stabilize channels
+- Group 2: 4 integration test.todo stubs with detailed descriptions for ZoneRoom-level scenarios
+  - Death cleanup for disconnected downed players (ghost entity removal)
+  - Reconnection timeout not interfering with active bleed-out
+  - Ghost entity removal verified by other players' occupant updates
+  - Non-downed disconnect path regression protection
+
+**Key Learnings:**
+- DowningSystem is pure game logic — no connection awareness needed, bleed-out ticks regardless of client state
+- ZoneRoom integration tests require ColyseusTestServer + bootTestServer + combat setup — too complex for test.todo→real test without Jarlaxle's fix landed
+- removePlayer is the key API that ZoneRoom calls on disconnect — unit tests validate it stops bleed-out cleanly
+
 ### 2026-04-13: Permadeath Tests — Reset Model (Not Deletion)
 **Status:** ✅ Complete
 

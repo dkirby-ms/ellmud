@@ -4922,3 +4922,79 @@ Meanwhile, the old `onLeave`'s `allowReconnection` eventually times out. Its cle
 - No test for "downed player disconnects → reconnection timeout → should die"
 - No test for "downed player refreshes → duplicate join → downed state restored"
 - No test for "disconnect cleanup broadcasts room occupants update"
+
+---
+
+# Decision: User Directive — Bleed-out Continuation on Disconnect
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-04-18T10:30:47Z  
+**Status:** Policy (captured for team memory)
+
+## Directive
+
+Disconnected players should NOT get a free pass from bleeding out. Bleed-out timers must continue ticking even when a player is disconnected.
+
+## Rationale
+
+User request. Preserves game balance — players cannot avoid death penalties by refreshing during downed state.
+
+## Implementation Guidance
+
+For the disconnect-while-downed bug fix, focus on:
+1. Properly handling death that occurs while disconnected
+2. Cleaning up ghost entities via `broadcastRoomOccupantsUpdate`
+3. Ensuring `onJoin` for a returning player correctly handles "already dead" state
+
+Do NOT pause bleed-out timers on disconnect.
+
+---
+
+# Decision: Disconnect-while-downed Cleanup Strategy
+
+**Author:** Jarlaxle  
+**Date:** 2026-04-18  
+**Status:** Implemented
+
+## Context
+
+When a downed player disconnects (browser refresh), three interacting bugs left ghost entities and broke reconnection.
+
+## Solution
+
+Implemented three fixes in `packages/server/src/rooms/ZoneRoom.ts`:
+
+### Fix 1: Early Return for Downed Players in `onLeave`
+
+Downed players now skip full cleanup when disconnecting. Bleed-out continues ticking while disconnected (per user directive), preventing erroneous death penalties or duplicate cleanup calls.
+
+### Fix 2: Disconnected Death Cleanup in `handlePlayerDeath`
+
+New `else` branch when `findClient(playerId)` returns null confirms player is disconnected and executes full state cleanup:
+- Profile save
+- Cache purge (follow, group, damage maps)
+- Occupant broadcast to other players
+
+Symmetric to connected path — both paths now call `broadcastRoomOccupantsUpdate()`.
+
+### Fix 3: `cleanupPlayerCaches` Helper
+
+New helper DRYs repeated cache cleanup logic (9+ map deletions + follow/group cleanup) shared between `onLeave` and `handlePlayerDeath`. Reduces duplication, improves maintainability.
+
+## Test Coverage
+
+✅ All 40 downing tests passing  
+✅ All 23 death-spawn tests passing  
+✅ 68 total tests passing  
+✅ New test file: `packages/server/src/__tests__/disconnect-while-downed.test.ts` with 5 unit tests + 4 integration stubs
+
+## Impact
+
+- **Scope:** ZoneRoom.ts only — no API or client changes required
+- **Other agents:** No action needed unless modifying `onLeave` or `handlePlayerDeath` flows
+- **User-facing:** Downed players who disconnect now properly clean up ghost entities on reconnection attempts
+
+## Files Modified
+
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)

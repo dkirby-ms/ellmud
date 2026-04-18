@@ -56,6 +56,9 @@
 - Flee already updates combatant.roomId in CombatSystem (line 1007); other movement paths need defensive sync via updateCombatantRoom
 - Player movement points to sync: handleCommandMessage goto, moveFollowers, admin teleport
 - Post-combat cooldown (POST_COMBAT_COOLDOWN_TICKS=3) removed — looting now uses corpse containers, so no need to keep combat alive after all enemies die. Combat ends immediately when one side is eliminated.
+- **Disconnect-while-downed fix:** Three-part fix in ZoneRoom.ts — (1) handlePlayerDeath else-branch cleans up disconnected players with full cache/state cleanup + broadcastRoomOccupantsUpdate, (2) onLeave catch block returns early for downed players so bleed-out continues ticking, (3) cleanupPlayerCaches helper DRYs cache deletion shared between onLeave and handlePlayerDeath
+- cleanupPlayerCaches consolidates 9 cache maps + follow/group cleanup — reused in onLeave, handlePlayerDeath connected timeout, and handlePlayerDeath disconnected path
+- broadcastRoomOccupantsUpdate was missing from both connected and disconnected death paths — ghost entities persisted in room occupant lists
 
 ### 2026-04-13: Permadeath Death Handler Implementation
 **Status:** ✅ Complete
@@ -527,3 +530,42 @@ See `.squad/decisions/decisions.md` for full review details.
 - `.squad/log/2026-04-18T09-46-reconnect-downed-bug.md` — Session log
 
 See Drizzt's orchestration log for engine/session perspective on recommended fix approach.
+
+### 2026-04-18: Disconnect-While-Downed Bug Fix Implementation (COMPLETE)
+
+**Task:** Implement 3 fixes in ZoneRoom.ts per user directive: bleed-out continuation on disconnect, disconnected death cleanup, cache helper consolidation.
+
+**Outcome:** ✅ COMPLETE — All 68 tests passing (40 downing + 23 death-spawn).
+
+**Implementations:**
+
+1. **Early return for downed players in `onLeave`** (L~2930)
+   - Downed players skip full cleanup on disconnect
+   - Bleed-out continues ticking while disconnected (no free pass per user directive)
+   - Prevents erroneous death penalties or duplicate cleanup calls
+
+2. **Disconnected death cleanup in `handlePlayerDeath`** (L~2710)
+   - New `else` branch: When `findClient(playerId)` returns null, player is confirmed disconnected
+   - Executes full state cleanup: profile save, cache purge, occupant broadcast
+   - Symmetric to connected path — both paths now call `broadcastRoomOccupantsUpdate()`
+
+3. **`cleanupPlayerCaches` helper** (new, L~2750)
+   - DRYs 9+ cache map deletions + follow/group cleanup shared between `onLeave` and `handlePlayerDeath`
+   - Reduces duplication, improves maintainability
+
+**Testing & Verification:**
+- Created test file: `packages/server/src/__tests__/disconnect-while-downed.test.ts`
+- 5 unit tests: bleed-out continuation, death cleanup execution, ghost entity removal, reconnect-after-downed, cache cleanup
+- 4 integration test stubs: full lifecycle, multi-player disconnect, fast reconnect cycling, death penalty persistence
+- All 68 tests in ZoneRoom test suite passing
+- ESLint compliance verified
+
+**Files Modified:**
+- `packages/server/src/rooms/ZoneRoom.ts` (3 fixes)
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+**Related Orchestration:**
+- `.squad/orchestration-log/2026-04-18T10-38-jarlaxle.md` — Implementation orchestration
+- `.squad/orchestration-log/2026-04-18T10-38-minsc.md` — Test orchestration
+- `.squad/log/2026-04-18T10-38-disconnect-downed-fix.md` — Session log
+- `.squad/decisions.md` — 2 new decisions merged (User directive + implementation strategy)

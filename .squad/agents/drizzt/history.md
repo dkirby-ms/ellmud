@@ -287,3 +287,30 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - `.squad/log/2026-04-18T09-46-reconnect-downed-bug.md` — Session log
 
 See Jarlaxle's analysis for deeper systems-level breakdown and test strategy.
+
+### 2026-04-18: Disconnect-While-Downed Bug Fix Implementation (COMPLETE)
+
+**Outcome:** ✅ IMPLEMENTED by Jarlaxle (Systems Dev) and Minsc (Tester)
+
+**What was fixed:**
+Jarlaxle implemented 3 fixes in ZoneRoom.ts per the bleed-out-continuation user directive (dkirby-ms, 2026-04-18T10:30):
+1. **Early return for downed players in `onLeave`** — Downed players skip full cleanup on disconnect; bleed-out continues (no free pass)
+2. **Disconnected death cleanup in `handlePlayerDeath`** — New `else` branch handles death while disconnected: full state cleanup (profile save, cache purge, broadcast)
+3. **`cleanupPlayerCaches` helper** — DRYs 9+ cache deletions shared between `onLeave` and `handlePlayerDeath`
+
+All 68 tests passing (40 downing + 23 death-spawn). New test file created with 5 unit tests + 4 integration stubs.
+
+**Significance for Engine Dev:**
+- ZoneRoom.ts is the central combat room coordinator — this fix ensures downed/death flows are symmetric for both connected and disconnected players
+- No API or client changes required — fix scoped to server-side state management
+- `broadcastRoomOccupantsUpdate()` now called from both connected and disconnected death paths — ensures stale occupant lists never persist
+
+**Files modified:**
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+**Orchestration:**
+- `.squad/orchestration-log/2026-04-18T10-38-jarlaxle.md` — Implementation summary
+- `.squad/orchestration-log/2026-04-18T10-38-minsc.md` — Test coverage summary
+- `.squad/decisions.md` — 2 new decisions merged: User directive + implementation strategy
+- `.squad/log/2026-04-18T10-38-disconnect-downed-fix.md` — Session log
