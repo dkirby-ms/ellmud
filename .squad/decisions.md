@@ -4998,3 +4998,192 @@ New helper DRYs repeated cache cleanup logic (9+ map deletions + follow/group cl
 
 - `packages/server/src/rooms/ZoneRoom.ts`
 - `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+---
+
+# Directive: Model Preference and Combat Architecture Redesign
+
+**Date:** 2026-04-18  
+**Source:** User directive (dkirby-ms via Copilot)  
+**Status:** Guidance for future work
+
+## Model Preference
+
+**What:** Use premium models (Claude Sonnet, Claude Opus) instead of GPT-5.2 for research and design tasks.
+
+**Why:** Research and architecture design benefit from higher-quality reasoning and deeper analysis. Premium models produce more thorough, well-reasoned proposals.
+
+**Applied to:** Combat encounter redesign research (this session) — Elminster research task executed with upgraded model.
+
+---
+
+## Combat Architecture Redesign Directive
+
+**What:** The current room-scoped encounter model must change to allow multiple independent fights in the same room. Not every entity should auto-join when someone attacks.
+
+**Why:** Classic MUD behavior — combat is between specific entities, not governed by room membership. Current Ellmud forces all combat in a shared room to merge into one encounter.
+
+**Implementation:** See `.squad/decisions.md` — Architecture Proposal: Combat Encounter Model Redesign (Elminster)
+
+---
+
+# PR #474 Review & Re-review: disconnect-while-downed Fix
+
+**Date:** 2026-04-18  
+**PR:** #474 — "fix: handle disconnect-while-downed — eliminate ghost entities and preserve bleed-out"  
+**Author:** Jarlaxle  
+**Final Verdict:** ✅ APPROVED (after addressing blocking issues)
+
+## Initial Review (REQUEST CHANGES)
+
+### What Was Good
+- `onLeave` early-returns on downed player reconnection timeout (bleed-out continues, no free pass)
+- `handlePlayerDeath` now has disconnected-player branch with full cleanup
+- Connected death cleanup also broadcasts occupants update
+
+### Blocking Issues Identified
+1. **Downed state not restored on duplicate-join reconnect:** `onJoin` sent fresh PLAYER_STATE (HP=100) without downed overlay
+2. **`onLeave` cleanup didn't broadcast occupants:** Other clients retained stale occupant entries
+
+### Non-blocking Recommendations
+- Clean up stale `sessionId → playerId` entries in map after bleed-out
+
+---
+
+## Re-review (APPROVED)
+
+### Issues Addressed
+1. ✅ **Blocking #1:** Fixed. `onJoin` now checks `downingSystem.getDownedPlayer(playerId)` and re-sends PLAYER_STATE with correct HP + downed OVERLAY_STATE
+2. ✅ **Blocking #2:** Fixed. `onLeave` captures roomId and calls `broadcastRoomOccupantsUpdate(roomId)` after deletion
+3. ✅ **Non-blocking:** Implemented. Disconnected-death cleanup removes all stale `sessionId → playerId` mappings
+
+### New Issues
+- None found. Reconnect narration differs from initial downed narration, but overlay `state: 'downed'` is consistent.
+
+### Test Status
+- ✅ `npm -w packages/server test` passing
+
+## Impact
+- **Scope:** ZoneRoom.ts only (no API or client changes)
+- **Other agents:** No action required unless modifying `onLeave` or `handlePlayerDeath` flows
+- **User-facing:** Downed players who disconnect now properly clean up ghost entities on reconnection
+
+## Files Modified
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/disconnect-while-downed.test.ts` (new)
+
+
+---
+
+# Architecture Proposal: Combat Encounter Model Redesign
+
+**Author:** Elminster (Lead / Architect)  
+**Date:** 2026-04-18  
+**Status:** PROPOSAL — awaiting team review  
+**Scope:** CombatSystem, CombatState, ZoneRoom, creature AI, client store, shared types
+
+## Executive Summary
+
+The current room-scoped encounter model forces all combat in a shared room to merge into one encounter. This violates classic MUD behavior where multiple independent fights coexist in the same room.
+
+**Root cause:** `CombatSystem.findEncounterInRoom()` returns the first encounter found and adds all new combatants to it, regardless of who they're fighting.
+
+**Solution:** Replace room-scoped lookup with three targeted methods:
+1. `findEncounterForCombatant(id)` — what encounter is this entity in?
+2. `findEncounterWithTarget(id)` — what encounter is the target in?
+3. `findEncountersInRoom(roomId)` — find all encounters for room-scoped events
+
+**New join logic:** When A attacks B:
+- If A is in an encounter → add B to that encounter
+- Else if B is in an encounter → add A to that encounter
+- Else create a new encounter with both
+
+## Key Design Decisions
+
+### Decision 1: Keep Encounter Objects (Don't Go Pure Pointer-Based)
+
+**Choice:** Keep `CombatEncounter` but make it target-scoped instead of room-scoped.
+
+**Rationale:** Encounter objects provide valuable bookkeeping:
+- Threat tables scoped to an encounter (per-fight, not global)
+- Tick counting and timeout per encounter
+- Clean encounter-end detection
+- COMBAT_STATE broadcast scoping
+
+Classic MUDs lacked these because they had simpler combat. Ellmud's simultaneous tick resolution, threat tables, and position system benefit from encounter grouping.
+
+### Decision 2: Join-By-Target, Not Join-By-Room
+
+**Choice:** You join an encounter by attacking someone in it, never by room membership alone.
+
+**Rationale:** This is the entire point of the redesign. Walking into a room with a fight makes you an observer, not a combatant.
+
+### Decision 3: Creature Assist is Template-Configured
+
+**Choice:** Assist behavior is per-creature-template, not a system-wide rule.
+
+**Rationale:** Different creatures have different social behavior:
+- Goblins assist other goblins (`sameType: true`)
+- Pack animals assist anything (`all: true`)
+- Solo predators don't assist anyone
+- Custom groups share `groupTag: 'cultist'`
+
+### Decision 4: AoE Merges Encounters
+
+**Choice:** When an AoE hits creatures in different encounters, those encounters merge.
+
+**Rationale:** Creates meaningful risk for AoE usage in crowded rooms. Also intuitive — if your fireball hits creatures from two different groups, you fight all of them.
+
+### Decision 5: Assist Only At Initiation
+
+**Choice:** Creature assist checks fire once when attacked, not on every tick.
+
+**Rationale:** Prevents chain-assist cascades. One-time initiation is predictable: attack a goblin, all goblins in room join, done.
+
+### Decision 6: Type-Based Hostility Stays (For Now)
+
+**Choice:** Within an encounter, hostility is determined by `isPlayer` flag (players vs creatures).
+
+**Rationale:** With per-encounter scoping, type-based hostility works correctly. Future refinement: explicit hostility tracking for mixed PvP encounters.
+
+## 4-Phase Migration Plan
+
+| Phase | Goal | Changes |
+|-------|------|---------|
+| **1** | Core refactor: target-scoped lookups | CombatSystem.ts refactor, selective room-entry engage, observer state broadcast |
+| **2** | Creature assist system | Add assist field to CreatureTemplate, implement resolver, configure templates |
+| **3** | AoE encounter merging | `mergeEncounters()` logic, cross-encounter target resolution |
+| **4** | Client observer UX | Read-only combat HUD, click-to-join from observer mode |
+
+**Feature Flag Strategy:** No rollback flag needed. Change is API-preserving. Creature assist defaults to `undefined` (inactive).
+
+## Touch Points & Risk
+
+| File | Change | Risk |
+|------|--------|------|
+| CombatSystem.ts | Core refactor: new lookups, `initiateCombat()`, `mergeEncounters()` | 🔴 **HIGH** |
+| ZoneRoom.ts | Selective room-entry engage, observer state broadcast | 🟡 **MEDIUM** |
+| creatures/types.ts | Add `assist` field | 🟢 **LOW** |
+| creatures/behavior.ts | No changes | 🟢 **NONE** |
+| Client store & HUD | Handle `isParticipant`, render observer mode | 🟡 **MEDIUM** |
+| Shared types | Add `isParticipant` to `CombatStateMessage` | 🟢 **LOW** |
+| Tests | Update combat.test.ts, add multi-encounter.test.ts | 🟡 **MEDIUM** |
+
+## What Stays the Same (Do Not Break)
+
+1. Tick resolution model — simultaneous damage calculation, single-pass O(P+C)
+2. Threat table system — per-creature threat tables with damage-based generation
+3. Position system — front/flank/rear with reachability checks
+4. Wind-up / telegraph system — queued abilities with countdown
+5. COMBAT_STATE broadcast — per-encounter unicast with perspective-correct hostileIds
+6. Creature AI behavior tree — deterministic state machine (idle → alert → hostile → fleeing)
+
+## Status
+
+**PENDING TEAM REVIEW** — Architecture proposal ready for feedback.
+- Scribe to merge inbox → decisions.md ✅
+- Squad lead to schedule review session
+- Target: Phase 1 implementation kickoff
+
+---
+

@@ -16,6 +16,30 @@
 
 **Recent Work (Last 30 Lines):**
 
+### 2026-07-09: Phase 1 Multi-Encounter Tests (Sections A, B, I)
+**Status:** ✅ Complete
+
+**What was done:**
+- Implemented 20 real tests in `packages/server/src/__tests__/multi-encounter.test.ts` replacing test.todo() stubs
+- Section A (Core Multi-Encounter): 6 tests — separate encounters per room, joining existing, isolation (damage + defeat), 3+ concurrent encounters
+- Section B (Encounter Joining Logic): 8 tests — attacker/target join, idempotent re-initiate, merge on cross-encounter attack, threat table + tick count preservation on merge
+- Section I (Backward Compatibility): 6 tests — solo fight, assist-join, flee, threat tables, position system, timeout
+- 12/20 pass against current (pre-refactor) CombatSystem; 8 fail as expected (they test the new multi-encounter API Jarlaxle is building)
+- ESLint clean, 40 test.todo() stubs preserved for Phase 2-4 (sections C-H)
+
+**Key test design decisions:**
+- Tests exercise `findEncountersInRoom()` (new) and `mergeEncounters()` (implicit via initiateCombat) — will compile once Jarlaxle lands the refactor
+- Threat table preservation test builds threat via multiple ticks, then verifies merge keeps both tables intact
+- Merge tick count test creates staggered encounters (3 ticks apart) to verify max() behavior
+- Backward compat tests mirror existing combat.test.ts patterns exactly (flee, position, timeout) to ensure no regressions
+
+## Learnings
+- `findEncounterInRoom` (singular, private) is the current implementation — returns first encounter in room. New API needs `findEncountersInRoom` (plural, public) returning all.
+- Current `initiateCombat` always joins existing room encounter — no concept of separate encounters per room yet
+- ThreatTable has `getAllThreat()` returning `Map<string, number>` — useful for merge verification
+- CombatEncounter.threatTables is `Map<string, ThreatTable>` keyed by creature ID — merge must union both maps
+- `submitAction` for creatures works the same as players — useful for forcing no-strike timeout scenarios
+
 ### 2026-04-18: Disconnect-While-Downed Tests
 **Status:** ✅ Complete
 
@@ -197,6 +221,38 @@
 ---
 
 ## Learnings
+
+### 2026-04-18: Multi-Encounter Combat Test Plan (TDD)
+**Status:** 📋 Test plan complete, skeleton written
+
+**What was done:**
+- Audited all 23 combat-related test files for single-encounter-per-room assumptions
+- Identified 8 test files that WILL BREAK when encounter model changes (combat.test.ts, combat-state-message.test.ts, pvp-combat.test.ts, auto-attack.test.ts, room-positioning.test.ts, creature-wiring.test.ts, phase2-qa.test.ts, creatures.test.ts)
+- Designed 60 new test cases across 9 categories (core multi-encounter, joining logic, creature assist, AoE merge, room entry/aggro, observer pattern, group wipe, edge cases, backward compat)
+- Created test skeleton: `packages/server/src/__tests__/multi-encounter.test.ts` (60 test.todo stubs, all recognized by vitest)
+- Wrote comprehensive test plan: `.squad/decisions/inbox/minsc-combat-test-plan.md`
+
+**Key Architecture Insights:**
+- Current model: `findEncounterInRoom()` returns single encounter; must become `findEncountersInRoom()` returning Set
+- `combatantEncounter` map (combatant→encounter) already supports multi-encounter; no structural change needed there
+- Creature assist is NOT implemented yet — behavior tree has no pack/assist mechanic; this is new functionality
+- AoE ability type (`aoe_attack`) is defined but not implemented — AoE merge tests are forward-looking
+- ThreatTable is per-creature within an encounter — threat preservation during merge requires copying tables to merged encounter
+- Observer pattern requires new `isParticipant` field on COMBAT_STATE messages
+
+**Key File Paths:**
+- `packages/server/src/combat/CombatSystem.ts` — main combat system, `findEncounterInRoom()` at line ~1227
+- `packages/server/src/combat/CombatState.ts` — CombatEncounter interface, `combatantEncounter` map
+- `packages/server/src/combat/ThreatTable.ts` — per-creature threat tracking
+- `packages/server/src/creatures/behavior.ts` — creature behavior tree (idle→alert→hostile→fleeing)
+- `packages/server/src/__tests__/multi-encounter.test.ts` — new test skeleton (60 todos)
+
+**Design Decisions (from user):**
+- Aggro ≠ target switch: aggressive creatures add entering players to threat table but keep current target
+- Freed creatures (after group wipe) return to behavior tree, re-aggro naturally
+- Players can only be in ONE encounter at a time (cross-encounter attack → merge)
+- Creatures already in combat do NOT assist allies in other encounters
+- AoE encounter merge is automatic (no confirmation)
 
 ### 2026-04-15: Death-Spawn-Routing Test Hardening
 - `fastForwardDeath` helper now asserts downed state was reached (no more silent pass if player never enters downed state)
