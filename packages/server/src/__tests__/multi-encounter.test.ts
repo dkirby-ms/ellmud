@@ -979,7 +979,7 @@ describe('Room Entry / Aggro', () => {
     system = new CombatSystem(testExitResolver);
   });
 
-  test('player enters room with aggressive creature in combat → creature aggros but keeps current target', () => {
+  test('player enters room with aggressive creature in combat → creature aggros and joins encounter (target updates)', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     const c1 = makeCreature('c1');
@@ -1071,7 +1071,7 @@ describe('Room Entry / Aggro', () => {
     expect(enc?.combatantIds.has('p1')).toBe(true);
   });
 
-  test('aggressive creature aggros entering player — adds to threat table but does not switch currentTarget', () => {
+  test('aggressive creature aggros entering player — adds to encounter and updates currentTarget', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     const c1 = makeCreature('c1');
@@ -1338,13 +1338,11 @@ describe('Group Wipe / Freed Creatures', () => {
 
     expect(system.isInCombat('c1')).toBe(false);
 
-    // After encounter ends, C1 may be removed from registry - re-register if needed
-    if (!system.getCombatant('c1')) {
-      system.registerCombatant(c1);
-    }
-    if (!system.getCombatant('p2')) {
-      system.registerCombatant(p2);
-    }
+    // After encounter ends, cleanup removes combatants from registry — re-register
+    expect(system.getCombatant('c1')).toBeUndefined();
+    system.registerCombatant(c1);
+    // P2 was not in enc-A, so still registered
+    expect(system.getCombatant('p2')).toBeDefined();
 
     // Simulate behavior tree re-aggro: C1 attacks P2
     const newEncId = system.initiateCombat('c1', 'p2');
@@ -1362,7 +1360,7 @@ describe('Group Wipe / Freed Creatures', () => {
     expect(c1.hp).toBe(c1HpAfterFight);
   });
 
-  test('freed creatures create new encounter — not join existing', () => {
+  test('freed creature joins existing encounter when attacking combatant in one', () => {
     // P1 has 1 HP, will be killed
     const p1 = makePlayer('p1', TEST_ROOM, { maxHp: 1 });
     const p2 = makePlayer('p2');
@@ -1383,19 +1381,18 @@ describe('Group Wipe / Freed Creatures', () => {
     system.resolveTick();
     expect(system.isInCombat('c1')).toBe(false);
 
-    // Re-register C1 if needed (encounter cleanup may remove it)
-    if (!system.getCombatant('c1')) {
-      system.registerCombatant(c1);
-    }
+    // Encounter cleanup removes combatants from registry — re-register
+    expect(system.getCombatant('c1')).toBeUndefined();
+    system.registerCombatant(c1);
 
     // C1 attacks P2 (who is in enc-B)
     const resultEncId = system.initiateCombat('c1', 'p2');
 
     // C1 joins enc-B (Step 4: target in encounter, attacker not)
-    expect(resultEncId).toBe(encIdB);
+    expect(resultEncId).toBe(_encIdB);
 
     const c1Enc = system.getEncounterForCombatant('c1');
-    expect(c1Enc?.id).toBe(encIdB);
+    expect(c1Enc?.id).toBe(_encIdB);
     expect(c1Enc?.combatantIds.has('p2')).toBe(true);
     expect(c1Enc?.combatantIds.has('c2')).toBe(true);
   });
@@ -1588,7 +1585,7 @@ describe('Edge Cases', () => {
     expect(system.isInCombat('c2')).toBe(true);
 
     const p2Enc = system.getEncounterForCombatant('p2');
-    expect(p2Enc?.id).toBe(encIdB);
+    expect(p2Enc?.id).toBe(_encIdB);
   });
 
   test('room has 3+ simultaneous encounters — all tick independently with no cross-contamination', () => {
