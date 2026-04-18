@@ -11,6 +11,7 @@
  */
 
 import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
+import type { CreatureAssistConfig } from '../creatures/types.js';
 import {
   type Combatant,
   type CombatEncounter,
@@ -391,6 +392,78 @@ export class CombatSystem {
       if (c) result.push(c);
     }
     return result;
+  }
+
+  /**
+   * Resolve creature assist — find idle creatures in the same room that should
+   * assist the attacked creature. Returns list of (assistCreatureId, targetPlayerId)
+   * pairs for ZoneRoom to initiate combat with.
+   *
+   * Rules:
+   * - Only idle (not in combat) creatures can assist
+   * - Creature must have an `assist` config
+   * - 'sameType': assists if attacked creature is the same creature type
+   * - 'all': assists any creature in the room
+   * - 'groupTag': assists if attacked creature has matching groupTag
+   * - No chain assists: only assists creatures DIRECTLY targeted by the player
+   * - Only creatures in the SAME room (not adjacent)
+   */
+  resolveAssist(
+    attackedCreatureId: string,
+    attackerPlayerId: string,
+    roomCreatures: Array<{ id: string; type: string; roomId: string; assist?: CreatureAssistConfig }>,
+  ): Array<{ assistCreatureId: string; targetPlayerId: string }> {
+    const attackedCreature = roomCreatures.find(c => c.id === attackedCreatureId);
+    if (!attackedCreature) {
+      this.debug(`resolveAssist: attacked creature ${attackedCreatureId} not found`);
+      return [];
+    }
+
+    // Check if the player is actually targeting this creature (prevents chain assists)
+    const playerCombatant = this.combatants.get(attackerPlayerId);
+    if (!playerCombatant || playerCombatant.currentTarget !== attackedCreatureId) {
+      this.debug(`resolveAssist: player ${attackerPlayerId} not targeting ${attackedCreatureId}, skipping assists`);
+      return [];
+    }
+
+    const assists: Array<{ assistCreatureId: string; targetPlayerId: string }> = [];
+
+    for (const creature of roomCreatures) {
+      // Skip the attacked creature itself
+      if (creature.id === attackedCreatureId) continue;
+
+      // Must be in the same room
+      if (creature.roomId !== attackedCreature.roomId) continue;
+
+      // Must NOT already be in combat
+      if (this.isInCombat(creature.id)) continue;
+
+      // Must have assist config
+      if (!creature.assist) continue;
+
+      // Check assist mode
+      let shouldAssist = false;
+      switch (creature.assist.mode) {
+        case 'all':
+          shouldAssist = true;
+          break;
+        case 'sameType':
+          shouldAssist = creature.type === attackedCreature.type;
+          break;
+        case 'groupTag':
+          if (creature.assist.groupTag && attackedCreature.assist?.groupTag) {
+            shouldAssist = creature.assist.groupTag === attackedCreature.assist.groupTag;
+          }
+          break;
+      }
+
+      if (shouldAssist) {
+        assists.push({ assistCreatureId: creature.id, targetPlayerId: attackerPlayerId });
+        this.debug(`${creature.id} will assist ${attackedCreatureId} vs ${attackerPlayerId}`);
+      }
+    }
+
+    return assists;
   }
 
   // ─── Position System (GDD §6.11) ──────────────────────────────────────────
