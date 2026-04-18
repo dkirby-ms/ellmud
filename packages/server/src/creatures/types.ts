@@ -57,6 +57,20 @@ export interface SpawnRules {
   forbiddenRoomTypes: string[];
 }
 
+// ─── Assist Behavior ─────────────────────────────────────────────────────────
+
+/** Assist behavior — how this creature responds when nearby allies are attacked. */
+export interface CreatureAssistConfig {
+  /** Assist mode:
+   * - 'sameType': assist only creatures of the same type
+   * - 'all': assist any creature attacked in the room
+   * - 'groupTag': assist creatures sharing the same groupTag value
+   */
+  mode: 'sameType' | 'all' | 'groupTag';
+  /** Tag for groupTag mode — creatures with matching tags assist each other. */
+  groupTag?: string;
+}
+
 // ─── Creature Template ───────────────────────────────────────────────────────
 
 export interface CreatureTemplate {
@@ -78,6 +92,8 @@ export interface CreatureTemplate {
   abilities?: CreatureAbility[];
   /** Position type for combat reachability (GDD §6.11). */
   positionType?: CreaturePositionType;
+  /** Assist behavior config. If undefined, creature does NOT assist. */
+  assist?: CreatureAssistConfig;
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -118,6 +134,8 @@ export interface Creature {
   positionType?: CreaturePositionType;
   /** Whether this creature was spawned by the combat sandbox. */
   sandbox?: boolean;
+  /** Assist behavior config (copied from template). */
+  assist?: CreatureAssistConfig;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────
