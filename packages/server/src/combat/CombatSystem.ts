@@ -117,7 +117,8 @@ export class CombatSystem {
 
   /**
    * Initiate combat between attacker and target.
-   * Creates a new encounter or joins existing one in the same room.
+   * Uses join-by-target logic: encounters are scoped by who is fighting whom,
+   * not by room. Multiple independent encounters can exist in the same room.
    * Auto-queues attacker's first action as strike and sets current target.
    * Returns the encounter ID, or null if initiation failed.
    */
@@ -135,17 +136,31 @@ export class CombatSystem {
       return null;
     }
 
-    // Check for existing encounter in the room
-    let encounter = this.findEncounterInRoom(attacker.roomId);
+    const attackerEncId = this.combatantEncounter.get(attackerId);
+    const targetEncId = this.combatantEncounter.get(targetId);
+    const attackerEnc = attackerEncId ? this.encounters.get(attackerEncId) : undefined;
+    const targetEnc = targetEncId ? this.encounters.get(targetEncId) : undefined;
 
-    if (encounter) {
-      // Join existing encounter
-      encounter.combatantIds.add(attackerId);
-      encounter.combatantIds.add(targetId);
-      this.combatantEncounter.set(attackerId, encounter.id);
-      this.combatantEncounter.set(targetId, encounter.id);
+    let encounter: CombatEncounter;
+
+    if (attackerEnc && targetEnc && attackerEnc.id === targetEnc.id) {
+      // Step 1: Both already in the SAME encounter — idempotent, just update target
+      encounter = attackerEnc;
+    } else if (attackerEnc && targetEnc) {
+      // Step 2: Both in DIFFERENT encounters — merge them
+      encounter = this.mergeEncounters(attackerEnc, targetEnc);
+    } else if (attackerEnc) {
+      // Step 3: Attacker in encounter, target not — add target
+      attackerEnc.combatantIds.add(targetId);
+      this.combatantEncounter.set(targetId, attackerEnc.id);
+      encounter = attackerEnc;
+    } else if (targetEnc) {
+      // Step 4: Target in encounter, attacker not — add attacker
+      targetEnc.combatantIds.add(attackerId);
+      this.combatantEncounter.set(attackerId, targetEnc.id);
+      encounter = targetEnc;
     } else {
-      // Create new encounter
+      // Step 5: Neither in encounter — create new
       const encId = `enc-${this.nextEncounterId++}`;
       encounter = {
         id: encId,
@@ -153,7 +168,6 @@ export class CombatSystem {
         combatantIds: new Set([attackerId, targetId]),
         tickCount: 0,
         ticksSinceLastStrike: 0,
-
       };
       this.encounters.set(encId, encounter);
       this.combatantEncounter.set(attackerId, encId);
@@ -1224,11 +1238,48 @@ export class CombatSystem {
     }
   }
 
-  private findEncounterInRoom(roomId: string): CombatEncounter | undefined {
+  /** Return ALL encounters in a room (for observer pattern, room-scoped events). */
+  findEncountersInRoom(roomId: string): CombatEncounter[] {
+    const result: CombatEncounter[] = [];
     for (const enc of this.encounters.values()) {
-      if (enc.roomId === roomId) return enc;
+      if (enc.roomId === roomId) result.push(enc);
     }
-    return undefined;
+    return result;
+  }
+
+  /**
+   * Merge two encounters into one. All combatants from encB move into encA.
+   * Uses max tick counts. Merges threat tables. Deletes encB.
+   */
+  private mergeEncounters(encA: CombatEncounter, encB: CombatEncounter): CombatEncounter {
+    // Move all combatants from encB into encA
+    for (const cid of encB.combatantIds) {
+      encA.combatantIds.add(cid);
+      this.combatantEncounter.set(cid, encA.id);
+    }
+
+    // Preserve the further-progressed tick state
+    encA.tickCount = Math.max(encA.tickCount, encB.tickCount);
+    encA.ticksSinceLastStrike = Math.max(encA.ticksSinceLastStrike, encB.ticksSinceLastStrike);
+
+    // Merge threat tables from encB into encA
+    if (encB.threatTables) {
+      if (!encA.threatTables) {
+        encA.threatTables = new Map();
+      }
+      for (const [creatureId, threatTable] of encB.threatTables) {
+        if (!encA.threatTables.has(creatureId)) {
+          encA.threatTables.set(creatureId, threatTable);
+        }
+        // If encA already has a threat table for this creature, keep it
+        // (the creature was already in encA's fight context)
+      }
+    }
+
+    // Delete encB
+    this.encounters.delete(encB.id);
+    this.debug(`Merged encounter ${encB.id} into ${encA.id} (${encA.combatantIds.size} combatants)`);
+    return encA;
   }
 
   /** Pick the first other combatant in the encounter as default target. */

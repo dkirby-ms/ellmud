@@ -1747,6 +1747,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           .map(h => h.id);
 
         const playerCombatant = this.combatSystem.getCombatant(sid);
+        const isParticipant = this.combatSystem.isInCombat(sid)
+          && this.combatSystem.getEncounterForCombatant(sid)?.id === encounter.id;
 
         client.send(MessageTypes.COMBAT_STATE, {
           encounterId: encounter.id,
@@ -1754,6 +1756,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           combatants: snapshots,
           hostileIds,
           playerTargetId: playerCombatant?.currentTarget,
+          isParticipant,
         } satisfies CombatStateMessage);
       }
     }
