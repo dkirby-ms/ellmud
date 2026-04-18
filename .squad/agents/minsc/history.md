@@ -445,3 +445,9 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - `submitAction` takes `(combatantId, action: CombatAction, targetId?, fleeRoomId?, abilityId?)` — not an object.
 - Default roll `() => 1` always fails dodge/block. Use `() => 0` for flee to succeed.
 - Vitest workspace uses `packages/*` glob — `--project server` filter doesn't work. Run tests by file path instead.
+
+### 2025-07-26 — PR #473 Review Fixes (Revision Task)
+
+- When hoisting a query out of a loop in production code, test mocks using `mockResolvedValueOnce` must be reordered to match the new call sequence. The loadout query moved from inside the per-character loop to before it, so the mock had to shift ahead of the skills/runs mocks.
+- Removing `as unknown as` casts can surface real TS errors downstream (e.g. `string` indexing a known-shape object). Fix by narrowing the key type with `keyof NonNullable<T>`.
+- Duplicate interfaces in shared barrel files compile fine but create maintenance hazards — always search for existing definitions before adding new types.
