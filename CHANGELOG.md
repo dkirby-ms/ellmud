@@ -1,3 +1,10 @@
+# [0.2.0-dev.58](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.57...v0.2.0-dev.58) (2026-04-18)
+
+
+### Features
+
+* **combat:** multi-encounter support — Phase 1 core refactor ([#475](https://github.com/dkirby-ms/ellmud/issues/475)) ([249f596](https://github.com/dkirby-ms/ellmud/commit/249f59649e76290b56a31ebb165bd6f45c6baa15)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
 # [0.2.0-dev.57](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.56...v0.2.0-dev.57) (2026-04-18)
 
 
