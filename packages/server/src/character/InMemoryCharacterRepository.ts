@@ -180,6 +180,18 @@ export class InMemoryCharacterRepository implements CharacterRepository {
       lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,
       topSkills: [],
       totalRuns: 0,
+      baseStats: {
+        maxHp: row.combatStats.maxHp,
+        unarmed: row.combatStats.unarmed,
+        oneHanded: row.combatStats.oneHanded,
+        twoHanded: row.combatStats.twoHanded,
+        ranged: row.combatStats.ranged,
+        shieldBlock: row.combatStats.shieldBlock,
+        dodge: row.combatStats.dodge,
+        armour: row.combatStats.armour,
+      },
+      equipment: {},
+      statPointsAvailable: this.statPointsMap.get(row.id) ?? 0,
     };
   }
 }
