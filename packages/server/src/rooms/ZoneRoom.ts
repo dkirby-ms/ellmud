@@ -723,6 +723,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Send current inventory to client on join
     this.sendInventoryUpdate(client, playerId);
+
+    // Restore downed state for reconnecting players — if the player is still
+    // bleeding out in DowningSystem, override the fresh HP=100 we just sent
+    // and re-show the bleed-out overlay so the client matches server state.
+    const downedRecord = this.downingSystem.getDownedPlayer(playerId);
+    if (downedRecord) {
+      const maxHp = this.playerStatsCache.get(playerId)?.maxHp ?? 100;
+      client.send(MessageTypes.PLAYER_STATE, {
+        hp: downedRecord.currentHp,
+        maxHp,
+        stamina: 0,
+        maxStamina: 0,
+        statusEffects: [],
+        posture: playerState.posture,
+      } satisfies PlayerStateMessage);
+
+      this.sendOverlayState(client, {
+        playerId,
+        state: 'downed',
+        narration: 'You are bleeding out...',
+        timestamp: Date.now(),
+      });
+
+      this.log(`Reconnected player ${this.playerTag(playerId)} is downed — restored bleed-out state`);
+    }
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -780,6 +805,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return; // Player reconnected — keep them in the game
       } catch {
         // Reconnection timeout expired
+        // If player is downed, let bleed-out continue — they don't get a free escape.
+        // handlePlayerDeath (Fix 1) will clean up when bleed-out completes.
+        if (this.downingSystem.isPlayerDowned(playerId)) {
+          this.log(`Reconnection timeout: ${this.playerTag(playerId)} still downed — bleed-out continues`);
+          return; // Exit onLeave entirely — DowningSystem handles death + cleanup
+        }
         this.log(`Reconnection timeout: ${this.playerTag(playerId)} — applying death behavior`);
         this.handleReconnectionTimeout(playerId);
       }
@@ -788,6 +819,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Clean up player (consented leave or timeout expired)
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
+      const roomId = this.players.get(playerId)!.currentRoomId;
+
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
@@ -800,26 +833,32 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
-      this.characterNames.delete(playerId);
-      this.playerStatsCache.delete(playerId);
-      this.playerBaseStatsCache.delete(playerId);
-      this.playerStatPointsCache.delete(playerId);
-      this.playerWeaponTypes.delete(playerId);
-      this.playerFactionSlugs.delete(playerId);
-      this.playerStartingZones.delete(playerId);
-      this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
-      this.pendingDeathTeleport.delete(playerId);
-      this.playerCurrentHp.delete(playerId);
+      this.cleanupPlayerCaches(playerId);
       this.updateMetadata();
+      this.broadcastRoomOccupantsUpdate(roomId);
     }
-    // Clean up follow relationships on disconnect (#403)
-    this.cleanupFollowRelationships(playerId);
-    // Clean up group membership on disconnect (#403 Phase 3)
-    // If leader disconnects → group disbands; otherwise member is removed.
-    this.cleanupGroupMembership(playerId);
     this.playerIds.delete(client.sessionId);
     this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
+  }
+
+  /**
+   * Clean up all cached state for a player. Shared between onLeave and
+   * handlePlayerDeath (disconnected path) to avoid duplication.
+   */
+  private cleanupPlayerCaches(playerId: string): void {
+    this.characterNames.delete(playerId);
+    this.playerStatsCache.delete(playerId);
+    this.playerBaseStatsCache.delete(playerId);
+    this.playerStatPointsCache.delete(playerId);
+    this.playerWeaponTypes.delete(playerId);
+    this.playerFactionSlugs.delete(playerId);
+    this.playerStartingZones.delete(playerId);
+    this.playerFlagsCache.delete(playerId);
+    this.pendingDeathTeleport.delete(playerId);
+    this.playerCurrentHp.delete(playerId);
+    this.cleanupFollowRelationships(playerId);
+    this.cleanupGroupMembership(playerId);
   }
 
   /**
@@ -1656,6 +1695,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
    * Broadcast COMBAT_STATE snapshots to each player in active encounters.
    * Unicast per player so hostileIds / playerTargetId are perspective-correct.
    * Skips ended encounters (already cleaned up by resolveTick).
+   *
+   * Phase 4 performance note: With multiple encounters per room, this sends
+   * N messages per tick per player (one per encounter). Monitor if rooms
+   * routinely have 3+ concurrent encounters.
    */
   private broadcastCombatState(tickResult: TickResult): void {
     const endedSet = new Set(tickResult.endedEncounterIds);
@@ -1708,6 +1751,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           .map(h => h.id);
 
         const playerCombatant = this.combatSystem.getCombatant(sid);
+        const isParticipant = this.combatSystem.isInCombat(sid)
+          && this.combatSystem.getEncounterForCombatant(sid)?.id === encounter.id;
 
         client.send(MessageTypes.COMBAT_STATE, {
           encounterId: encounter.id,
@@ -1715,6 +1760,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           combatants: snapshots,
           hostileIds,
           playerTargetId: playerCombatant?.currentTarget,
+          isParticipant,
         } satisfies CombatStateMessage);
       }
     }
@@ -3011,10 +3057,32 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         // Clean up player from zone state
         this.players.delete(playerId);
         this.ownerPlayerIds.delete(playerId);
+        this.cleanupPlayerCaches(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
+        this.broadcastRoomOccupantsUpdate(roomId);
         this.log(`Player ${this.playerTag(playerId)} died and returned to ${respawnTarget}`);
       }, 3000);
+    } else {
+      // Player died while disconnected — clean up immediately (no overlay/teleport needed).
+      // Inventory is already persisted above (soulbound-only at line 2804).
+      await this.savePlayerProfile(playerId, player);
+      await this.recordRunHistory(playerId, player, false);
+      this.players.delete(playerId);
+      this.ownerPlayerIds.delete(playerId);
+      this.cleanupPlayerCaches(playerId);
+      this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+      this.updateMetadata();
+      this.broadcastRoomOccupantsUpdate(roomId);
+
+      // Clean up stale sessionId → playerId entries for the disconnected player
+      for (const [sessionId, pid] of this.playerIds) {
+        if (pid === playerId) {
+          this.playerIds.delete(sessionId);
+        }
+      }
+
+      this.log(`Player ${this.playerTag(playerId)} died while disconnected — cleaned up`);
     }
 
     // Clean up from downing system
