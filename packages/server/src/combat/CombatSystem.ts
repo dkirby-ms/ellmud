@@ -11,6 +11,7 @@
  */
 
 import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
+import type { CreatureAssistConfig } from '../creatures/types.js';
 import {
   type Combatant,
   type CombatEncounter,
@@ -391,6 +392,78 @@ export class CombatSystem {
       if (c) result.push(c);
     }
     return result;
+  }
+
+  /**
+   * Resolve creature assist — find idle creatures in the same room that should
+   * assist the attacked creature. Returns list of (assistCreatureId, targetPlayerId)
+   * pairs for ZoneRoom to initiate combat with.
+   *
+   * Rules:
+   * - Only idle (not in combat) creatures can assist
+   * - Creature must have an `assist` config
+   * - 'sameType': assists if attacked creature is the same creature type
+   * - 'all': assists any creature in the room
+   * - 'groupTag': assists if attacked creature has matching groupTag
+   * - No chain assists: only assists creatures DIRECTLY targeted by the player
+   * - Only creatures in the SAME room (not adjacent)
+   */
+  resolveAssist(
+    attackedCreatureId: string,
+    attackerPlayerId: string,
+    roomCreatures: Array<{ id: string; type: string; roomId: string; assist?: CreatureAssistConfig }>,
+  ): Array<{ assistCreatureId: string; targetPlayerId: string }> {
+    const attackedCreature = roomCreatures.find(c => c.id === attackedCreatureId);
+    if (!attackedCreature) {
+      this.debug(`resolveAssist: attacked creature ${attackedCreatureId} not found`);
+      return [];
+    }
+
+    // Check if the player is actually targeting this creature (prevents chain assists)
+    const playerCombatant = this.combatants.get(attackerPlayerId);
+    if (!playerCombatant || playerCombatant.currentTarget !== attackedCreatureId) {
+      this.debug(`resolveAssist: player ${attackerPlayerId} not targeting ${attackedCreatureId}, skipping assists`);
+      return [];
+    }
+
+    const assists: Array<{ assistCreatureId: string; targetPlayerId: string }> = [];
+
+    for (const creature of roomCreatures) {
+      // Skip the attacked creature itself
+      if (creature.id === attackedCreatureId) continue;
+
+      // Must be in the same room
+      if (creature.roomId !== attackedCreature.roomId) continue;
+
+      // Must NOT already be in combat
+      if (this.isInCombat(creature.id)) continue;
+
+      // Must have assist config
+      if (!creature.assist) continue;
+
+      // Check assist mode
+      let shouldAssist = false;
+      switch (creature.assist.mode) {
+        case 'all':
+          shouldAssist = true;
+          break;
+        case 'sameType':
+          shouldAssist = creature.type === attackedCreature.type;
+          break;
+        case 'groupTag':
+          if (creature.assist.groupTag && attackedCreature.assist?.groupTag) {
+            shouldAssist = creature.assist.groupTag === attackedCreature.assist.groupTag;
+          }
+          break;
+      }
+
+      if (shouldAssist) {
+        assists.push({ assistCreatureId: creature.id, targetPlayerId: attackerPlayerId });
+        this.debug(`${creature.id} will assist ${attackedCreatureId} vs ${attackerPlayerId}`);
+      }
+    }
+
+    return assists;
   }
 
   // ─── Position System (GDD §6.11) ──────────────────────────────────────────
@@ -1248,10 +1321,117 @@ export class CombatSystem {
   }
 
   /**
+   * Resolve AoE attack encounter merge logic.
+   * Brings all targets into the caster's encounter, merging any other encounters they belong to.
+   * 
+   * Rules:
+   * - If caster is NOT in combat: creates new encounter with caster + all targets
+   * - If caster IS in combat: brings all targets into caster's encounter, merging others as needed
+   * - Skips targets that are dead (hp <= 0) or not in the same room
+   * - Sets caster's currentTarget to first target if not already set
+   * - Does NOT deal damage — that's handled by tick resolution
+   * 
+   * @param casterId - The entity casting the AoE
+   * @param targetIds - All creatures hit by the AoE
+   * @returns The final encounter ID, or null if resolution failed
+   */
+  resolveAoE(casterId: string, targetIds: string[]): string | null {
+    const caster = this.combatants.get(casterId);
+    if (!caster) {
+      this.debug(`resolveAoE failed: caster ${casterId} not found`);
+      return null;
+    }
+
+    // Filter targets: must exist, be alive, and in same room as caster
+    const validTargets: Combatant[] = [];
+    for (const targetId of targetIds) {
+      const target = this.combatants.get(targetId);
+      if (!target) {
+        this.debug(`resolveAoE: skipping missing target ${targetId}`);
+        continue;
+      }
+      if (target.hp <= 0) {
+        this.debug(`resolveAoE: skipping dead target ${targetId}`);
+        continue;
+      }
+      if (target.roomId !== caster.roomId) {
+        this.debug(`resolveAoE: skipping target ${targetId} not in caster room`);
+        continue;
+      }
+      validTargets.push(target);
+    }
+
+    if (validTargets.length === 0) {
+      this.debug(`resolveAoE: no valid targets`);
+      return null;
+    }
+
+    const casterEncId = this.combatantEncounter.get(casterId);
+    const casterEnc = casterEncId ? this.encounters.get(casterEncId) : undefined;
+
+    let finalEncounter: CombatEncounter;
+
+    if (!casterEnc) {
+      // Caster not in combat — create new encounter with caster + all targets
+      const encId = `enc-${this.nextEncounterId++}`;
+      finalEncounter = {
+        id: encId,
+        roomId: caster.roomId,
+        combatantIds: new Set([casterId, ...validTargets.map(t => t.id)]),
+        tickCount: 0,
+        ticksSinceLastStrike: 0,
+      };
+      this.encounters.set(encId, finalEncounter);
+      this.combatantEncounter.set(casterId, encId);
+      for (const target of validTargets) {
+        this.combatantEncounter.set(target.id, encId);
+      }
+      this.debug(`resolveAoE: created new encounter ${encId} with ${finalEncounter.combatantIds.size} combatants`);
+    } else {
+      // Caster is in combat — merge all targets into caster's encounter
+      finalEncounter = casterEnc;
+
+      // Collect all unique encounters from targets (excluding caster's own encounter)
+      const encountersToMerge = new Set<CombatEncounter>();
+      for (const target of validTargets) {
+        const targetEncId = this.combatantEncounter.get(target.id);
+        if (targetEncId && targetEncId !== casterEnc.id) {
+          const targetEnc = this.encounters.get(targetEncId);
+          if (targetEnc) {
+            encountersToMerge.add(targetEnc);
+          }
+        }
+      }
+
+      // Merge all collected encounters into caster's encounter
+      for (const encToMerge of encountersToMerge) {
+        this.mergeEncounters(finalEncounter, encToMerge);
+      }
+
+      // Add any targets not already in an encounter
+      for (const target of validTargets) {
+        if (!finalEncounter.combatantIds.has(target.id)) {
+          finalEncounter.combatantIds.add(target.id);
+          this.combatantEncounter.set(target.id, finalEncounter.id);
+          this.debug(`resolveAoE: added ${target.id} to encounter ${finalEncounter.id}`);
+        }
+      }
+    }
+
+    // Set caster's current target to first valid target if not already set
+    if (!caster.currentTarget && validTargets.length > 0) {
+      caster.currentTarget = validTargets[0].id;
+      this.debug(`resolveAoE: set caster target to ${caster.currentTarget}`);
+    }
+
+    return finalEncounter.id;
+  }
+
+  /**
    * Merge two encounters into one. All combatants from encB move into encA.
    * Uses max tick counts. Merges threat tables. Deletes encB.
    */
-  private mergeEncounters(encA: CombatEncounter, encB: CombatEncounter): CombatEncounter {
+  mergeEncounters(encA: CombatEncounter, encB: CombatEncounter): CombatEncounter {
     // Move all combatants from encB into encA
     for (const cid of encB.combatantIds) {
       encA.combatantIds.add(cid);

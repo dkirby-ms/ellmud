@@ -483,21 +483,227 @@ describe('Encounter Joining Logic', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('Creature Assist', () => {
-  test.todo('creature with sameType: true assists when same-type ally attacked');
+  let system: CombatSystem;
 
-  test.todo('creature with all: true assists any creature attacked');
+  beforeEach(() => {
+    system = new CombatSystem(testExitResolver);
+  });
 
-  test.todo('creature with groupTag assists matching tag');
+  test('creature with sameType: true assists when same-type ally attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
 
-  test.todo('creature already in combat does NOT assist');
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+    ];
 
-  test.todo('creature with no assist config does NOT assist');
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
 
-  test.todo('chain assist prevention — A assists B, C does not cascade-assist A');
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
 
-  test.todo('assist only triggers for idle creatures in same room (not adjacent rooms)');
+  test('creature with all: true assists any creature attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
 
-  test.todo('multiple creatures assist simultaneously when ally attacked');
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM },
+      { id: 'c2', type: 'drowned_revenant', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
+
+  test('creature with groupTag assists matching tag', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'groupTag' as const, groupTag: 'pack-alpha' } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'groupTag' as const, groupTag: 'pack-alpha' } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(1);
+    expect(result[0].assistCreatureId).toBe('c2');
+    expect(result[0].targetPlayerId).toBe('p1');
+  });
+
+  test('creature already in combat does NOT assist', () => {
+    const player1 = makePlayer('p1');
+    const player2 = makePlayer('p2');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player1);
+    system.registerCombatant(player2);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    // Put creature2 in combat first
+    const enc1 = system.initiateCombat('p2', 'c2');
+    expect(enc1).toBeDefined();
+
+    // Now attack creature1
+    const enc2 = system.initiateCombat('p1', 'c1');
+    expect(enc2).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('creature with no assist config does NOT assist', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('chain assist prevention — A assists B, C does not cascade-assist A', () => {
+    const player = makePlayer('p1');
+    const creatureA = makeCreature('cA');
+    const creatureB = makeCreature('cB');
+    const creatureC = makeCreature('cC');
+    system.registerCombatant(player);
+    system.registerCombatant(creatureA);
+    system.registerCombatant(creatureB);
+    system.registerCombatant(creatureC);
+
+    const roomCreatures = [
+      { id: 'cA', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'cB', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'cC', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    // Player attacks B
+    const enc1 = system.initiateCombat('p1', 'cB');
+    expect(enc1).toBeDefined();
+
+    // Resolve assists - Both A and C should assist B (since both are idle and have assist: all)
+    const result1 = system.resolveAssist('cB', 'p1', roomCreatures);
+    expect(result1).toBeDefined();
+    expect(result1.length).toBe(2);
+    
+    const assistIds = result1.map(r => r.assistCreatureId).sort();
+    expect(assistIds).toEqual(['cA', 'cC']);
+
+    // Now put A and C into combat
+    system.initiateCombat('cA', 'p1');
+    system.initiateCombat('cC', 'p1');
+
+    // At this point, all three creatures are in combat
+    // If we resolve assists again for B, should get EMPTY because A and C are already in combat
+    const result2 = system.resolveAssist('cB', 'p1', roomCreatures);
+    expect(result2).toBeDefined();
+    expect(result2.length).toBe(0);
+  });
+
+  test('assist only triggers for idle creatures in same room (not adjacent rooms)', () => {
+    const player = makePlayer('p1', TEST_ROOM);
+    const creature1 = makeCreature('c1', TEST_ROOM);
+    const creature2 = makeCreature('c2', ADJACENT_ROOM);
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'all' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: ADJACENT_ROOM, assist: { mode: 'all' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(0);
+  });
+
+  test('multiple creatures assist simultaneously when ally attacked', () => {
+    const player = makePlayer('p1');
+    const creature1 = makeCreature('c1');
+    const creature2 = makeCreature('c2');
+    const creature3 = makeCreature('c3');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.registerCombatant(creature2);
+    system.registerCombatant(creature3);
+
+    const roomCreatures = [
+      { id: 'c1', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c2', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+      { id: 'c3', type: 'gutterspawn', roomId: TEST_ROOM, assist: { mode: 'sameType' as const } },
+    ];
+
+    const encounterId = system.initiateCombat('p1', 'c1');
+    expect(encounterId).toBeDefined();
+
+    const result = system.resolveAssist('c1', 'p1', roomCreatures);
+    
+    expect(result).toBeDefined();
+    expect(result.length).toBe(2);
+    
+    const assistCreatureIds = result.map(r => r.assistCreatureId).sort();
+    expect(assistCreatureIds).toEqual(['c2', 'c3']);
+    
+    result.forEach(r => {
+      expect(r.targetPlayerId).toBe('p1');
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -505,21 +711,261 @@ describe('Creature Assist', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('AoE Encounter Merge', () => {
-  test.todo('AoE hits creatures in caster encounter only → no merge needed');
+  let system: CombatSystem;
 
-  test.todo('AoE hits creatures in two different encounters → encounters merge');
+  beforeEach(() => {
+    system = new CombatSystem(testExitResolver);
+  });
 
-  test.todo('AoE hits creature not in any encounter → creature joins caster encounter');
+  test('AoE hits creatures in caster encounter only → no merge needed', () => {
+    const p1 = makePlayer('p1');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    system.registerCombatant(p1);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
 
-  test.todo('AoE hits mix of encounter and non-encounter targets → all merge into one');
+    // P1 fighting C1 and C2 in same encounter
+    const encId = system.initiateCombat('p1', 'c1');
+    system.initiateCombat('p1', 'c2');
 
-  test.todo('AoE merge preserves all threat tables from merged encounters');
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
 
-  test.todo('AoE merge handles tick count correctly (uses max)');
+    // AoE targeting creatures already in same encounter
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2']);
 
-  test.todo('AoE merges all 3 encounters in room into one');
+    expect(resultEncId).toBe(encId);
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+    expect(system.getEncounterForCombatant('p1')?.id).toBe(encId);
+    expect(system.getEncounterForCombatant('c1')?.id).toBe(encId);
+    expect(system.getEncounterForCombatant('c2')?.id).toBe(encId);
+  });
 
-  test.todo('AoE from non-encounter player creates encounter with all hit creatures');
+  test('AoE hits creatures in two different encounters → encounters merge', () => {
+    const p1 = makePlayer('p1');
+    const p2 = makePlayer('p2');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    system.registerCombatant(p1);
+    system.registerCombatant(p2);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+
+    // P1 vs C1 (enc-A), P2 vs C2 (enc-B)
+    const encA = system.initiateCombat('p1', 'c1');
+    const encB = system.initiateCombat('p2', 'c2');
+    expect(encA).not.toBe(encB);
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(2);
+
+    // P1 AoE targets both C1 and C2
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2']);
+
+    expect(resultEncId).toBeDefined();
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+
+    // All four combatants in one merged encounter
+    const mergedEnc = system.getEncounterForCombatant('p1');
+    expect(mergedEnc).toBeDefined();
+    expect(mergedEnc?.combatantIds.has('p1')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('p2')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('c1')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('c2')).toBe(true);
+  });
+
+  test('AoE hits creature not in any encounter → creature joins caster encounter', () => {
+    const p1 = makePlayer('p1');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    system.registerCombatant(p1);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+
+    // P1 vs C1, C2 not in combat
+    const encId = system.initiateCombat('p1', 'c1');
+    expect(system.getEncounterForCombatant('c2')).toBeUndefined();
+
+    // P1 AoE targets C1 and C2
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2']);
+
+    expect(resultEncId).toBe(encId);
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+
+    // C2 joined P1's encounter
+    const enc = system.getEncounterForCombatant('c2');
+    expect(enc).toBeDefined();
+    expect(enc?.id).toBe(encId);
+    expect(enc?.combatantIds.has('p1')).toBe(true);
+    expect(enc?.combatantIds.has('c1')).toBe(true);
+    expect(enc?.combatantIds.has('c2')).toBe(true);
+  });
+
+  test('AoE hits mix of encounter and non-encounter targets → all merge into one', () => {
+    const p1 = makePlayer('p1');
+    const p2 = makePlayer('p2');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    const c3 = makeCreature('c3');
+    system.registerCombatant(p1);
+    system.registerCombatant(p2);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+    system.registerCombatant(c3);
+
+    // P1 vs C1 (enc-A), P2 vs C2 (enc-B), C3 not in combat
+    system.initiateCombat('p1', 'c1');
+    system.initiateCombat('p2', 'c2');
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(2);
+    expect(system.getEncounterForCombatant('c3')).toBeUndefined();
+
+    // P1 AoE targets all three creatures
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2', 'c3']);
+
+    expect(resultEncId).toBeDefined();
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+
+    // All five combatants in one merged encounter
+    const mergedEnc = system.getEncounterForCombatant('p1');
+    expect(mergedEnc).toBeDefined();
+    expect(mergedEnc?.combatantIds.has('p1')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('p2')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('c1')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('c2')).toBe(true);
+    expect(mergedEnc?.combatantIds.has('c3')).toBe(true);
+  });
+
+  test('AoE merge preserves all threat tables from merged encounters', () => {
+    const p1 = makePlayer('p1');
+    const p2 = makePlayer('p2');
+    const c1 = makeCreature('c1', TEST_ROOM, { maxHp: 200 });
+    const c2 = makeCreature('c2', TEST_ROOM, { maxHp: 200 });
+    system.registerCombatant(p1);
+    system.registerCombatant(p2);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+
+    // Set up two encounters with threat
+    system.initiateCombat('p1', 'c1');
+    system.initiateCombat('p2', 'c2');
+    system.resolveTick(); // Build up threat
+
+    const encA = system.getEncounterForCombatant('p1');
+    const encB = system.getEncounterForCombatant('p2');
+    expect(encA?.threatTables).toBeDefined();
+    expect(encB?.threatTables).toBeDefined();
+    const c1ThreatOnP1 = encA?.threatTables?.get('c1')?.getThreat('p1') ?? 0;
+    const c2ThreatOnP2 = encB?.threatTables?.get('c2')?.getThreat('p2') ?? 0;
+    expect(c1ThreatOnP1).toBeGreaterThan(0);
+    expect(c2ThreatOnP2).toBeGreaterThan(0);
+
+    // AoE merge
+    system.resolveAoE('p1', ['c1', 'c2']);
+
+    // Merged encounter preserves both threat tables
+    const merged = system.getEncounterForCombatant('p1');
+    expect(merged).toBeDefined();
+    expect(merged?.threatTables?.get('c1')?.getThreat('p1')).toBe(c1ThreatOnP1);
+    expect(merged?.threatTables?.get('c2')?.getThreat('p2')).toBe(c2ThreatOnP2);
+  });
+
+  test('AoE merge handles tick count correctly (uses max)', () => {
+    const p1 = makePlayer('p1');
+    const p2 = makePlayer('p2');
+    const c1 = makeCreature('c1', TEST_ROOM, { maxHp: 200 });
+    const c2 = makeCreature('c2', TEST_ROOM, { maxHp: 200 });
+    system.registerCombatant(p1);
+    system.registerCombatant(p2);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+
+    // Start encounter A first and tick it
+    system.initiateCombat('p1', 'c1');
+    system.resolveTick(); // tick 1
+    system.resolveTick(); // tick 2
+    system.resolveTick(); // tick 3
+
+    const encATickCount = system.getEncounterForCombatant('p1')?.tickCount ?? 0;
+    expect(encATickCount).toBe(3);
+
+    // Start encounter B (tick count = 0)
+    system.initiateCombat('p2', 'c2');
+    const encBTickCount = system.getEncounterForCombatant('p2')?.tickCount ?? 0;
+    expect(encBTickCount).toBe(0);
+
+    // AoE merge
+    system.resolveAoE('p1', ['c1', 'c2']);
+
+    // Merged encounter uses max tick count
+    const merged = system.getEncounterForCombatant('p1');
+    expect(merged).toBeDefined();
+    expect(merged?.tickCount).toBe(Math.max(encATickCount, encBTickCount));
+  });
+
+  test('AoE merges all 3 encounters in room into one', () => {
+    const p1 = makePlayer('p1');
+    const p2 = makePlayer('p2');
+    const p3 = makePlayer('p3');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    const c3 = makeCreature('c3');
+    system.registerCombatant(p1);
+    system.registerCombatant(p2);
+    system.registerCombatant(p3);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+    system.registerCombatant(c3);
+
+    // P1 vs C1, P2 vs C2, P3 vs C3 (3 separate encounters)
+    const encA = system.initiateCombat('p1', 'c1');
+    const encB = system.initiateCombat('p2', 'c2');
+    const encC = system.initiateCombat('p3', 'c3');
+    expect(new Set([encA, encB, encC]).size).toBe(3);
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(3);
+
+    // P1 AoE targets all three creatures
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2', 'c3']);
+
+    expect(resultEncId).toBeDefined();
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+
+    // All six combatants in one merged encounter
+    const merged = system.getEncounterForCombatant('p1');
+    expect(merged).toBeDefined();
+    expect(merged?.combatantIds.size).toBe(6);
+    expect(merged?.combatantIds.has('p1')).toBe(true);
+    expect(merged?.combatantIds.has('p2')).toBe(true);
+    expect(merged?.combatantIds.has('p3')).toBe(true);
+    expect(merged?.combatantIds.has('c1')).toBe(true);
+    expect(merged?.combatantIds.has('c2')).toBe(true);
+    expect(merged?.combatantIds.has('c3')).toBe(true);
+  });
+
+  test('AoE from non-encounter player creates encounter with all hit creatures', () => {
+    const p1 = makePlayer('p1');
+    const c1 = makeCreature('c1');
+    const c2 = makeCreature('c2');
+    system.registerCombatant(p1);
+    system.registerCombatant(c1);
+    system.registerCombatant(c2);
+
+    // P1 not in combat, C1 and C2 registered but not in combat
+    expect(system.getEncounterForCombatant('p1')).toBeUndefined();
+    expect(system.getEncounterForCombatant('c1')).toBeUndefined();
+    expect(system.getEncounterForCombatant('c2')).toBeUndefined();
+
+    // P1 AoE targets C1 and C2
+    const resultEncId = system.resolveAoE('p1', ['c1', 'c2']);
+
+    expect(resultEncId).toBeDefined();
+    expect(system.findEncountersInRoom(TEST_ROOM)).toHaveLength(1);
+
+    // New encounter created with P1, C1, C2
+    const enc = system.getEncounterForCombatant('p1');
+    expect(enc).toBeDefined();
+    expect(enc?.id).toBe(resultEncId);
+    expect(enc?.combatantIds.has('p1')).toBe(true);
+    expect(enc?.combatantIds.has('c1')).toBe(true);
+    expect(enc?.combatantIds.has('c2')).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
