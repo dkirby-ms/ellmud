@@ -1,3 +1,11 @@
+# [0.2.0-dev.57](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.56...v0.2.0-dev.57) (2026-04-18)
+
+
+### Bug Fixes
+
+* handle disconnect-while-downed — eliminate ghost entities and preserve bleed-out ([7f26048](https://github.com/dkirby-ms/ellmud/commit/7f2604864ec269afdfe0dd10c27dbd3ce432e388))
+* restore downed state on reconnect + broadcast on leave cleanup ([f2cc440](https://github.com/dkirby-ms/ellmud/commit/f2cc4406b10d95461246e79dae42998753bc7ed1))
+
 # [0.2.0-dev.56](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.55...v0.2.0-dev.56) (2026-04-18)
 
 

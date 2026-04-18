@@ -307,6 +307,8 @@ export interface CombatStateMessage {
   hostileIds: string[];
   /** The receiving player's current auto-attack target. */
   playerTargetId?: string;
+  /** true = player is in this encounter, false/undefined = observer */
+  isParticipant?: boolean;
 }
 
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────

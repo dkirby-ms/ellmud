@@ -569,3 +569,40 @@ See Drizzt's orchestration log for engine/session perspective on recommended fix
 - `.squad/orchestration-log/2026-04-18T10-38-minsc.md` — Test orchestration
 - `.squad/log/2026-04-18T10-38-disconnect-downed-fix.md` — Session log
 - `.squad/decisions.md` — 2 new decisions merged (User directive + implementation strategy)
+
+### 2026-04-18: Phase 1 — Multi-Encounter Combat Refactor
+**Status:** ✅ Complete
+
+**Task:** Rewrite CombatSystem encounter joining logic to support multiple independent encounters per room. Root cause was `findEncounterInRoom()` returning the first encounter, forcing all combatants into one fight.
+
+**Implementation:**
+1. **CombatSystem.initiateCombat()** — Rewrote with join-by-target logic:
+   - Both in same encounter → idempotent (just set target)
+   - Both in different encounters → merge encounters
+   - Attacker in encounter → add target
+   - Target in encounter → add attacker
+   - Neither → create new encounter
+2. **Removed** `findEncounterInRoom()` — the root problem
+3. **Added** `findEncountersInRoom(roomId)` — returns ALL encounters in a room
+4. **Added** `mergeEncounters(encA, encB)` — merges two encounters preserving threat tables, using max tick counts
+5. **Shared types** — Added `isParticipant?: boolean` to `CombatStateMessage`
+6. **broadcastCombatState** — Now sends `isParticipant` flag per player per encounter
+
+**Key decisions:**
+- Merge uses max(tickCount) and max(ticksSinceLastStrike) to preserve progression
+- Threat tables from both encounters are preserved (encA's take priority on collision)
+- ZoneRoom stabilized-player re-engage logic unchanged — `initiateCombat()` correctly handles adding player to creature's existing encounter
+- Room-entry aggressive creature logic unchanged — already checks `isInCombat()` before initiating
+
+**Test results:** All 3316 tests pass, 0 regressions
+
+**Files Modified:**
+- `packages/server/src/combat/CombatSystem.ts` (initiateCombat rewrite, findEncounterInRoom→findEncountersInRoom+mergeEncounters)
+- `packages/server/src/rooms/ZoneRoom.ts` (broadcastCombatState isParticipant)
+- `packages/shared/src/index.ts` (CombatStateMessage.isParticipant)
+
+## Learnings
+- Join-by-target is backward compatible with join-by-room for the single-encounter case — all existing tests pass without modification
+- The combatantEncounter map is the key invariant: every combatant ID must map to exactly one encounter ID at all times
+- mergeEncounters must update combatantEncounter for ALL moved combatants or lookups break silently
+- broadcastCombatState already iterates all encounters and unicasts per player — multi-encounter support was already structurally present in the broadcast layer
