@@ -1260,7 +1260,8 @@ export class CombatSystem {
 
     // Preserve the further-progressed tick state
     encA.tickCount = Math.max(encA.tickCount, encB.tickCount);
-    encA.ticksSinceLastStrike = Math.max(encA.ticksSinceLastStrike, encB.ticksSinceLastStrike);
+    // Use min: the merged encounter should reflect the most recent strike across both sources
+    encA.ticksSinceLastStrike = Math.min(encA.ticksSinceLastStrike, encB.ticksSinceLastStrike);
 
     // Merge threat tables from encB into encA
     if (encB.threatTables) {
@@ -1270,9 +1271,15 @@ export class CombatSystem {
       for (const [creatureId, threatTable] of encB.threatTables) {
         if (!encA.threatTables.has(creatureId)) {
           encA.threatTables.set(creatureId, threatTable);
+        } else {
+          // Creature exists in both encounters — merge threat values additively.
+          // Prepares for Phase 3 AoE merge scenarios where a creature may have
+          // accumulated threat from multiple encounters.
+          const existingTable = encA.threatTables.get(creatureId)!;
+          for (const [playerId, threat] of threatTable.getAllThreat()) {
+            existingTable.addDamageThreat(playerId, threat);
+          }
         }
-        // If encA already has a threat table for this creature, keep it
-        // (the creature was already in encA's fight context)
       }
     }
 

@@ -1695,6 +1695,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
    * Broadcast COMBAT_STATE snapshots to each player in active encounters.
    * Unicast per player so hostileIds / playerTargetId are perspective-correct.
    * Skips ended encounters (already cleaned up by resolveTick).
+   *
+   * Phase 4 performance note: With multiple encounters per room, this sends
+   * N messages per tick per player (one per encounter). Monitor if rooms
+   * routinely have 3+ concurrent encounters.
    */
   private broadcastCombatState(tickResult: TickResult): void {
     const endedSet = new Set(tickResult.endedEncounterIds);
