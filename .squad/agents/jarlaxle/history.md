@@ -42,6 +42,12 @@
 - Tests serve as regression protection for future changes
 
 ### Learnings
+- **Downed-state disconnect bug (investigated):** When a downed player refreshes their browser, three interacting failures cause them to respawn at the inn with a stale ghost entity left in the combat room. See decisions/inbox/jarlaxle-downed-disconnect-bug.md for full root cause analysis.
+- DowningSystem state is purely in-memory (Map<string, DownedPlayer>) — not persisted to DB, not restored on reconnect
+- Downed players are already removed from CombatSystem (line 2621), so onLeave's `isInCombat` check returns false — combat disconnect marking is skipped
+- onLeave cleanup (lines 787-818) never broadcasts a room occupants update — stale entities remain visible
+- Duplicate-join path (onJoin lines 498-513) creates fresh PlayerState but doesn't check or restore DowningSystem state
+- handleReconnectionTimeout (line 826) has no awareness of downed state — treats downed players like normal disconnects
 - Reusing container infrastructure simpler than custom loot distribution logic
 - Player agency improves with explicit take commands over auto-distribution
 - Corpse item pattern aligns with thematic game feel (visible death consequences)
@@ -490,3 +496,34 @@ Elminster completed comprehensive architecture review of PR #470 (re-PR of #469 
 **No revisions requested. Ready to merge to `dev`.**
 
 See `.squad/decisions/decisions.md` for full review details.
+
+---
+
+### 2026-04-18: Reconnect-While-Downed Bug Investigation (DELIVERED)
+
+**Task:** Investigate browser refresh while downed — combat/death state focus.
+
+**Outcome:** ✅ DELIVERED — Root cause analysis with 3 interacting failures, decision proposal written to inbox.
+
+**Coordination:** Parallel investigation with Drizzt (Engine Dev). Both agents independently identified the same three core failures:
+1. Bleed-out ticking on disconnected players
+2. Missing room occupants broadcast in death cleanup
+3. Downed state not restored on duplicate-join reconnect
+
+**Jarlaxle Focus:** Combat/death state systems perspective
+- **Failure 1:** onLeave cleanup never broadcasts room occupants update (L786-818)
+- **Failure 2:** Downed players invisible to combat disconnect handling (L730, 743-745) — bleed-out keeps ticking
+- **Failure 3:** Downed state not restored on duplicate-join reconnect (L498-513, 620-628)
+- Test coverage gaps identified: disconnect-during-downed, downed-reconnect-restore, room-broadcast on disconnect
+- Priority fix sequence: broadcast fix (all scenarios) → downed-timeout→death → reconnect-restore
+
+**Drizzt Focus:** Reconnection/session handling perspective
+- Decision proposal recommending **Approach A** (pause bleed-out on disconnect)
+- Simplest fix, aligns with `allowReconnection` grace window, avoids new DB state
+
+**Deliverables:**
+- `.squad/orchestration-log/2026-04-18T09-46-jarlaxle.md` — Orchestration summary
+- `.squad/decisions/decisions.md` — Both proposals merged (deduplicated)
+- `.squad/log/2026-04-18T09-46-reconnect-downed-bug.md` — Session log
+
+See Drizzt's orchestration log for engine/session perspective on recommended fix approach.

@@ -4805,3 +4805,120 @@ CharacterSummary is defined twice (line 315 and line 966) with identical content
 - Schema: `packages/server/src/db/migrations/001_schema.sql` (player_loadout table)
 - Type definition: `packages/shared/src/index.ts:315` (CharacterSummary)
 - Query: `packages/server/src/character/PgCharacterRepository.ts:82-163` (list method)
+# Decision: Fix Downed-Player Reconnection Race Conditions
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-07-23
+**Status:** Proposed
+
+## Context
+
+Browser refresh while downed causes two bugs: (1) player respawns at inn instead of restoring combat state, (2) stale player copy remains in combat room. Root cause is race conditions between `tickDowningSystem()`, `handlePlayerDeath()`, `onLeave()`, and `onJoin()` — all operating on the same player state concurrently.
+
+## Decision Needed
+
+**Approach A — Pause bleed-out on disconnect:**
+- `DowningSystem` gets a `disconnected` flag per player; `tick()` skips bleed-out for disconnected players
+- On reconnection (successful `allowReconnection` or duplicate join), clear the flag and resume
+- Pro: Simplest, preserves all state, gives reconnecting player full bleed-out remaining
+- Con: Player is "frozen in time" while disconnected — other players may find that odd
+
+**Approach B — Handle death-while-disconnected as deferred state:**
+- Let bleed-out complete, but if client is disconnected, persist death state to DB rather than sending ROOM_SWITCH
+- On next `onJoin`, check for pending death state and route to respawn immediately
+- Pro: More realistic (you die if you DC in combat)
+- Con: More complex, requires new DB/cache state
+
+## Recommendation
+
+**Approach A** — pause bleed-out on disconnect. It's the simplest fix, aligns with the existing `allowReconnection` grace window design, and avoids new persistence state. The 30s reconnection timeout already limits the freeze window.
+
+Both approaches must also fix the missing `broadcastRoomOccupantsUpdate()` in `handlePlayerDeath`'s delayed cleanup.
+
+## Files Affected
+
+- `packages/server/src/rooms/ZoneRoom.ts` — onJoin, onLeave, handlePlayerDeath, tickDowningSystem
+- `packages/server/src/systems/DowningSystem.ts` — new pause/resume API
+# Downed-State Disconnect Bug — Root Cause Analysis
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2025-07-25  
+**Status:** Investigation complete — fix not yet implemented
+
+---
+
+## Bug Summary
+
+When a player refreshes their browser while in "downed" state:
+1. They respawn at the inn instead of reconnecting to their downed state
+2. A stale copy of their entity remains visible in the combat room
+
+## Root Cause: Three Interacting Failures
+
+### Failure 1: onLeave cleanup never broadcasts room occupants update
+
+**File:** `ZoneRoom.ts` lines 786–818  
+When `onLeave` cleanup runs (consented leave or reconnection timeout), it deletes the player from `this.players` but **never calls `broadcastRoomOccupantsUpdate()`** for the player's room. Other players in that room still see the disconnected player as an occupant — the "stale ghost."
+
+Compare with `goto` movement (line 1141–1142) which correctly broadcasts updates for both the old and new room.
+
+### Failure 2: Downed players are invisible to combat disconnect handling
+
+**File:** `ZoneRoom.ts` lines 730, 743–745  
+When `onLeave` fires:
+```typescript
+const isInCombat = this.combatSystem.isInCombat(playerId);  // FALSE for downed players
+```
+
+Downed players were already removed from CombatSystem at line 2621 (`removeCombatant` called when entering downed state). So the `combatSystem.markDisconnected()` call is skipped. There is no equivalent `downingSystem.markDisconnected()` — **the downing system has no concept of disconnect at all.**
+
+The bleed-out timer keeps ticking on a disconnected player. If bleed-out completes before reconnection, `handlePlayerDeath` fires but the client is gone, so the `ROOM_SWITCH` message is lost. The death's side effects (corpse, penalty, etc.) still execute, but the player never receives the respawn routing.
+
+### Failure 3: Downed state is not restored on duplicate-join reconnect
+
+**File:** `ZoneRoom.ts` lines 498–513, 620–628  
+When the browser refresh triggers a new `onJoin` with the same characterId:
+- Duplicate join detected → `preservedRoomId` saved → old session mapping deleted
+- A **completely fresh** `PlayerState` is created (HP 100, no downed overlay)
+- DowningSystem still has the player registered as downed
+- Result: commands are blocked (line 1022 checks `downingSystem.isPlayerDowned`) but the client shows full health
+
+Meanwhile, the old `onLeave`'s `allowReconnection` eventually times out. Its cleanup runs with the **real playerId** (captured before the mapping was deleted). It then deletes the **new** player state from `this.players` — destroying the fresh session.
+
+### The Two Timing Scenarios
+
+**Fast refresh (< 30s, most common):** New `onJoin` fires while old `onLeave` is awaiting `allowReconnection`. Duplicate-join creates fresh state. Old onLeave timeout later destroys it. Player ends up in a broken orphaned state.
+
+**Slow refresh (> 30s timeout):** Old `onLeave` cleanup completes first, removing player entirely (no room broadcast). New `onJoin` finds no duplicate, routes player to last inn / zone start. Ghost remains in old room.
+
+## Downed State Architecture (for context)
+
+- **DowningSystem** (`packages/server/src/systems/DowningSystem.ts`): Pure in-memory `Map<string, DownedPlayer>`. Not persisted to DB. No disconnect/reconnect awareness.
+- **Bleed-out timer:** 60 ticks (~1 min). HP drains from 0 to -10. Stabilization by allies stops the timer.
+- **Death resolution:** When bleed-out completes or killing blow lands, `handlePlayerDeath()` fires in ZoneRoom.
+- **Combat removal:** Downed players are removed from CombatSystem immediately upon downing (line 2621).
+
+## Files That Need Changes
+
+1. **`ZoneRoom.ts` `onLeave` cleanup (lines 786–818):** Must call `broadcastRoomOccupantsUpdate(playerState.currentRoomId)` before deleting from `this.players`.
+
+2. **`ZoneRoom.ts` `onLeave` reconnection window (lines 736–783):** Must check DowningSystem state. On successful reconnection: re-send downed overlay and bleed-out HP. On timeout: resolve downed state as death (call `handlePlayerDeath` instead of just cleaning up).
+
+3. **`ZoneRoom.ts` `onJoin` duplicate detection (lines 498–513):** Must check if the reconnecting player was downed and either: (a) restore the downed overlay to the new client, or (b) carry the DownedPlayer record forward with the new session.
+
+4. **`ZoneRoom.ts` `handleReconnectionTimeout` (lines 826–860):** Should explicitly check `this.downingSystem.isPlayerDowned(playerId)` and route through `handlePlayerDeath()` instead of the generic cleanup path.
+
+5. **`DowningSystem.ts` (optional):** Could add a `markDisconnected(playerId)` method to pause the bleed-out timer during the reconnection window, preventing death-while-disconnected races.
+
+## Suggested Fix Priority
+
+1. **Broadcast fix** (Failure 1) — simplest, fixes the ghost entity for ALL disconnect scenarios, not just downed
+2. **Downed timeout → death** (Failure 2 + 4) — ensures downed players who disconnect and timeout actually die properly
+3. **Reconnect restore** (Failure 3) — ensures fast reconnects preserve downed state correctly
+
+## Test Coverage Gaps
+
+- `death-spawn-routing.test.ts` covers death routing but not disconnect-during-downed
+- No test for "downed player disconnects → reconnection timeout → should die"
+- No test for "downed player refreshes → duplicate join → downed state restored"
+- No test for "disconnect cleanup broadcasts room occupants update"
