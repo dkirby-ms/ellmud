@@ -1,3 +1,10 @@
+# [0.2.0-dev.59](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.58...v0.2.0-dev.59) (2026-04-18)
+
+
+### Features
+
+* **combat:** creature assist system — Phase 2 multi-encounter ([#476](https://github.com/dkirby-ms/ellmud/issues/476)) ([f7a7dd8](https://github.com/dkirby-ms/ellmud/commit/f7a7dd832d98333ece4d342045673a9fb0e77679)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
 # [0.2.0-dev.58](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.57...v0.2.0-dev.58) (2026-04-18)
 
 

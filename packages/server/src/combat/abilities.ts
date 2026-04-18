@@ -77,11 +77,22 @@ export const OBSERVE: AbilityDefinition = {
   effects: [{ type: 'reveal_stats' }],
 };
 
+/** Whirlwind — AoE attack with lower damage multiplier (Phase 3). */
+export const WHIRLWIND: AbilityDefinition = {
+  id: 'whirlwind',
+  name: 'Whirlwind',
+  type: 'aoe_attack',
+  cooldownTicks: 4,
+  staminaCost: 20,
+  effects: [{ type: 'damage', damageMultiplier: 0.75 }],
+};
+
 /** Registry of all default abilities. */
 export const DEFAULT_ABILITIES = new Map<string, AbilityDefinition>([
   [HEAVY_STRIKE.id, HEAVY_STRIKE],
   [BLOCK.id, BLOCK],
   [OBSERVE.id, OBSERVE],
+  [WHIRLWIND.id, WHIRLWIND],
 ]);
 
 // ─── Ability Slots ──────────────────────────────────────────────────────────
