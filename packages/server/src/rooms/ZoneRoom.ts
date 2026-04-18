@@ -721,6 +721,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Send current inventory to client on join
     this.sendInventoryUpdate(client, playerId);
+
+    // Restore downed state for reconnecting players — if the player is still
+    // bleeding out in DowningSystem, override the fresh HP=100 we just sent
+    // and re-show the bleed-out overlay so the client matches server state.
+    const downedRecord = this.downingSystem.getDownedPlayer(playerId);
+    if (downedRecord) {
+      const maxHp = this.playerStatsCache.get(playerId)?.maxHp ?? 100;
+      client.send(MessageTypes.PLAYER_STATE, {
+        hp: downedRecord.currentHp,
+        maxHp,
+        stamina: 0,
+        maxStamina: 0,
+        statusEffects: [],
+        posture: playerState.posture,
+      } satisfies PlayerStateMessage);
+
+      this.sendOverlayState(client, {
+        playerId,
+        state: 'downed',
+        narration: 'You are bleeding out...',
+        timestamp: Date.now(),
+      });
+
+      this.log(`Reconnected player ${this.playerTag(playerId)} is downed — restored bleed-out state`);
+    }
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -792,6 +817,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Clean up player (consented leave or timeout expired)
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
+      const roomId = this.players.get(playerId)!.currentRoomId;
+
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
@@ -807,6 +834,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.ownerPlayerIds.delete(playerId);
       this.cleanupPlayerCaches(playerId);
       this.updateMetadata();
+      this.broadcastRoomOccupantsUpdate(roomId);
     }
     this.playerIds.delete(client.sessionId);
     this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
@@ -2995,6 +3023,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
       this.updateMetadata();
       this.broadcastRoomOccupantsUpdate(roomId);
+
+      // Clean up stale sessionId → playerId entries for the disconnected player
+      for (const [sessionId, pid] of this.playerIds) {
+        if (pid === playerId) {
+          this.playerIds.delete(sessionId);
+        }
+      }
+
       this.log(`Player ${this.playerTag(playerId)} died while disconnected — cleaned up`);
     }
 
