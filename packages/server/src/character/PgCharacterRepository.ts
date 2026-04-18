@@ -25,6 +25,13 @@ interface DbCharacterRow {
   shield_block: number;
   dodge: number;
   armour: number;
+  stat_points_available: number;
+}
+
+interface LoadoutSlotRow {
+  slot: string;
+  item_id: string;
+  item_name: string;
 }
 
 interface FactionNameRow {
@@ -68,7 +75,8 @@ function mapRow(row: DbCharacterRow): CharacterRow {
 /** Shared column list for character SELECT queries. */
 const CHARACTER_COLUMNS = `id, player_id, name, starting_zone_slug, faction_slug, is_active,
        created_at, last_played_at, deleted_at,
-       max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour`;
+       max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour,
+       stat_points_available`;
 
 export class PgCharacterRepository implements CharacterRepository {
   async list(playerId: string): Promise<CharacterSummary[]> {
@@ -112,6 +120,19 @@ export class PgCharacterRepository implements CharacterRepository {
         [row.id],
       );
 
+      // Equipment: join player_loadout → item_definitions for display names
+      const loadoutResult = await query<LoadoutSlotRow>(
+        `SELECT pl.slot, pl.item_id, id.name AS item_name
+         FROM player_loadout pl
+         JOIN item_definitions id ON id.id = pl.item_id
+         WHERE pl.player_id = $1`,
+        [row.player_id],
+      );
+      const equipment: Record<string, { itemId: string; name: string } | null> = {};
+      for (const lr of loadoutResult.rows) {
+        equipment[lr.slot] = { itemId: lr.item_id, name: lr.item_name };
+      }
+
       summaries.push({
         id: row.id,
         name: row.name,
@@ -124,6 +145,18 @@ export class PgCharacterRepository implements CharacterRepository {
         lastPlayedAt: row.last_played_at?.toISOString() ?? null,
         topSkills: skillResult.rows.map((s) => ({ name: s.skill_name, level: s.level })),
         totalRuns: runResult.rows[0]?.total_runs ?? 0,
+        baseStats: {
+          maxHp: row.max_hp ?? DEFAULT_PLAYER_COMBAT_STATS.maxHp,
+          unarmed: row.unarmed ?? DEFAULT_PLAYER_COMBAT_STATS.unarmed,
+          oneHanded: row.one_handed ?? DEFAULT_PLAYER_COMBAT_STATS.oneHanded,
+          twoHanded: row.two_handed ?? DEFAULT_PLAYER_COMBAT_STATS.twoHanded,
+          ranged: row.ranged ?? DEFAULT_PLAYER_COMBAT_STATS.ranged,
+          shieldBlock: row.shield_block ?? DEFAULT_PLAYER_COMBAT_STATS.shieldBlock,
+          dodge: row.dodge ?? DEFAULT_PLAYER_COMBAT_STATS.dodge,
+          armour: row.armour ?? DEFAULT_PLAYER_COMBAT_STATS.armour,
+        },
+        equipment,
+        statPointsAvailable: row.stat_points_available ?? 0,
       });
     }
 

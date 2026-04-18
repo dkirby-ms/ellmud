@@ -324,6 +324,21 @@ export interface CharacterSummary {
   lastPlayedAt: string | null;
   topSkills: Array<{ name: string; level: number }>;
   totalRuns: number;
+  /** Base combat stats for display on character select. */
+  baseStats?: {
+    maxHp: number;
+    unarmed: number;
+    oneHanded: number;
+    twoHanded: number;
+    ranged: number;
+    shieldBlock: number;
+    dodge: number;
+    armour: number;
+  };
+  /** Currently equipped items (slot → item name). */
+  equipment?: Record<string, { itemId: string; name: string } | null>;
+  /** Available stat points for training. */
+  statPointsAvailable?: number;
 }
 
 /** Client → Server: Create a new character. */
@@ -960,6 +975,21 @@ export interface CharacterSummary {
   lastPlayedAt: string | null;
   topSkills: Array<{ name: string; level: number }>;
   totalRuns: number;
+  /** Base combat stats for display on character select. */
+  baseStats?: {
+    maxHp: number;
+    unarmed: number;
+    oneHanded: number;
+    twoHanded: number;
+    ranged: number;
+    shieldBlock: number;
+    dodge: number;
+    armour: number;
+  };
+  /** Currently equipped items (slot → item name). */
+  equipment?: Record<string, { itemId: string; name: string } | null>;
+  /** Available stat points for training. */
+  statPointsAvailable?: number;
 }
 
 /** Client → Server: Create a new character. */
