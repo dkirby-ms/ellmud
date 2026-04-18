@@ -604,12 +604,27 @@ export class CombatSystem {
       }
     }
 
+    // Capture surviving player HP data before cleanup destroys combatant records
+    const endedEncounterData: TickResult['endedEncounterData'] = [];
+    for (const encId of endedEncounterIds) {
+      const encounter = this.encounters.get(encId);
+      if (!encounter) continue;
+      const playerCombatantHps: Array<{ id: string; hp: number; maxHp: number }> = [];
+      for (const cid of encounter.combatantIds) {
+        const c = this.combatants.get(cid);
+        if (c && c.isPlayer) {
+          playerCombatantHps.push({ id: c.id, hp: c.hp, maxHp: c.maxHp });
+        }
+      }
+      endedEncounterData.push({ encounterId: encId, roomId: encounter.roomId, playerCombatantHps });
+    }
+
     // Clean up ended encounters
     for (const encId of endedEncounterIds) {
       this.cleanupEncounter(encId);
     }
 
-    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs, newEncounterRoomIds };
+    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs, newEncounterRoomIds, endedEncounterData };
   }
 
   private resolveEncounterTick(encounter: CombatEncounter): {
