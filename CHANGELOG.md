@@ -1,3 +1,10 @@
+# [0.2.0-dev.61](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.60...v0.2.0-dev.61) (2026-04-18)
+
+
+### Features
+
+* complete all 60 multi-encounter tests (Sections E-H) ([#478](https://github.com/dkirby-ms/ellmud/issues/478)) ([83dd282](https://github.com/dkirby-ms/ellmud/commit/83dd28210add7afd94c4e667eb1e7edd29f57e00)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
 # [0.2.0-dev.60](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.59...v0.2.0-dev.60) (2026-04-18)
 
 
