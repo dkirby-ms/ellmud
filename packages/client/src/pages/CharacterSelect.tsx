@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Settings, LogOut, Dices, Skull } from "lucide-react";
+import {
+  Settings,
+  LogOut,
+  Dices,
+  Skull,
+  Shield,
+  Sword,
+  Heart,
+  Crosshair,
+  Shirt,
+} from "lucide-react";
 import { useAppContext } from "../store";
 import {
   fetchCharacters,
@@ -34,11 +44,175 @@ const STARTING_ZONES = [
   },
 ];
 
+const STAT_LABELS: { key: string; label: string; icon: typeof Heart }[] = [
+  { key: "maxHp", label: "Max HP", icon: Heart },
+  { key: "unarmed", label: "Unarmed", icon: Sword },
+  { key: "oneHanded", label: "One-Handed", icon: Sword },
+  { key: "twoHanded", label: "Two-Handed", icon: Sword },
+  { key: "ranged", label: "Ranged", icon: Crosshair },
+  { key: "shieldBlock", label: "Shield Block", icon: Shield },
+  { key: "dodge", label: "Dodge", icon: Crosshair },
+  { key: "armour", label: "Armour", icon: Shield },
+];
+
+const EQUIPMENT_SLOT_LABELS: Record<string, { label: string; icon: typeof Sword }> = {
+  mainHand: { label: "Main Hand", icon: Sword },
+  offHand: { label: "Off Hand", icon: Shield },
+  head: { label: "Head", icon: Shield },
+  chest: { label: "Chest", icon: Shirt },
+  legs: { label: "Legs", icon: Shirt },
+  feet: { label: "Feet", icon: Shirt },
+};
+
 function sanitizeName(raw: string): string {
   const alpha = raw.replace(/[^a-zA-Z]/g, "");
   if (alpha.length === 0) return "";
   return alpha.charAt(0).toUpperCase() + alpha.slice(1).toLowerCase();
 }
+
+// ─── Character Detail Panel ───────────────────────────────────────────────
+
+function CharacterDetailPanel({ char }: { char: CharacterSummary }) {
+  const extended = char as unknown as {
+    baseStats?: Record<string, number>;
+    equipment?: Record<string, { itemId: string; name: string } | null>;
+    statPointsAvailable?: number;
+  };
+  const baseStats = extended.baseStats;
+  const equipment = extended.equipment;
+  const statPointsAvailable = extended.statPointsAvailable;
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-8">
+      {/* Header */}
+      <div>
+        <h2
+          className="text-accent-gold font-serif mb-1"
+          style={{ fontSize: "1.75rem" }}
+        >
+          {char.name}
+        </h2>
+        <p className="text-text-secondary text-sm font-sans">
+          📍 {char.startingZoneName}
+          {char.factionName && (
+            <span className="text-text-disabled ml-2">— {char.factionName}</span>
+          )}
+        </p>
+      </div>
+
+      {/* Stats Section */}
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <h3
+            className="text-text-primary font-serif"
+            style={{ fontSize: "1.125rem" }}
+          >
+            Base Stats
+          </h3>
+          {(statPointsAvailable ?? 0) > 0 && (
+            <span className="px-2 py-0.5 bg-accent-gold/20 text-accent-gold text-xs rounded font-sans font-medium">
+              {statPointsAvailable} points available
+            </span>
+          )}
+        </div>
+        {baseStats ? (
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+            {STAT_LABELS.map(({ key, label, icon: Icon }) => (
+              <div
+                key={key}
+                className="flex items-center justify-between bg-bg-elevated border border-border-muted rounded px-3 py-2"
+              >
+                <span className="flex items-center gap-2 text-text-secondary text-sm font-sans">
+                  <Icon className="w-3.5 h-3.5 text-text-disabled" />
+                  {label}
+                </span>
+                <span className="text-accent-gold font-sans text-sm font-medium tabular-nums">
+                  {baseStats[key] ?? 0}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-text-disabled text-sm italic font-sans">
+            Stats not yet available.
+          </p>
+        )}
+      </section>
+
+      {/* Equipment Section */}
+      <section>
+        <h3
+          className="text-text-primary font-serif mb-4"
+          style={{ fontSize: "1.125rem" }}
+        >
+          Equipment
+        </h3>
+        {equipment ? (
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+            {Object.entries(EQUIPMENT_SLOT_LABELS).map(
+              ([slot, { label, icon: Icon }]) => {
+                const item = equipment[slot];
+                return (
+                  <div
+                    key={slot}
+                    className="flex items-center justify-between bg-bg-elevated border border-border-muted rounded px-3 py-2"
+                  >
+                    <span className="flex items-center gap-2 text-text-secondary text-sm font-sans">
+                      <Icon className="w-3.5 h-3.5 text-text-disabled" />
+                      {label}
+                    </span>
+                    {item ? (
+                      <span className="text-accent-gold text-sm font-sans">
+                        {item.name}
+                      </span>
+                    ) : (
+                      <span className="text-text-disabled text-sm italic font-sans">
+                        Empty
+                      </span>
+                    )}
+                  </div>
+                );
+              },
+            )}
+          </div>
+        ) : (
+          <p className="text-text-disabled text-sm italic font-sans">
+            Equipment not yet available.
+          </p>
+        )}
+      </section>
+
+      {/* Skills Section (moved from card pills) */}
+      {(char.topSkills?.length ?? 0) > 0 && (
+        <section>
+          <h3
+            className="text-text-primary font-serif mb-4"
+            style={{ fontSize: "1.125rem" }}
+          >
+            Trained Skills
+          </h3>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+            {char.topSkills.map((skill) => (
+              <div
+                key={skill.name}
+                className="flex items-center justify-between bg-bg-elevated border border-border-muted rounded px-3 py-2"
+              >
+                <span className="text-text-secondary text-sm font-sans">
+                  {skill.name}
+                </span>
+                <span className="text-accent-gold font-sans text-sm font-medium tabular-nums">
+                  {skill.level}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────
 
 export default function CharacterSelect() {
   const { state, dispatch } = useAppContext();
@@ -52,8 +226,11 @@ export default function CharacterSelect() {
   const [selectedZone, setSelectedZone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [highlightedCharId, setHighlightedCharId] = useState<string | null>(null);
 
   const token = state.token!;
+
+  const highlightedChar = characters.find((c) => c.id === highlightedCharId) ?? null;
 
   const loadCharacters = useCallback(async () => {
     setError(null);
@@ -81,7 +258,6 @@ export default function CharacterSelect() {
     setError(null);
     try {
       await createCharacter(token, { name, startingZoneSlug: selectedZone });
-      // Reload full list to get complete character data (topSkills, startingZoneName, etc.)
       const chars = await fetchCharacters(token);
       setCharacters(chars);
       setNewCharName(generateRandomName());
@@ -119,6 +295,7 @@ export default function CharacterSelect() {
       await deleteCharacter(token, charId);
       setCharacters((prev) => prev.filter((c) => c.id !== charId));
       setDeleteConfirm(null);
+      if (highlightedCharId === charId) setHighlightedCharId(null);
       if (characters.length <= 1) setIsCreating(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete character.");
@@ -206,71 +383,83 @@ export default function CharacterSelect() {
         )}
 
         <div className="space-y-4">
-          {characters.map((char) => (
-            <div
-              key={char.id}
-              className="bg-bg-elevated border border-border-muted rounded-lg p-4 hover:border-accent-gold transition-colors"
-            >
-              <h3
-                className="text-accent-gold mb-1 font-serif"
-                style={{ fontSize: "1.25rem" }}
+          {characters.map((char) => {
+            const isHighlighted = highlightedCharId === char.id;
+            return (
+              <div
+                key={char.id}
+                onClick={() => {
+                  setHighlightedCharId(char.id);
+                  setIsCreating(false);
+                  setDeleteConfirm(null);
+                }}
+                className={`bg-bg-elevated border rounded-lg p-4 cursor-pointer transition-all ${
+                  isHighlighted
+                    ? "border-accent-gold shadow-[0_0_12px_rgba(212,175,55,0.25)]"
+                    : "border-border-muted hover:border-accent-gold/50"
+                }`}
               >
-                {char.name}
-              </h3>
-              <p className="text-text-secondary text-sm font-sans mb-1">
-                📍 {char.startingZoneName}
-              </p>
-              {char.factionName && (
-                <p className="text-text-disabled text-xs font-sans mb-1">
-                  {char.factionName}
+                <h3
+                  className="text-accent-gold mb-1 font-serif"
+                  style={{ fontSize: "1.25rem" }}
+                >
+                  {char.name}
+                </h3>
+                <p className="text-text-secondary text-sm font-sans mb-1">
+                  📍 {char.startingZoneName}
                 </p>
-              )}
+                {char.factionName && (
+                  <p className="text-text-disabled text-xs font-sans mb-1">
+                    {char.factionName}
+                  </p>
+                )}
 
-              {(char.topSkills?.length ?? 0) > 0 && (
-                <div className="flex gap-2 mb-2 flex-wrap">
-                  {char.topSkills.map((skill) => (
-                    <span
-                      key={skill.name}
-                      className="px-2 py-0.5 bg-bg-primary text-text-secondary text-xs rounded font-sans"
-                    >
-                      {skill.name} {skill.level}
-                    </span>
-                  ))}
+                {char.lastPlayedAt && (
+                  <p className="text-text-disabled text-xs font-sans mb-1">
+                    Last played: {new Date(char.lastPlayedAt).toLocaleDateString()}
+                  </p>
+                )}
+
+                {typeof char.totalRuns === "number" && (
+                  <p className="text-text-disabled text-xs font-sans mb-3">
+                    Total runs: {char.totalRuns}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelect(char);
+                    }}
+                    disabled={submitting}
+                    className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-2 rounded transition-colors disabled:opacity-50 font-sans"
+                  >
+                    Enter World
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(char.id);
+                    }}
+                    disabled={submitting}
+                    className={`px-3 py-2 rounded transition-colors font-sans text-sm ${
+                      deleteConfirm === char.id
+                        ? "bg-danger text-white"
+                        : "border border-border-muted text-text-secondary hover:text-danger hover:border-danger"
+                    }`}
+                  >
+                    {deleteConfirm === char.id ? "Confirm?" : "Delete"}
+                  </button>
                 </div>
-              )}
-
-              {char.lastPlayedAt && (
-                <p className="text-text-disabled text-xs mb-3 font-sans">
-                  Last played: {new Date(char.lastPlayedAt).toLocaleDateString()}
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSelect(char)}
-                  disabled={submitting}
-                  className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-2 rounded transition-colors disabled:opacity-50 font-sans"
-                >
-                  Enter World
-                </button>
-                <button
-                  onClick={() => handleDelete(char.id)}
-                  disabled={submitting}
-                  className={`px-3 py-2 rounded transition-colors font-sans text-sm ${
-                    deleteConfirm === char.id
-                      ? "bg-danger text-white"
-                      : "border border-border-muted text-text-secondary hover:text-danger hover:border-danger"
-                  }`}
-                >
-                  {deleteConfirm === char.id ? "Confirm?" : "Delete"}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <button
             onClick={() => {
               setIsCreating(true);
+              setHighlightedCharId(null);
               setNewCharName(generateRandomName());
               setDeleteConfirm(null);
             }}
@@ -281,7 +470,7 @@ export default function CharacterSelect() {
         </div>
       </div>
 
-      {/* Right panel — Character creation */}
+      {/* Right panel — Detail / Creation / Placeholder */}
       <div className="flex-1 p-8 overflow-y-auto">
         {isCreating ? (
           <div className="max-w-3xl mx-auto">
@@ -378,13 +567,15 @@ export default function CharacterSelect() {
               </div>
             </form>
           </div>
+        ) : highlightedChar ? (
+          <CharacterDetailPanel char={highlightedChar} />
         ) : (
           <div className="flex items-center justify-center h-full">
             <p
               className="text-text-disabled italic text-center font-serif"
               style={{ fontSize: "1.125rem" }}
             >
-              Select a character or create a new one.
+              Select a character to view details, or create a new one.
             </p>
           </div>
         )}
