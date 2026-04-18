@@ -1,3 +1,20 @@
+# [0.2.0-dev.56](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.55...v0.2.0-dev.56) (2026-04-18)
+
+
+### Bug Fixes
+
+* address PR [#473](https://github.com/dkirby-ms/ellmud/issues/473) review — remove cast, hoist query, dedupe type ([fae4519](https://github.com/dkirby-ms/ellmud/commit/fae45195253bed269d5d0bfb50e786f01f0cd387))
+* clear HP cache on player defeat + fix test expectations ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([4ff3772](https://github.com/dkirby-ms/ellmud/commit/4ff3772478080435b64c7f8cdc4b9004b21aaa16))
+* **client:** resolve combat state consistency bugs ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([8d6c2c0](https://github.com/dkirby-ms/ellmud/commit/8d6c2c0cce118b67a8c1d26428dd413044f1602e))
+* **combat:** persist player HP between encounters and send terminal COMBAT_STATE ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([bb75839](https://github.com/dkirby-ms/ellmud/commit/bb7583953beef2d17ccce8c47b0ccbe040401966))
+* update PgCharacterRepository test mock for loadout query ([9a6a10e](https://github.com/dkirby-ms/ellmud/commit/9a6a10e9ca49670ca3edd21c1fcf0f1c6c85d1de))
+
+
+### Features
+
+* **client:** redesign character select with detail panel in right pane ([7fc6e87](https://github.com/dkirby-ms/ellmud/commit/7fc6e8786a5e7c624cb48a85a4b5b89bfbfcab4a))
+* extend CharacterSummary with baseStats, equipment, and statPointsAvailable ([4f23401](https://github.com/dkirby-ms/ellmud/commit/4f23401f8952f8078bf72b7227a2b755e5a1e4c6))
+
 # [0.2.0-dev.55](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.54...v0.2.0-dev.55) (2026-04-17)
 
 
