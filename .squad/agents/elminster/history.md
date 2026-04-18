@@ -51,6 +51,35 @@
 
 ## Learnings
 
+### 2025-07-25: Combat Encounter Model Redesign — Deep Architecture Research
+
+**Task:** Research classic MUD combat models and design new encounter architecture to replace room-scoped encounters with selective engagement.
+
+**Key Architecture Decision:** Replace `findEncounterInRoom()` (returns first encounter in room → forces all combatants into one encounter) with target-based joining: you join an encounter by attacking someone already in it, not by being in the same room. Multiple encounters can coexist per room.
+
+**Classic MUD Pattern (DikuMUD/CircleMUD/ROM):** No encounter object at all — per-entity `fighting` pointer + global `perform_violence()` loop. Ellmud keeps encounter objects (needed for threat tables, tick counting, COMBAT_STATE broadcast) but makes them target-scoped instead of room-scoped.
+
+**Creature Assist:** Modeled after CircleMUD's ASSIST_VNUM/ASSIST_ALL flags. Per-template config: `assist.sameType`, `assist.all`, `assist.groupTag`. Only fires at initiation, not ongoing.
+
+**AoE:** Room-scoped (not encounter-scoped). Cross-encounter hits trigger encounter merging via `mergeEncounters()`. Matches classic MUD behavior.
+
+**Key Files (Combat System):**
+- `packages/server/src/combat/CombatSystem.ts` — core orchestrator (1322 lines). `initiateCombat()` at line 124, `findEncounterInRoom()` at line 1227 (the root problem), `resolveTick()` at line 581.
+- `packages/server/src/combat/CombatState.ts` — types. `CombatEncounter` interface at line 165.
+- `packages/server/src/combat/ThreatTable.ts` — 41 lines, clean.
+- `packages/server/src/commands/handlers/attack.ts` — player attack command (132 lines).
+- `packages/server/src/creatures/behavior.ts` — AI behavior tree, `updateCreature()` at line 106.
+- `packages/server/src/creatures/types.ts` — creature types, `CreatureTemplate` at line 62.
+- `packages/server/src/rooms/ZoneRoom.ts` — Colyseus room (~3400 lines). Auto-engage on room entry at lines 3330-3339. COMBAT_STATE broadcast at line 1695-1779.
+- `packages/shared/src/index.ts` — `CombatStateMessage` at line 302.
+- `packages/client/src/store.ts` — client combat state, `combatCombatants` at line 126.
+
+**Decision logged to:** `.squad/decisions/inbox/elminster-combat-encounter-redesign.md`
+
+**4-phase migration plan:** (1) Core refactor — target-based joining, (2) Creature assist, (3) AoE encounter merging, (4) Client observer UX.
+
+---
+
 ### 2025-07-25: Review PR #473 — Character Select Redesign (REJECT)
 
 **Task:** Review UI redesign extending CharacterSummary with baseStats + equipment, new loadout query, component refactor.
