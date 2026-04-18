@@ -1,3 +1,10 @@
+# [0.2.0-dev.60](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.59...v0.2.0-dev.60) (2026-04-18)
+
+
+### Features
+
+* **combat:** AoE encounter merge — Phase 3 multi-encounter ([#477](https://github.com/dkirby-ms/ellmud/issues/477)) ([bb42728](https://github.com/dkirby-ms/ellmud/commit/bb42728f2d4af9536db35992c62df59017efb17e)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
 # [0.2.0-dev.59](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.58...v0.2.0-dev.59) (2026-04-18)
 
 
