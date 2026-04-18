@@ -4687,3 +4687,121 @@ This decision affects:
 - **Frontend:** All WebSocket and fetch calls now use browser defaults
 - **Backend:** Should ensure server-side timeout handling is robust
 - **QA:** Verify Firefox compatibility is restored
+
+---
+
+# Decision: REJECT PR #473 — Character Select Redesign
+
+**Date:** 2026-04-18  
+**Decided by:** Elminster (Lead/Architect)  
+**Status:** Rejected — requires revision
+
+## Context
+
+PR #473 extends the character select UI to show base stats and equipped items. Changes span 4 files:
+- Shared type extension (CharacterSummary)
+- Backend query extension (PgCharacterRepository.list)
+- Test repo update (InMemoryCharacterRepository)
+- Client UI redesign (CharacterSelect.tsx)
+
+## Rejection Reasons
+
+### 1. Type Safety Violation (BLOCKER)
+
+**File:** `packages/client/src/pages/CharacterSelect.tsx:76`
+
+```typescript
+const extended = char as unknown as {
+  baseStats?: Record<string, number>;
+  equipment?: Record<string, { itemId: string; name: string } | null>;
+  statPointsAvailable?: number;
+};
+```
+
+**Problem:** The double-cast `as unknown as` bypasses TypeScript's type checker. These fields are already present on CharacterSummary (defined in shared/index.ts:328-341). The component should access them directly:
+
+```typescript
+// Correct approach:
+const baseStats = char.baseStats;
+const equipment = char.equipment;
+const statPointsAvailable = char.statPointsAvailable;
+```
+
+**Impact:** If CharacterSummary changes (field rename, type change, removal), this component will fail at runtime without any compile-time warning.
+
+### 2. N+1 Query Bug (BLOCKER)
+
+**File:** `packages/server/src/character/PgCharacterRepository.ts:124-130`
+
+**Problem:** The loadout query executes inside the per-character loop:
+
+```typescript
+for (const row of result.rows) {  // Loop over characters
+  const loadoutResult = await query<LoadoutSlotRow>(
+    `SELECT ... FROM player_loadout pl WHERE pl.player_id = $1`,
+    [row.player_id]  // ← Same player_id every iteration!
+  );
+  // ...
+}
+```
+
+**Schema:** `player_loadout` has `PRIMARY KEY (player_id, slot)` — loadout is player-scoped, not character-scoped. All characters for a player share the same loadout data.
+
+**Current behavior:** For 10 characters → 10 identical loadout queries (wasted 9 queries).
+
+**Correct approach:** Hoist the loadout query before the loop (1 query total):
+
+```typescript
+const loadoutResult = await query<LoadoutSlotRow>(
+  `SELECT ... FROM player_loadout pl WHERE pl.player_id = $1`,
+  [playerId]
+);
+const equipment: Record<string, ...> = {};
+for (const lr of loadoutResult.rows) {
+  equipment[lr.slot] = { itemId: lr.item_id, name: lr.item_name };
+}
+
+for (const row of result.rows) {
+  // Reuse equipment for all characters
+  summaries.push({ ..., equipment, ... });
+}
+```
+
+**Impact:** 3× more queries than necessary (skills + runs + loadout all in loop). Performance regression.
+
+### 3. Type Duplication
+
+**File:** `packages/shared/src/index.ts`
+
+CharacterSummary is defined twice (line 315 and line 966) with identical content. This is a merge artifact — one definition should be removed.
+
+## Secondary Issues (Not Blockers)
+
+1. **Accessibility:** Character cards lack keyboard navigation (no tabIndex, no onKeyDown for Enter/Space)
+2. **Accessibility:** "Enter World" / "Delete" buttons lack aria-labels (screen readers can't distinguish which character)
+3. **Test Coverage:** Mock update doesn't verify loadout JOIN logic or item name resolution
+
+## Revision Assignment
+
+**Assign to:** Drizzt (Implementation)
+
+**Required changes:**
+1. Remove `as unknown as` cast — access char.baseStats directly
+2. Hoist loadout query outside the loop (single query per player)
+3. Remove duplicate CharacterSummary definition (keep line 315, delete line 966)
+
+**Recommended changes:**
+4. Add keyboard nav: tabIndex={0}, onKeyDown for Enter/Space
+5. Add aria-labels to "Enter World" / "Delete" buttons (e.g., aria-label="Enter world as {char.name}")
+
+## Architectural Notes
+
+- The N+1 pattern already exists for skills/runs queries (pre-existing issue, not introduced by this PR)
+- Long-term fix: Batch all per-character queries (skills, runs) into aggregate queries with GROUP BY
+- This PR adds a third N+1 vector (loadout) which is easily avoided — hence blocker status
+
+## References
+
+- Schema: `packages/server/src/db/migrations/001_schema.sql` (player_loadout table)
+- Type definition: `packages/shared/src/index.ts:315` (CharacterSummary)
+- Query: `packages/server/src/character/PgCharacterRepository.ts:82-163` (list method)

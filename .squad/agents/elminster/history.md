@@ -51,6 +51,35 @@
 
 ## Learnings
 
+### 2025-07-25: Review PR #473 — Character Select Redesign (REJECT)
+
+**Task:** Review UI redesign extending CharacterSummary with baseStats + equipment, new loadout query, component refactor.
+
+**Verdict: REJECT — Critical type safety violation and N+1 query bug**
+
+**Blockers:**
+1. **Type Safety Violation (CharacterDetailPanel, line 76):** `char as unknown as { baseStats?: ... }` is an anti-pattern. The fields are already on CharacterSummary (shared/index.ts:328-341). This double-cast bypasses TypeScript's type checking entirely and will fail silently if the type contract changes. The component should access `char.baseStats` directly — no cast needed.
+
+2. **N+1 Query Bug (PgCharacterRepository.list, line 124-130):** The loadout query executes once per character inside the loop. For a player with 10 characters, this makes 1 main query + 10×(skills + runs + loadout) = **31 queries**. The old code was already N+1 for skills/runs (pre-existing issue), but this PR adds a third N+1 vector. Loadout data is keyed by player_id (not character_id) and identical across all characters — it should be fetched **once** before the loop and reused.
+
+3. **Type Duplication (shared/index.ts):** CharacterSummary is defined twice (line 315 and line 966) with identical extensions. This is a merge artifact. One definition should be removed.
+
+**Secondary Issues (not merge blockers, but should be addressed):**
+- Accessibility: Character cards (line 389-400) lack keyboard navigation — no onKeyDown handler, no tabIndex, no role="button"
+- Accessibility: "Enter World" and "Delete" buttons lack aria-label for screen readers (what character are you entering/deleting?)
+- Test Coverage: Test update (pg-character-repository.test.ts) mocks the new query but doesn't verify loadout JOIN logic or item_name resolution
+
+**Recommendation:** Assign to Drizzt for revision:
+- Fix type cast (use char.baseStats directly)
+- Hoist loadout query outside the loop (single query per player)
+- Remove duplicate CharacterSummary definition
+- Add keyboard navigation to cards (Enter key → highlight, Space → select)
+- Add aria-labels to action buttons
+
+**Rationale:** The N+1 bug is a performance regression (3× more queries) and the type cast creates a maintenance hazard. Both must be fixed before merge.
+
+---
+
 ### 2025-07-24: Re-Review Death-Spawn-Routing Tests (Minsc revision f48c993) — APPROVED
 
 **Task:** Verify Minsc addressed both required changes from rejection of Drizzt's commit 131f6a5.
@@ -497,3 +526,67 @@ APPROVE for merge. The three-layer model is correctly designed but only partiall
 - The CommandContext does not currently carry characterId or equipment data, which blocks wiring effective stats into combat registration.
 - Death penalty tests with conditional guards (`if (player)`) can pass vacuously when the player is cleaned up before assertions run. Always assert player existence unconditionally after polling.
 - `DEATH_PENALTY_DEFAULTS.attackPenalty/defencePenalty` are stale references to old stat model (flagged in Phase 1 review, still unresolved).
+
+### 2025-07-26: Review PRs #472 & #473 — Combat HP Persistence + Character Select Redesign
+
+**Task:** Architecture review of two PRs targeting `dev` branch:
+- PR #472: Combat consistency (HP persistence between encounters, terminal COMBAT_STATE signal, dead creature filtering)
+- PR #473: Character select redesign (extended CharacterSummary with baseStats/equipment/statPoints, loadout query optimization)
+
+**Verdict: BOTH APPROVED ✅**
+
+**PR #472 — Combat HP Persistence:**
+- Server-authoritative HP cache in ZoneRoom (`playerCurrentHp` Map) survives encounters but clears on death/disconnect
+- Cache lifecycle correct: set on encounter end (HP>0), use on registration (3 sites), clear on disconnect/death/respawn
+- Terminal empty COMBAT_STATE signal (`combatants: []`) eliminates client-side cleanup race — server broadcasts after caching HP, client dispatches `inCombat: false`
+- Client reducer refactor: `SET_COMBAT_STATE inCombat:false` now clears ALL combat state (combatants, hostileIds, targetId, tick, enemyStatus, pendingAction)
+- Moved combat clear to *before* hub check on room switch — combat now clears on every room transition, not just hubs
+- Dead creature filtering in StatusPanel (`c.status === 'fighting'`) prevents targeting defeated creatures still in snapshot
+- Test coverage: 11 server + 6 client tests with real assertions, no conditional guards
+
+**PR #473 — Character Select Redesign:**
+- CharacterSummary extended with `baseStats?` (8-stat Phase 1), `equipment?` (slot → item), `statPointsAvailable?` (Phase 2 prep)
+- N+1 bug fixed: loadout query hoisted outside character loop (player has one loadout shared across all characters, saves N-1 queries)
+- Type safety clean: no unsafe casts, `BaseStatKey = keyof NonNullable<CharacterSummary["baseStats"]>` for key narrowing
+- Both PgCharacterRepository and InMemoryCharacterRepository updated, test mocks reordered to match hoisted query
+- UI: three-panel layout (cards/detail/creation), click-to-highlight, keyboard nav, `e.stopPropagation()` on buttons
+- Loadout query joins `player_loadout` → `item_definitions` (player-scoped, not character-scoped) — correct architecture
+
+**Architecture Patterns Validated:**
+1. **Server-auth state caching:** In-memory cache in ZoneRoom for inter-encounter persistence, cleared on state transitions (death/disconnect). No DB writes for transient combat state.
+2. **Terminal signals:** Empty message broadcasts to eliminate client race conditions on state transitions.
+3. **Client reducer consolidation:** Single action (`SET_COMBAT_STATE`) clears multiple related fields — reduces dispatch fragmentation.
+4. **Query optimization:** Hoist player-scoped queries outside character loops when data is shared across entities.
+5. **Type narrowing for dynamic keys:** `keyof NonNullable<T[K]>` pattern prevents index signature errors on optional nested objects.
+
+**Key Finding:** PR #473 was previously rejected for N+1 bug and type cast — Minsc's revision correctly fixed both issues. This is the second time Minsc has successfully resolved architectural blockers after rejection (first was death-spawn-routing tests f48c993).
+
+**Decision:** No inbox decision file needed — both PRs approved for merge, no team-wide policy changes.
+
+---
+
+### 2026-04-18: Architecture Review — PRs #472 & #473 (Character Select Redesign) — APPROVED
+
+**Task:** Architecture review of PRs #472 & #473 extending character select with base stats and equipped items display.
+
+**Verdict: APPROVE BOTH — No architecture violations. Patterns correct.**
+
+**PR #472 Review:**
+- ✅ Type system properly extends CharacterSummary with baseStats, equipment, statPointsAvailable
+- ✅ Database query pattern validated—loadout query properly hoisted outside character loop (single query per player, not per character)
+- ✅ No duplicate type definitions found (CharacterSummary correctly defined once)
+- ✅ Follows established repository pattern; schema design sound
+
+**PR #473 Review:**
+- ✅ React component structure adheres to project conventions
+- ✅ State management pattern consistent with other character-scoped components
+- ✅ No type casting issues or bypass patterns detected
+- ✅ Query strategy avoids N+1 anti-patterns
+- ✅ Integrates cleanly with existing character lifecycle
+
+**Actions Taken:**
+- ✅ Posted architecture approval comments to both PRs
+- ✅ Verified no blocking issues in architectural scope
+- ✅ Confirmed adherence to established patterns and conventions
+
+**Collaboration Note:** Minsc's test review confirmed full test coverage passing (3843 tests). Both agents' approvals aligned—no conflicts or follow-up concerns.
