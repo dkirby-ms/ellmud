@@ -103,6 +103,20 @@ export class PgCharacterRepository implements CharacterRepository {
       'the-carrion-court': 'The Carrion Court',
     };
 
+    // Equipment: join player_loadout → item_definitions for display names.
+    // All characters share the same player, so query once before the loop.
+    const loadoutResult = await query<LoadoutSlotRow>(
+      `SELECT pl.slot, pl.item_id, id.name AS item_name
+       FROM player_loadout pl
+       JOIN item_definitions id ON id.id = pl.item_id
+       WHERE pl.player_id = $1`,
+      [playerId],
+    );
+    const equipment: Record<string, { itemId: string; name: string } | null> = {};
+    for (const lr of loadoutResult.rows) {
+      equipment[lr.slot] = { itemId: lr.item_id, name: lr.item_name };
+    }
+
     const summaries: CharacterSummary[] = [];
     for (const row of result.rows) {
       // Top skills for this character
@@ -119,19 +133,6 @@ export class PgCharacterRepository implements CharacterRepository {
          WHERE character_id = $1`,
         [row.id],
       );
-
-      // Equipment: join player_loadout → item_definitions for display names
-      const loadoutResult = await query<LoadoutSlotRow>(
-        `SELECT pl.slot, pl.item_id, id.name AS item_name
-         FROM player_loadout pl
-         JOIN item_definitions id ON id.id = pl.item_id
-         WHERE pl.player_id = $1`,
-        [row.player_id],
-      );
-      const equipment: Record<string, { itemId: string; name: string } | null> = {};
-      for (const lr of loadoutResult.rows) {
-        equipment[lr.slot] = { itemId: lr.item_id, name: lr.item_name };
-      }
 
       summaries.push({
         id: row.id,

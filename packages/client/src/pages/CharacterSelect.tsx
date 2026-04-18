@@ -44,7 +44,8 @@ const STARTING_ZONES = [
   },
 ];
 
-const STAT_LABELS: { key: string; label: string; icon: typeof Heart }[] = [
+type BaseStatKey = keyof NonNullable<CharacterSummary["baseStats"]>;
+const STAT_LABELS: { key: BaseStatKey; label: string; icon: typeof Heart }[] = [
   { key: "maxHp", label: "Max HP", icon: Heart },
   { key: "unarmed", label: "Unarmed", icon: Sword },
   { key: "oneHanded", label: "One-Handed", icon: Sword },
@@ -73,14 +74,9 @@ function sanitizeName(raw: string): string {
 // ─── Character Detail Panel ───────────────────────────────────────────────
 
 function CharacterDetailPanel({ char }: { char: CharacterSummary }) {
-  const extended = char as unknown as {
-    baseStats?: Record<string, number>;
-    equipment?: Record<string, { itemId: string; name: string } | null>;
-    statPointsAvailable?: number;
-  };
-  const baseStats = extended.baseStats;
-  const equipment = extended.equipment;
-  const statPointsAvailable = extended.statPointsAvailable;
+  const baseStats = char.baseStats;
+  const equipment = char.equipment;
+  const statPointsAvailable = char.statPointsAvailable;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">

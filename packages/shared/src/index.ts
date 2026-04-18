@@ -961,47 +961,7 @@ export interface InventoryUpdateMessage {
 }
 
 // ─── Character System (Character Selection & Management) ─────────────────────
-
-/** Summary of a character for the selection screen. */
-export interface CharacterSummary {
-  id: string;
-  name: string;
-  startingZoneSlug: string;
-  startingZoneName: string;
-  factionSlug: string | null;
-  factionName: string | null;
-  isActive: boolean;
-  createdAt: string;
-  lastPlayedAt: string | null;
-  topSkills: Array<{ name: string; level: number }>;
-  totalRuns: number;
-  /** Base combat stats for display on character select. */
-  baseStats?: {
-    maxHp: number;
-    unarmed: number;
-    oneHanded: number;
-    twoHanded: number;
-    ranged: number;
-    shieldBlock: number;
-    dodge: number;
-    armour: number;
-  };
-  /** Currently equipped items (slot → item name). */
-  equipment?: Record<string, { itemId: string; name: string } | null>;
-  /** Available stat points for training. */
-  statPointsAvailable?: number;
-}
-
-/** Client → Server: Create a new character. */
-export interface CreateCharacterRequest {
-  name: string;
-  startingZoneSlug: string;
-}
-
-/** Client → Server: Select a character. */
-export interface SelectCharacterRequest {
-  characterId: string;
-}
+// CharacterSummary is defined above in "Character Types (GDD §7.1)".
 
 // ─── Slot Validation ─────────────────────────────────────────────────────────
 

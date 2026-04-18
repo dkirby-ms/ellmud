@@ -264,6 +264,15 @@ describe('PgCharacterRepository', () => {
         fields: [],
       });
 
+      // Loadout (hoisted before loop — runs once for the player)
+      queryMock.mockResolvedValueOnce({
+        rows: [{ slot: 'mainHand', item_id: 'sword-1', item_name: 'Iron Sword' }],
+        command: 'SELECT',
+        rowCount: 1,
+        oid: 0,
+        fields: [],
+      });
+
       // Skills for char-1
       queryMock.mockResolvedValueOnce({
         rows: [{ skill_name: 'stealth', level: 15 }],
@@ -276,15 +285,6 @@ describe('PgCharacterRepository', () => {
       // Run count for char-1
       queryMock.mockResolvedValueOnce({
         rows: [{ total_runs: 7 }],
-        command: 'SELECT',
-        rowCount: 1,
-        oid: 0,
-        fields: [],
-      });
-
-      // Loadout for char-1
-      queryMock.mockResolvedValueOnce({
-        rows: [{ slot: 'mainHand', item_id: 'sword-1', item_name: 'Iron Sword' }],
         command: 'SELECT',
         rowCount: 1,
         oid: 0,
