@@ -236,6 +236,15 @@ describe('PgCharacterRepository', () => {
           created_at: now,
           last_played_at: null,
           deleted_at: null,
+          max_hp: 100,
+          unarmed: 10,
+          one_handed: 10,
+          two_handed: 10,
+          ranged: 10,
+          shield_block: 10,
+          dodge: 10,
+          armour: 10,
+          stat_points_available: 0,
         }],
         command: 'SELECT',
         rowCount: 1,
@@ -273,6 +282,15 @@ describe('PgCharacterRepository', () => {
         fields: [],
       });
 
+      // Loadout for char-1
+      queryMock.mockResolvedValueOnce({
+        rows: [{ slot: 'mainHand', item_id: 'sword-1', item_name: 'Iron Sword' }],
+        command: 'SELECT',
+        rowCount: 1,
+        oid: 0,
+        fields: [],
+      });
+
       const result = await repo.list('player-1');
 
       expect(result).toHaveLength(1);
@@ -280,6 +298,9 @@ describe('PgCharacterRepository', () => {
       expect(result[0].factionName).toBe('The Bloom Tenders');
       expect(result[0].topSkills).toEqual([{ name: 'stealth', level: 15 }]);
       expect(result[0].totalRuns).toBe(7);
+      expect(result[0].equipment).toEqual({ mainHand: { itemId: 'sword-1', name: 'Iron Sword' } });
+      expect(result[0].baseStats).toBeDefined();
+      expect(result[0].statPointsAvailable).toBe(0);
     });
   });
 });
