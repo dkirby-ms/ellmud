@@ -554,7 +554,7 @@ describe('PgCreatureDefinitionsStore', () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([]));
       await store.getById('c-001');
       expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE id = $1'),
+        expect.stringContaining('WHERE type = $1 OR slug = $1 OR id::text = $1'),
         ['c-001'],
       );
     });
