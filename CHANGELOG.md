@@ -1,3 +1,10 @@
+# [0.2.0-dev.63](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.62...v0.2.0-dev.63) (2026-04-19)
+
+
+### Bug Fixes
+
+* **test:** update getById assertion to match new multi-lookup query ([#482](https://github.com/dkirby-ms/ellmud/issues/482)) ([37d1e31](https://github.com/dkirby-ms/ellmud/commit/37d1e31843df97f39615eed70430df0bf4f1fb70)), closes [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#481](https://github.com/dkirby-ms/ellmud/issues/481) [#479](https://github.com/dkirby-ms/ellmud/issues/479) [#481](https://github.com/dkirby-ms/ellmud/issues/481)
+
 # [0.2.0-dev.62](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.61...v0.2.0-dev.62) (2026-04-19)
 
 
