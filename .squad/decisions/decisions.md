@@ -2488,3 +2488,272 @@ UI: StatusPanel → CombatHUD → availableTargets from combatCombatants
 ---
 
 *Decision merged from inbox on 2026-04-17T19:39:00Z. No duplicates found.*
+
+---
+
+## 2026-04-18T15:24: Combat Encounter Redesign — Design Q&A Clarifications
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-04-18  
+**Type:** Design clarification
+
+### Q&A Answers
+
+**Q1 — Room entry aggro:** Yes, aggressive creatures will aggro entering players, but aggro does NOT mean immediate target switch. The creature joins the encounter and adds the player to its threat table, but continues attacking its current target until threat re-evaluation naturally shifts it. This is important — "aggro" ≠ "target switch."
+
+**Q2 — Group wipe freed creatures:** Yes, freed creatures return to behavior tree and re-aggro naturally.
+
+**Q3 — Single encounter per player:** Confirmed. Players can only be in one encounter at a time.
+
+**Q4 — No cross-encounter assist:** Confirmed. Creatures already in combat don't abandon their fight to assist allies.
+
+**Q5 — AoE merge is automatic:** Confirmed. No confirmation dialog — caster accepts the consequences.
+
+---
+
+## 2026-04-18T16:56: Phase 1 Test Coverage — Unit Tests
+
+**By:** Minsc (Test Infrastructure)  
+**Date:** 2026-04-18  
+**Status:** ✅ Complete  
+**Type:** Test infrastructure
+
+### Summary
+
+Unit tests implemented for Phase 1 combat operations: single-encounter tests covering 1v1 combat scenarios, creature types, damage calculation, and basic combat state verification.
+
+### Coverage
+
+- Core 1v1 combat initiation and action resolution
+- Damage calculations and stat interactions
+- Creature type validation
+- Combat state message generation
+
+### Validation
+
+All tests passing; ready for Phase 2 multi-encounter integration.
+
+---
+
+## 2026-04-18T15:32: Combat Encounter Redesign — Comprehensive Test Plan
+
+**By:** Minsc (QA/Test Infrastructure)  
+**Date:** 2026-04-18  
+**Status:** 📋 Ready for Implementation  
+**Type:** Test strategy
+
+### Executive Summary
+
+Comprehensive audit of 23 existing combat test files to identify which tests will break under multi-encounter redesign. Test plan includes:
+- Files safe for inheritance (13)
+- Files requiring rewrite (10)
+- Recommended migration path
+- TDD-first approach for new multi-encounter tests
+
+### Breaking Tests (10 files)
+
+1. **combat.test.ts** — Multi-combatant tests assume single encounter per room
+2. **combat-state-message.test.ts** — Message building assumes single encounter
+3. **pvp-combat.test.ts** — All players auto-join one encounter
+4. **auto-attack.test.ts** — Target scoping to single encounter
+5. **room-positioning.test.ts** — Shared threat table per room
+6. **combat-movement-lock.test.ts** — Lock scope may need per-encounter check
+7. **phase2-qa.test.ts** — Multi-player scenarios assume one encounter
+8. **creature-wiring.test.ts** — One creature/player per encounter
+9. **creatures.test.ts** — Behavior tree assumes single encounter
+10. **post-death-combat.test.ts** — One encounter per test
+
+### Safe Tests (13 files)
+
+Stat calculations, dodge/dodge-agi/abilities, dodge-block, weapon-types, stats, enemy-telegraph, threat utility, disconnect-while-downed, combat-actions — no encounter-model assumptions.
+
+### Recommended Approach
+
+- Preserve safe tests (no changes required)
+- Rewrite breaking tests to test target-scoped joining
+- Add new multi-encounter integration tests
+- Use TDD pattern: tests first, implementation validates
+
+---
+
+## 2026-04-18T22:42: E2E Combat Multi-Encounter Tests
+
+**By:** Minsc (Test Infrastructure)  
+**Date:** 2026-04-18  
+**Status:** ✅ Implemented  
+**Type:** Test infrastructure
+
+### Summary
+
+Created comprehensive e2e test suite for multi-encounter combat system in `packages/e2e/tests/combat.spec.ts`. 7 tests covering basic initiation, separate encounters, observer visibility, flee mechanics, and creature engagement.
+
+### Test Coverage
+
+1. **Basic combat initiation** — Single player attacks creature
+2. **Separate encounters** — Two players attack different creatures independently
+3. **Same encounter** — Two players attack same creature (encounter joining)
+4. **Observer visibility** — Non-participant sees ongoing combat
+5. **Flee mechanics** — Player successfully exits combat
+6. **Creature targeting** — Player targets specific creature when multiple exist
+7. **Aggressive creatures** — Aggressive creatures can be engaged
+
+### Infrastructure Added
+
+- `adminSpawnCreature(creatureId, targetRoom, zoneSlug)` helper in `admin-api.ts`
+- Uses admin POST `/admin/api/rooms/{colyseusRoomId}/spawn` with type='creature'
+- Test creatures: `sludge_crawler` (passive), `flood_scuttler` (aggressive) from bestiary
+
+### Test Design Patterns
+
+- Follows existing e2e patterns from `connection.spec.ts` and `group.spec.ts`
+- Uses `createPlayer()` fixture for isolated browser contexts
+- Verifies combat via `waitForMessage()` with regex patterns
+- Tests run serially (workers: 1) with fresh server per test
+- Players spawn in 'reliquary-inn' (the-reliquary zone entry room)
+
+### Future Considerations
+
+- Add tests for creature death and loot distribution in encounters
+- Add tests for encounter timeout/cleanup when all participants flee
+- Consider adding tests for PvP multi-encounter scenarios (if supported)
+- Add tests for combat abilities/skills when implemented
+
+---
+
+## 2026-04-18T18:01: Phase 1 Refactor — Systems Architecture
+
+**By:** Jarlaxle (Systems)  
+**Date:** 2026-04-18  
+**Status:** ✅ Complete  
+**Type:** Architecture refactor
+
+### Summary
+
+Phase 1 systems refactor completed: repositioned creature system (action ordering, threat evaluation) to support multi-encounter redesign. Key changes:
+- Creature action submission proper ordering
+- Threat table optimization
+- Encounter state management
+- Backward compatibility maintained with existing tests
+
+### Validation
+
+All Phase 1 tests passing. System ready for Phase 2 multi-encounter integration.
+
+---
+
+## 2026-04-18T19:43: Phase 3 Architecture Review — Multi-Encounter Combat
+
+**By:** Elminster (Architecture)  
+**Date:** 2026-04-18  
+**Status:** ✅ Approved for implementation  
+**Type:** Architecture review
+
+### Summary
+
+Comprehensive architecture review of multi-encounter combat redesign (PRs #477-478). Validated encounter merging logic, threat table preservation, client message broadcasting, and position system integration.
+
+### Key Validations
+
+1. **Encounter merging:** Cross-target AoE properly merges separate encounters
+2. **Threat table preservation:** Threat maintained on merge (max tick count, union of threat data)
+3. **Client state:** Correct observers per encounter, message broadcasting accurate
+4. **Position system:** Compatible with encounter model; tested 8-player scenarios
+5. **Backward compatibility:** Solo encounters, assist-join, flee, timeout all working
+
+### Architectural Notes
+
+- Position system tested at 8-player scale — no issues identified
+- Message load (~1 msg/player/second during combat) acceptable
+- Threat merging logic sound for all encounter sizes tested
+- No race conditions identified in concurrent encounter scenarios
+
+### Recommendations
+
+1. Monitor COMBAT_STATE message rate in production
+2. Consider paginated snapshots if encounters exceed 20 combatants (unlikely)
+3. Proceed with Phase B (combatant list UI)
+
+---
+
+## 2026-04-18T20:16: Phase 4 Tests — Combat Test Quality Audit
+
+**By:** Elminster (Architecture)  
+**Date:** 2026-04-18  
+**Status:** ✅ Audit complete; tests ready  
+**Type:** Test quality audit
+
+### Summary
+
+Comprehensive quality audit of Phase 4 test suite (unit tests for multi-encounter operations). 40+ tests covering:
+- Separate encounters per room
+- Encounter joining logic (attacker/target)
+- Threat table preservation on merge
+- Tick count behavior
+- Backward compatibility
+- Test design patterns
+
+### Test Quality Findings
+
+**Good:**
+- Tests are isolated and deterministic
+- Threat preservation test properly validates merge behavior
+- Backward compatibility tests mirror production patterns exactly
+- Test design decisions documented (threat via multiple ticks, staggered encounters)
+
+**Areas for Enhancement:**
+- Some tests have loose assertions (should be tightened in follow-up)
+- Edge case coverage could be expanded (timeouts, position conflicts)
+- Performance characteristics not tested
+
+### Recommendations
+
+1. Merge Phase 4 tests as-is (good baseline)
+2. Follow-up PR to tighten assertions and expand edge cases
+3. Add performance benchmarks for multi-encounter scenarios
+4. Document test design decisions in code comments
+
+### Validation
+
+All tests passing against current codebase. Ready for Phase B implementation.
+
+---
+
+## 2026-04-18T19:24: Phase 3 AoE Combat — Design & Implementation
+
+**By:** Jarlaxle (Systems)  
+**Date:** 2026-04-18  
+**Status:** ✅ Implemented  
+**Type:** Feature implementation
+
+### Summary
+
+Phase 3 AoE combat implementation: multi-target encounter merging, automatic merge on AoE cast (no confirmation dialog), cross-encounter targeting validation.
+
+### Key Design Decisions
+
+1. **Automatic merge:** No confirmation dialog — caster accepts consequences
+2. **Encounter eligibility:** Only same-room encounters can merge
+3. **Threat behavior:** Merged encounters inherit union of threat tables
+4. **Message broadcast:** Separate COMBAT_STATE per encounter until merge
+
+### Implementation Details
+
+- AoE spell validation checks for creatures in multiple encounters
+- Encounter merge triggered automatically on cast resolution
+- Threat re-evaluation happens post-merge
+- Client receives separate messages per encounter pre-merge, unified post-merge
+
+### Testing
+
+- Unit tests for merge logic: 5 scenarios (simple 1v1, 2-encounter merge, 3-encounter, timing edge cases)
+- E2E test for AoE cast with multiple creatures
+- Backward compatibility: solo casts and traditional 1v1 AoE unchanged
+
+### Rationale
+
+Automatic merge simplifies state management and matches user expectations (AoE hits all targets in area). No-dialog design aligns with existing combat action flow.
+
+---
+
+*Decisions merged from inbox on 2026-04-19T00:50:00Z.*
+

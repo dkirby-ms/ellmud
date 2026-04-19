@@ -613,3 +613,140 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - ✅ Documented mock chaining pattern observation for future reference
 
 **Collaboration Note:** Elminster's architecture review confirmed no type safety or N+1 query issues. Both agents' approvals aligned—PRs ready for merge.
+
+---
+
+### 2025-01-XX — Phase 3 AoE Encounter Merge Tests (Section D)
+
+**Task:** Write 8 TDD tests for Section D (AoE Encounter Merge) in multi-encounter test suite, parallel to Jarlaxle implementing `resolveAoE()`.
+
+**Branch:** `feature/multi-encounter-phase3-aoe-merge`
+
+**Work Completed:**
+- ✅ Replaced 8 `test.todo` stubs with full implementations in `packages/server/src/__tests__/multi-encounter.test.ts`
+- ✅ Tests cover: no-merge scenarios, 2-encounter merges, 3-encounter merges, non-encounter joining, threat preservation, tick count handling
+- ✅ All tests follow established patterns: no conditional guards, expect chains, proper beforeEach setup
+- ✅ Used existing helpers: `makePlayer()`, `makeCreature()`, `testExitResolver`
+- ✅ Verified encounter internals access patterns for threat tables and tick counts
+
+**Test Coverage Details:**
+1. **No merge needed** — AoE within single encounter maintains same encounter ID
+2. **Two encounter merge** — Cross-encounter AoE merges both encounters into one
+3. **Non-encounter joining** — Idle creature joins caster's encounter via AoE
+4. **Mixed targets** — AoE handles mix of encounter and non-encounter targets
+5. **Threat preservation** — Merged encounters preserve all original threat tables
+6. **Tick count handling** — Merged encounter uses Math.max of tick counts
+7. **Triple merge** — AoE merges 3 separate encounters into one
+8. **New encounter creation** — Non-combat caster creates encounter with all hit targets
+
+**Key Patterns Learned:**
+- Section D follows same structure as B and C: describe block with beforeEach + individual tests
+- Threat table verification: `enc?.threatTables?.get(creatureId)?.getThreat(playerId) ?? 0`
+- Encounter count verification: `system.findEncountersInRoom(TEST_ROOM).toHaveLength(N)`
+- Combatant set verification: `enc?.combatantIds.has(id)` for membership, `.size` for count
+- Always use `expect(x).toBeDefined()` before accessing properties (no `!` assertions)
+
+**File Modified:**
+- `packages/server/src/__tests__/multi-encounter.test.ts` (lines 713-969)
+
+**Next Steps:**
+- Tests are ready for when Jarlaxle implements `resolveAoE()` on CombatSystem
+- Will need to verify tests pass once implementation is complete
+
+
+---
+
+### 2025-01-27 — Multi-Encounter Remaining Tests (Sections E, F, G, H — 24 tests)
+
+**Task:** Complete multi-encounter test coverage by implementing all remaining test stubs.
+
+**Branch:** feature/multi-encounter-remaining-tests
+
+**Work Completed:**
+- Replaced 24 test.todo() stubs with full implementations across 4 sections
+- Section E (Room Entry / Aggro): 6 tests
+- Section F (Observer Pattern): 5 tests  
+- Section G (Group Wipe / Freed Creatures): 5 tests
+- Section H (Edge Cases): 8 tests
+- All 60 tests passing
+
+**Critical Discovery:** When encounter ends, CombatSystem removes ALL combatants from registry. Tests must re-register if reusing: if (!system.getCombatant(id)) { system.registerCombatant(combatant); }
+
+**Key Learnings:**
+- Player auto-attacks ONE target per tick. Multiple kills need multiple ticks OR resolveAoE()
+- initiateCombat() sets attacker currentTarget. Aggro without target switch is ZoneRoom concern
+- Default damage: 5 attack - 2 armour = 3 per hit. Use unarmed: 10 for guaranteed creature kill (maxHp: 1)
+- HP persists on combatant object after registry removal
+
+**Test Results:** All 60 tests passing. Test suite ready for multi-encounter PR merge.
+
+### 2026-04-18: E2E Combat Multi-Encounter Tests
+**Status:** ✅ Complete
+
+**What was done:**
+- Created `packages/e2e/tests/combat.spec.ts` with 7 comprehensive e2e tests for multi-encounter combat system
+- Added `adminSpawnCreature()` helper to `packages/e2e/src/helpers/admin-api.ts` for spawning creatures via admin API
+- Tests cover: basic combat initiation, separate encounters, joining same encounter, observer behavior, flee mechanics, creature targeting, aggressive creatures
+- Uses creatures from bestiary: `sludge_crawler` (passive), `flood_scuttler` (aggressive)
+- Tests compile successfully (TypeScript check passed)
+
+**Key design patterns:**
+- E2E tests use Playwright with custom `createPlayer()` fixture from `test-fixture.ts`
+- Each test gets a fresh server via `ServerManager` (workers: 1, fullyParallel: false)
+- Players start in 'reliquary-inn' (entry room for 'the-reliquary' zone)
+- Admin API pattern: POST to `/admin/api/rooms/{colyseusRoomId}/spawn` with `{type: 'creature', id: creatureId, targetRoomId: roomSlug}`
+- Combat verification uses `waitForMessage()` with regex patterns matching combat messages
+- Observer tests verify combat state visibility without participation
+
+**Learnings:**
+- The-reliquary zone has no native creature spawns — requires admin API to spawn for testing
+- Warrens zone has native creatures (gutterspawn, slum_rat, rubble_scavenger) but tests use reliquary for consistency
+- Admin API supports both 'item' and 'creature' spawn types via same endpoint
+- Creature definitions in `011_bestiary_creatures.sql` include aggressive flag (true/false) and room_description
+- Entry room for the-reliquary is 'reliquary-inn' (defined in zone config entry_room_slugs)
+- E2E test patterns: import from '../src/fixtures/test-fixture.js', use test.describe(), async ({ createPlayer }) => {...}
+
+---
+
+### 2026-04-19: E2E Combat Tests — PR #479 Review & Follow-Up
+
+**Status:** 🎯 Follow-up work assigned  
+**Review by:** Elminster (Architect)
+
+**What Happened:**
+Elminster reviewed PR #479 (7 e2e combat tests) and approved with notes. Tests provide essential regression coverage but have 3 coverage gaps and weak assertions needing attention.
+
+**Elminster's Findings:**
+
+#### ✅ Approved
+- 7 e2e tests provide meaningful regression coverage for multi-encounter redesign
+- Admin spawn API integration works correctly
+- Test patterns follow existing e2e conventions
+
+#### ⚠️ Coverage Gaps (5 scenarios needed)
+1. **Creature death / combat completion** — HIGHEST PRIORITY. Test runs combat to completion (creature HP → 0, encounter ends cleanly)
+2. **Combat blocks movement** — Verify `go` is rejected while in combat (or requires flee first)
+3. **Creature assist** — Spawn two same-type creatures, attack one, verify other joins encounter
+4. **Position system** — Test `reposition` command during combat
+5. **Combat timeout** — Verify encounter auto-ends after inactivity
+
+#### 📋 Weak Assertions (Tighten in Follow-Up)
+1. **Test 4 (observer):** Replace `seesAlice || seesCombat` OR-assertion with specific assertion on observer-visible combat state message
+2. **Test 5 (flee):** Replace `m.length > 20` with regex matching expected post-flee room description or "you are no longer in combat" message
+3. **Test 7 (aggressive):** Either test actual auto-aggro (creature attacks player on room entry) or remove as near-duplicate of Test 1
+
+**Action Items for Minsc:**
+1. Add 5 missing e2e combat scenarios (prioritize creature death completion)
+2. Tighten 3 weak assertions in existing tests
+3. Recommended: Submit follow-up PR for assertion fixes + new scenarios
+4. Test via: `cd packages/e2e && npx playwright test tests/combat.spec.ts`
+
+**Context for Tests:**
+- Multi-encounter redesign now in prod (PRs #477-478)
+- E2E tests provide essential client-server integration validation
+- Coverage gaps identified align with production feature completeness
+- Weak assertions reduce test reliability for regression detection
+
+**Handoff Notes:**
+Elminster approved merge of PR #479 to dev (squash merge completed). New tests are solid foundation; follow-up work brings coverage to production-ready state.
+
