@@ -606,3 +606,8 @@ See Drizzt's orchestration log for engine/session perspective on recommended fix
 - The combatantEncounter map is the key invariant: every combatant ID must map to exactly one encounter ID at all times
 - mergeEncounters must update combatantEncounter for ALL moved combatants or lookups break silently
 - broadcastCombatState already iterates all encounters and unicasts per player — multi-encounter support was already structurally present in the broadcast layer
+- **Phase 3 AoE Merge:** resolveAoE() is a pure query + mutation method that handles all encounter topology changes for AoE attacks — it doesn't deal damage (tick resolution handles that). Key insight: collect all unique encounters from targets first, then merge them all into caster's encounter to avoid double-merging.
+- mergeEncounters() made public in Phase 3 — resolveAoE needs it, and it's already well-tested via initiateCombat's Step 2 logic
+- WHIRLWIND ability (aoe_attack type, 0.75 damage multiplier, 4 tick cooldown, 20 stamina) added to DEFAULT_ABILITIES map for future AoE damage implementation
+- resolveAoE handles 4 main cases: (1) caster not in combat → create new encounter, (2) caster in combat + targets in other encounters → merge all into caster's, (3) targets not in any encounter → add to caster's, (4) mix of above → merge all into one
+- AoE merge preserves threat tables from all merged encounters (additive for creatures in multiple encounters), uses Math.max for tick counts, and sets caster's currentTarget to first valid target if not already set
