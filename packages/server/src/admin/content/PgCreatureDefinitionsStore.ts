@@ -92,6 +92,7 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
   }
 
   async getById(id: string): Promise<ContentEntity | undefined> {
+    // Match by type slug, slug column, or UUID id so callers can use any identifier
     const result = await query<CreatureRow>(
       `SELECT id, type, name, description, room_description, behavior, aggressive,
               max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
@@ -99,7 +100,8 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
               idle_ticks_min, idle_ticks_max, flee_threshold,
               tier_min, tier_max, status, loot_table, created_at
        FROM creature_definitions
-       WHERE id = $1`,
+       WHERE type = $1 OR slug = $1 OR id::text = $1
+       LIMIT 1`,
       [id],
     );
     if (result.rows.length === 0) return undefined;
