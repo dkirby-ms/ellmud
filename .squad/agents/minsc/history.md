@@ -543,6 +543,11 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 
 ## Learnings
 
+### 2025-07-28 — Fix content-stores test (Issue #481, PR #482)
+
+- When a store method's SQL query shape changes (e.g. `WHERE id = $1` → `WHERE type = $1 OR slug = $1 OR id::text = $1`), spy-based assertions using `expect.stringContaining(...)` must be updated to match the new query. The parameterised values array may stay the same even when the WHERE clause changes.
+- Always verify test assertions match the current implementation query, especially after PRs that modify store lookup logic.
+
 ### 2025-07-25 — COMBAT_STATE message tests (Issue #467 Phase A)
 
 - CombatSystem **removes defeated combatants** from `encounter.combatantIds` during `resolveTick()`. The COMBAT_STATE builder must merge defeated info from `TickResult.events` to show dead combatants in the client HUD.
