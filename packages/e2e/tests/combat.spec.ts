@@ -149,7 +149,9 @@ test.describe('Multi-encounter combat system', () => {
         await player.waitForMessage(/flees from combat/i, { timeout: 5_000 });
         break;
       } catch {
-        // Flee failed — retry
+        if (attempt === 4) {
+          throw new Error('Flee failed after 5 attempts — 50% chance per attempt, 5 attempts should succeed ~97% of the time');
+        }
         continue;
       }
     }
@@ -272,13 +274,16 @@ test.describe('Multi-encounter combat system', () => {
     await player.sendCommand('attack flood');
     await player.waitForMessage(/combat begins/i, { timeout: 10_000 });
 
-    // Wait for strike narrations from flood scuttlers
+    // Wait for strike narrations from both flood scuttlers.
+    // First strike confirms combat is ticking; a brief additional wait lets
+    // the second creature's AI tick fire as well.
     await player.waitForMessage(/flood scuttler strikes/i, { timeout: 20_000 });
+    await new Promise((r) => setTimeout(r, 5_000));
 
     const messages = await player.getMessages();
     const strikeMessages = messages.filter((m) =>
       /flood scuttler strikes/i.test(m),
     );
-    expect(strikeMessages.length).toBeGreaterThanOrEqual(1);
+    expect(strikeMessages.length).toBeGreaterThanOrEqual(2);
   });
 });
