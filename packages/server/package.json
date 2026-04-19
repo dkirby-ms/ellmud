@@ -1,6 +1,6 @@
 {
   "name": "@ellmud/server",
-  "version": "0.2.0-dev.61",
+  "version": "0.2.0-dev.62",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

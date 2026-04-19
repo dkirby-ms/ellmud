@@ -1,3 +1,10 @@
+# [0.2.0-dev.62](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.61...v0.2.0-dev.62) (2026-04-19)
+
+
+### Features
+
+* add e2e combat tests ([#479](https://github.com/dkirby-ms/ellmud/issues/479)) ([30e96d3](https://github.com/dkirby-ms/ellmud/commit/30e96d3acb9d77ef3207ff5b5874819b544d88c8)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
 # [0.2.0-dev.61](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.60...v0.2.0-dev.61) (2026-04-18)
 
 
