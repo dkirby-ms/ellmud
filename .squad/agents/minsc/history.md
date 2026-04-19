@@ -16,14 +16,19 @@
 
 **Recent Work (Last 30 Lines):**
 
-### 2026-07-14: E2E Combat Coverage Expansion (PR #480)
-**Status:** ✅ Complete — PR #480 open against `dev`
+### 2026-04-19: E2E Combat Coverage Expansion (PR #480)
+**Status:** ✅ Complete — PR #480 merged to `dev`
 
 **What was done:**
 - Expanded `combat.spec.ts` from 7 → 10 tests (3 new, 3 tightened)
 - New: combat-completion (defeat + end), movement-block, multi-creature aggro
 - Tightened: observer (strike narrations), flee (post-flee movement), aggressive (real auto-aggro)
 - All 39 e2e tests pass, zero regressions
+
+**Review outcome (Elminster):**
+- Verdict: APPROVE_WITH_NOTES — 5/6 notes fully addressed, 1/6 via acceptable proxy
+- Two non-blocking suggestions: (1) Multi-creature assertion >= 2 instead of >= 1; (2) Explicit flee-fail error message
+- PR #480 squash-merged to `dev` on 2026-04-19
 
 **Critical discovery — zone category limitation:**
 - `ZoneRoom.update()` skips combat/creature AI ticks in `faction_hub` zones (`isNonCombatZone`)
@@ -537,6 +542,11 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 # Minsc — Test Architect History
 
 ## Learnings
+
+### 2025-07-28 — Fix content-stores test (Issue #481, PR #482)
+
+- When a store method's SQL query shape changes (e.g. `WHERE id = $1` → `WHERE type = $1 OR slug = $1 OR id::text = $1`), spy-based assertions using `expect.stringContaining(...)` must be updated to match the new query. The parameterised values array may stay the same even when the WHERE clause changes.
+- Always verify test assertions match the current implementation query, especially after PRs that modify store lookup logic.
 
 ### 2025-07-25 — COMBAT_STATE message tests (Issue #467 Phase A)
 

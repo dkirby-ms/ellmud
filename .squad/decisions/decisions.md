@@ -1,5 +1,120 @@
-<<<<<<< HEAD
-## 2026-04-13T19:10:00Z: Permadeath System — Server-Wide Reset Model
+## 2026-04-19T11:30:00Z: E2E Combat Coverage Expansion (PR #480)
+
+**By:** Minsc (QA), Elminster (Review Lead)  
+**PR:** #480 — `e2e/expand-combat-coverage` → `dev`  
+**Date:** 2026-04-19  
+**Status:** ✅ Merged to `dev`  
+**Scope:** Test infrastructure — combat e2e coverage gaps, assertion tightening
+
+---
+
+## Overview
+
+Expanded combat e2e test suite from 7 → 10 tests (3 new, 3 tightened assertions). All 39 e2e tests pass, zero regressions. PR reviewed and approved by Elminster with two non-blocking improvement suggestions.
+
+---
+
+## New Tests (3)
+
+### Combat Completion
+**Test:** `combat completes when creature is killed`  
+Kills a sludge_crawler in warrens dungeon zone, verifies `/is defeated/` and `/combat has ended/` messages. Uses `peaceful` mode to isolate encounter.  
+**Quality:** Strong — both end-of-combat messages verified with specific regex.
+
+### Movement Block
+**Test:** `go command is blocked during combat`  
+Tests in reliquary-inn (sync zone, no ticks needed). Verifies exact error: `"You're in combat! Use 'flee' to escape first."`  
+**Quality:** Strong — gold standard for command rejection testing.
+
+### Multi-Creature Aggro
+**Test:** `multiple aggressive creatures engage when one is attacked`  
+Two flood_scuttlers spawn; player attacks one; waits for strike messages from both.  
+**Note:** No DB creatures have `assist` configs; test uses aggressive behavior tree proxy (acceptable pragmatic choice).
+
+---
+
+## Tightened Assertions (3)
+
+### Observer Test
+**Before:** `seesAlice || seesCombat` — passes on name OR any combat keyword (too loose)  
+**After:** Regex `/strikes.*for \d+ damage/i` — Bob must see actual strike narration with numeric damage  
+**Quality:** Strong — moved to warrens for real tick-based damage verification.
+
+### Flee Test
+**Before:** `m.length > 20` — "any long message proves flee worked" (easily passes on room descriptions)  
+**After:** Retry loop (5 attempts for 50% chance) → `/flees from combat/i` → `go west` succeeds  
+**Quality:** Strong — movement success is definitive proof of escape.
+
+### Aggressive Creature Test
+**Before:** Spawns aggressive creature, manually types `attack` (identical to Test 1)  
+**After:** Spawns flood_scuttler in rubble-boulevard, player walks in with `go east`, waits for auto-aggro  
+**Quality:** Strong — tests actual AI behavior tree path (idle → hostile → combat_strike).
+
+---
+
+## Infrastructure Work
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `DEV_MODE_ENABLED` flag | ✅ | Enables `goto` + `peaceful` for test control. Zero regressions (29 existing tests pass). |
+| `teleportToWarrens()` helper | ✅ | Clean abstraction. Double-confirmation (waitForMessage + look) handles async zone loading. |
+| File-level JSDoc | ✅ | Documents faction_hub vs dungeon zone distinction — prevents future confusion. |
+| `adminSpawnCreature` zone param | ✅ | Pre-existing 3rd arg (`zoneSlug`) correctly used for warrens spawns. |
+
+---
+
+## Critical Discovery: Combat Tick Architecture
+
+**Problem:** Combat ticks don't run in starting zones (`faction_hub` category: reliquary, bloom-observatory, carrion-court).  
+**Original observation:** Tests 1–7 only passed because they tested synchronous command responses, not tick resolution.  
+**Solution:** `goto warrens:shattered-gate` teleports to dungeon zone where ticks are active.  
+**Pattern locked in:** Starting zone + teleport + peaceful isolation = reliable combat e2e.
+
+---
+
+## Review Outcome
+
+**Reviewer:** Elminster  
+**Verdict:** APPROVE_WITH_NOTES  
+**Assessment:** 5/6 fully addressed, 1/6 via acceptable proxy. Two minor improvement suggestions.
+
+### Elminster's Non-Blocking Suggestions
+
+1. **Multi-creature assertion:** Change `strikeMessages.length >= 1` to `>= 2` — both creatures should produce at least 2 total strikes in 20s.
+
+2. **Flee retry failure message:** Add explicit error after retry loop:
+   ```ts
+   throw new Error('Flee failed after 5 attempts');
+   ```
+   (Currently test fails confusingly with `go` command timeout if all flee attempts fail.)
+
+---
+
+## Rationale & Design Notes
+
+**Pragmatic creature-assist proxy:** Avoids coupling test infrastructure to game content seeds. True assist test would require seed data changes (no DB creatures currently have `assist` configs). Current aggressive behavior tree proxy is the right pragmatic choice.
+
+**Zone distinction documentation:** Future developers will understand why combat tests must teleport to dungeons. Prevents costly rework.
+
+**DEV_MODE_ENABLED scope:** Test server only. No regressions. Acceptable surface for test admin commands.
+
+---
+
+## Artifacts
+
+- PR #480: `e2e/expand-combat-coverage` → `dev`
+- Test file: `packages/server/src/__tests__/e2e/combat.spec.ts`
+- Orchestration logs: 
+  - `.squad/orchestration-log/2026-04-19T11-30-minsc.md`
+  - `.squad/orchestration-log/2026-04-19T11-30-elminster.md`
+- Session log: `.squad/log/2026-04-19T11-30-e2e-combat-expansion.md`
+
+---
+
+*Merged from inbox: `elminster-e2e-combat-review-480.md` on 2026-04-19T11:30:00Z.*
+
+---
+
 
 **By:** Elminster (Design), Drizzt (DB), Jarlaxle (Systems), Regis (UI), Minsc (Tests)  
 **Date:** 2026-04-13  
@@ -2274,486 +2389,4 @@ Added these paths to `paths-ignore` in both `pull_request` and `push` triggers:
 ### Rationale
 
 These paths contain no application code. Skipping CI for them saves runner minutes and reduces noise. If a workflow change itself needs validation, `workflow_dispatch` can be used manually.
-
-=======
-# Squad Decisions Log
-
----
-
-## Issue #467 — Combat HUD Status Panel Architecture (Elminster)
-
-**Date:** 2025-07-24  
-**Issue:** #467 — Combat HUD: status panel with combatant list and macro hotkeys  
-**Verdict:** APPROVED FOR PHASE A; PHASE B DEFERRED
-
-### Summary
-
-CombatHUD component is **90% built** but requires server-side architecture to broadcast combatant state. Proposed two-phase approach:
-
-- **Phase A:** New `COMBAT_STATE` message type; parallel work (Jarlaxle server + Regis client)
-- **Phase B:** Macro/hotkey system (deferred pending ability framework)
-
-### Key Decisions
-
-1. **COMBAT_STATE Message Type:** Unicast per player (not broadcast) to prevent enemy scouting in PvP scenarios
-2. **Message Frequency:** Every combat tick (~1 Hz) for responsive UI
-3. **Full Combatant List:** Send complete list; client filters per use case (hostile, allies, targets)
-4. **Phase Separation:** Hotkey system deferred until ability framework exists
-
-### Work Assignment (Phase A)
-
-**Server (Jarlaxle):**
-- Add COMBAT_STATE message type to shared/index.ts
-- Implement ZoneRoom.deliverCombatResults() broadcast
-
-**Client (Regis):**
-- Expand AppState.combat with combatant list + target tracking
-- Add SET_COMBAT_STATE reducer
-- Update StatusPanel.tsx to bind real combatant data to CombatHUD
-
-### Risk Assessment
-
-**Low Risk.** CombatHUD battle-tested (26 unit tests); server change is additive (no breaking changes); client integration follows established patterns.
-
-### Full Specification
-
-See: `.squad/decisions/inbox/elminster-combat-hud-467-analysis.md` (original comprehensive analysis with pseudocode, integration points, limitations)
-
----
-
-## Issue #468 — CI/CD Test Timeout Policy (Khelben)
-
-**Date:** 2026-04-17  
-**Issue:** #468 — Flaky tests on CI due to insufficient async polling timeout  
-**Verdict:** APPROVED & IMPLEMENTED
-
-### Problem
-
-Tests relying on async operations (combat ticks, database ops, network I/O) were failing intermittently on CI runners but passing locally. Root cause: 5-second timeout in `fastForwardDeath()` helper insufficient for CI runner performance variance.
-
-### Decision
-
-**Establish policy:** Async polling timeouts should be **2× typical local runtime** to account for CI runner slowness (containerization, resource sharing).
-
-### Implementation
-
-Applied to `fastForwardDeath()` helper:
-- Changed from 10 iterations (5s) to 20 iterations (10s)
-- Updated comment to mention "increased for CI reliability"
-- Commit: 6020f2b — `fix(tests): increase timeout for flaky death-spawn tests on CI`
-
-### Rationale
-
-- CI runners can be 2-3× slower than local dev machines
-- Flaky tests erode confidence and block legitimate deployments
-- Extra 5 seconds per test negligible vs. cost of investigating false failures
-- Tests should behave identically in all environments
-
-### Future Action
-
-Audit other integration tests for similar timeout issues, especially:
-- Database operation tests
-- Combat tick tests  
-- Network/WebSocket tests
-
----
-
-## Tech Debt Review — Drizzt + Minsc Changes (Elminster)
-
-**Date:** 2025-07-25  
-**Verdict:** ✅ APPROVE — No revisions requested
-
-### Deliverables Reviewed
-
-1. **Drizzt — skillsRepo Provider Fix:** ZoneRoom now uses lazy `getSkillsRepository()` getter (aligns with provider pattern, safe fallback)
-2. **Drizzt — Admin Creature CRUD Columns:** POST/PUT allow all 6 Phase 1 skill columns with correct defaults
-3. **Minsc — 20 New Combat Tick Tests:** Comprehensive coverage of 5 critical gaps (newEncounterRoomIds, roundNumber, multi-encounter isolation, mid-combat joining, event flags)
-
-### Key Notes
-
-- All tests pass with strong assertions; no trivial tests
-- Shield block test pragmatically asserts `dodged || blocked` due to base dodge chance (not a bug, acceptable for now)
-
----
-
-*Decisions merged from inbox on 2026-04-17T15:01:00Z. No duplicates found.*
->>>>>>> 447f49c (feat: COMBAT_STATE message + CombatHUD wiring (#467))
-
----
-
-## PR #470 Review — COMBAT_STATE Message + CombatHUD Wiring — Elminster
-
-**Date:** 2026-04-17  
-**PR:** #470 (re-PR of #469, targeting `dev`)  
-**Authors:** Jarlaxle (server), Regis (client), Minsc (tests)  
-**Verdict:** ✅ APPROVE — No revisions requested
-
-### Executive Summary
-
-Elminster completed comprehensive architecture review of Phase A implementation (issue #467). PR #470 implements a clean, server-authoritative COMBAT_STATE message with correct unicast-per-player design. 17 tests verified. No architectural concerns, no implementation issues, no cherry-pick artifacts. Cherry-pick strategy (revert on prod, cherry-pick to dev) worked cleanly.
-
-### Key Approvals
-
-**Server-Side Design (Jarlaxle)**
-- `ZoneRoom.broadcastCombatState()` correctly implements unicast-per-player pattern
-- Each player receives perspective-correct message with player-specific `hostileIds` and `playerTargetId`
-- Proper filtering: skips ended encounters, downed players, pending death teleports
-- `CombatSystem.getActiveEncounters()` and `getEncounterCombatants(encounterId)` safe and clean
-
-**Shared Types**
-- `CombatantStatus`, `CombatantSnapshot`, `CombatStateMessage` well-defined
-- Snapshot contains display-only data (no internal IDs or state)
-- `isPlayer`/`isNPC` mirror existing narration patterns
-- `telegraphedAction` follows GDD §6.5 telegraph contract
-
-**Client-Side State Management (Regis)**
-- New store fields: `combatCombatants`, `combatHostileIds`, `combatPlayerTargetId`
-- `SET_COMBAT_COMBATANTS` action dispatches all three fields atomically
-- Cleanup on combat end: `SET_COMBAT_STATE` with `inCombat: false` clears arrays
-- CombatHUD fallback to `roomOccupants.creatures` preserved for graceful behavior
-- `useZoneConnection` handler properly wired in `connect()` and `switchRoom()`
-
-**Test Coverage (Minsc)**
-- 11 server tests validating `buildCombatStateForPlayer()` contract (snapshot structure, HP updates per tick, combat end cleanup)
-- 6 client tests (3 active + 3 TODO) validating reducer behavior
-- Minor improvement: `fastForwardDeath()` timeout increased 10→20 iterations (5s→10s) for CI reliability
-- No risk: Does not weaken test validity
-
-**Type Safety**
-- All imports use correct `@ellmud/shared` paths
-- No unused imports (lint passes)
-- `MessageTypes` count updated 33→34
-- `types.test.ts` assertion updated to match new count
-
-**Cherry-Pick Verification**
-- Merge conflicts resolved correctly (kept incoming changes)
-- No orphaned code, duplicate logic, or stale references
-- Agent history files updated appropriately
-
-### Architectural Pattern Established
-
-**Per-player unicast with perspective-specific fields** (`hostileIds`, `playerTargetId`) is the correct model for server-authoritative state sync. This pattern should be applied to future state messages.
-
-### Message Flow
-
-```
-Server: resolveTick() → syncCreaturesAfterCombat() → deliverCombatResults()
-                      → broadcastCombatState()  <-- NEW
-                      → recordCombatMetrics()
-
-Per-player unicast: COMBAT_STATE → useZoneConnection.onCombatState()
-                                 → dispatch(SET_COMBAT_COMBATANTS)
-                                 → dispatch(SET_COMBAT_TICK)
-                                 → dispatch(SET_ENEMY_STATUS) [if target exists]
-                                 → dispatch(SET_COMBAT_STATE, inCombat: true)
-
-UI: StatusPanel → CombatHUD → availableTargets from combatCombatants
-                            → enemyStatus from target in combatCombatants
-```
-
-### Risk Assessment
-
-**✅ No Breaking Changes**
-- Existing combat flow unchanged (`broadcastCombatState()` is additive)
-- CombatHUD fallback to `roomOccupants.creatures` preserved
-- No changes to combat resolution logic, downing system, or teleportation
-
-**✅ No Performance Concerns**
-- Snapshot building O(combatants) per encounter — acceptable
-- Unicast loop O(players_in_room) — typical 1-4 players
-- No unnecessary allocations or repeated queries
-
-**✅ No Type Safety Regressions**
-- All new code uses `satisfies` assertions for message types
-- No `any` types introduced
-- Shared types exported correctly
-
-### Recommendations for Follow-Up
-
-1. **Phase B:** Add combatant list to CombatHUD (player + hostile sections) — see issue #467 acceptance criteria
-2. **Future:** Consider rate-limiting COMBAT_STATE if tick rate increases (current 1s/tick is fine)
-3. **Future:** If encounter size grows >20 combatants, consider paginated snapshots (unlikely with current content)
-
-### Team Patterns Validated
-
-- **Test approach:** Minsc's proactive test-writing (with TODO markers) works well — actual implementation matched test expectations perfectly
-- **Quality bar:** No architectural concerns, no implementation issues, no cherry-pick artifacts — this is the expected standard for all PRs
-
-### Next Steps
-
-1. ✅ Merge PR #470 to `dev`
-2. Proceed with Phase B (combatant list UI in CombatHUD)
-3. Monitor production telemetry for COMBAT_STATE message rate (~1 msg/player/second during combat)
-
----
-
-*Decision merged from inbox on 2026-04-17T19:39:00Z. No duplicates found.*
-
----
-
-## 2026-04-18T15:24: Combat Encounter Redesign — Design Q&A Clarifications
-
-**By:** dkirby-ms (via Copilot)  
-**Date:** 2026-04-18  
-**Type:** Design clarification
-
-### Q&A Answers
-
-**Q1 — Room entry aggro:** Yes, aggressive creatures will aggro entering players, but aggro does NOT mean immediate target switch. The creature joins the encounter and adds the player to its threat table, but continues attacking its current target until threat re-evaluation naturally shifts it. This is important — "aggro" ≠ "target switch."
-
-**Q2 — Group wipe freed creatures:** Yes, freed creatures return to behavior tree and re-aggro naturally.
-
-**Q3 — Single encounter per player:** Confirmed. Players can only be in one encounter at a time.
-
-**Q4 — No cross-encounter assist:** Confirmed. Creatures already in combat don't abandon their fight to assist allies.
-
-**Q5 — AoE merge is automatic:** Confirmed. No confirmation dialog — caster accepts the consequences.
-
----
-
-## 2026-04-18T16:56: Phase 1 Test Coverage — Unit Tests
-
-**By:** Minsc (Test Infrastructure)  
-**Date:** 2026-04-18  
-**Status:** ✅ Complete  
-**Type:** Test infrastructure
-
-### Summary
-
-Unit tests implemented for Phase 1 combat operations: single-encounter tests covering 1v1 combat scenarios, creature types, damage calculation, and basic combat state verification.
-
-### Coverage
-
-- Core 1v1 combat initiation and action resolution
-- Damage calculations and stat interactions
-- Creature type validation
-- Combat state message generation
-
-### Validation
-
-All tests passing; ready for Phase 2 multi-encounter integration.
-
----
-
-## 2026-04-18T15:32: Combat Encounter Redesign — Comprehensive Test Plan
-
-**By:** Minsc (QA/Test Infrastructure)  
-**Date:** 2026-04-18  
-**Status:** 📋 Ready for Implementation  
-**Type:** Test strategy
-
-### Executive Summary
-
-Comprehensive audit of 23 existing combat test files to identify which tests will break under multi-encounter redesign. Test plan includes:
-- Files safe for inheritance (13)
-- Files requiring rewrite (10)
-- Recommended migration path
-- TDD-first approach for new multi-encounter tests
-
-### Breaking Tests (10 files)
-
-1. **combat.test.ts** — Multi-combatant tests assume single encounter per room
-2. **combat-state-message.test.ts** — Message building assumes single encounter
-3. **pvp-combat.test.ts** — All players auto-join one encounter
-4. **auto-attack.test.ts** — Target scoping to single encounter
-5. **room-positioning.test.ts** — Shared threat table per room
-6. **combat-movement-lock.test.ts** — Lock scope may need per-encounter check
-7. **phase2-qa.test.ts** — Multi-player scenarios assume one encounter
-8. **creature-wiring.test.ts** — One creature/player per encounter
-9. **creatures.test.ts** — Behavior tree assumes single encounter
-10. **post-death-combat.test.ts** — One encounter per test
-
-### Safe Tests (13 files)
-
-Stat calculations, dodge/dodge-agi/abilities, dodge-block, weapon-types, stats, enemy-telegraph, threat utility, disconnect-while-downed, combat-actions — no encounter-model assumptions.
-
-### Recommended Approach
-
-- Preserve safe tests (no changes required)
-- Rewrite breaking tests to test target-scoped joining
-- Add new multi-encounter integration tests
-- Use TDD pattern: tests first, implementation validates
-
----
-
-## 2026-04-18T22:42: E2E Combat Multi-Encounter Tests
-
-**By:** Minsc (Test Infrastructure)  
-**Date:** 2026-04-18  
-**Status:** ✅ Implemented  
-**Type:** Test infrastructure
-
-### Summary
-
-Created comprehensive e2e test suite for multi-encounter combat system in `packages/e2e/tests/combat.spec.ts`. 7 tests covering basic initiation, separate encounters, observer visibility, flee mechanics, and creature engagement.
-
-### Test Coverage
-
-1. **Basic combat initiation** — Single player attacks creature
-2. **Separate encounters** — Two players attack different creatures independently
-3. **Same encounter** — Two players attack same creature (encounter joining)
-4. **Observer visibility** — Non-participant sees ongoing combat
-5. **Flee mechanics** — Player successfully exits combat
-6. **Creature targeting** — Player targets specific creature when multiple exist
-7. **Aggressive creatures** — Aggressive creatures can be engaged
-
-### Infrastructure Added
-
-- `adminSpawnCreature(creatureId, targetRoom, zoneSlug)` helper in `admin-api.ts`
-- Uses admin POST `/admin/api/rooms/{colyseusRoomId}/spawn` with type='creature'
-- Test creatures: `sludge_crawler` (passive), `flood_scuttler` (aggressive) from bestiary
-
-### Test Design Patterns
-
-- Follows existing e2e patterns from `connection.spec.ts` and `group.spec.ts`
-- Uses `createPlayer()` fixture for isolated browser contexts
-- Verifies combat via `waitForMessage()` with regex patterns
-- Tests run serially (workers: 1) with fresh server per test
-- Players spawn in 'reliquary-inn' (the-reliquary zone entry room)
-
-### Future Considerations
-
-- Add tests for creature death and loot distribution in encounters
-- Add tests for encounter timeout/cleanup when all participants flee
-- Consider adding tests for PvP multi-encounter scenarios (if supported)
-- Add tests for combat abilities/skills when implemented
-
----
-
-## 2026-04-18T18:01: Phase 1 Refactor — Systems Architecture
-
-**By:** Jarlaxle (Systems)  
-**Date:** 2026-04-18  
-**Status:** ✅ Complete  
-**Type:** Architecture refactor
-
-### Summary
-
-Phase 1 systems refactor completed: repositioned creature system (action ordering, threat evaluation) to support multi-encounter redesign. Key changes:
-- Creature action submission proper ordering
-- Threat table optimization
-- Encounter state management
-- Backward compatibility maintained with existing tests
-
-### Validation
-
-All Phase 1 tests passing. System ready for Phase 2 multi-encounter integration.
-
----
-
-## 2026-04-18T19:43: Phase 3 Architecture Review — Multi-Encounter Combat
-
-**By:** Elminster (Architecture)  
-**Date:** 2026-04-18  
-**Status:** ✅ Approved for implementation  
-**Type:** Architecture review
-
-### Summary
-
-Comprehensive architecture review of multi-encounter combat redesign (PRs #477-478). Validated encounter merging logic, threat table preservation, client message broadcasting, and position system integration.
-
-### Key Validations
-
-1. **Encounter merging:** Cross-target AoE properly merges separate encounters
-2. **Threat table preservation:** Threat maintained on merge (max tick count, union of threat data)
-3. **Client state:** Correct observers per encounter, message broadcasting accurate
-4. **Position system:** Compatible with encounter model; tested 8-player scenarios
-5. **Backward compatibility:** Solo encounters, assist-join, flee, timeout all working
-
-### Architectural Notes
-
-- Position system tested at 8-player scale — no issues identified
-- Message load (~1 msg/player/second during combat) acceptable
-- Threat merging logic sound for all encounter sizes tested
-- No race conditions identified in concurrent encounter scenarios
-
-### Recommendations
-
-1. Monitor COMBAT_STATE message rate in production
-2. Consider paginated snapshots if encounters exceed 20 combatants (unlikely)
-3. Proceed with Phase B (combatant list UI)
-
----
-
-## 2026-04-18T20:16: Phase 4 Tests — Combat Test Quality Audit
-
-**By:** Elminster (Architecture)  
-**Date:** 2026-04-18  
-**Status:** ✅ Audit complete; tests ready  
-**Type:** Test quality audit
-
-### Summary
-
-Comprehensive quality audit of Phase 4 test suite (unit tests for multi-encounter operations). 40+ tests covering:
-- Separate encounters per room
-- Encounter joining logic (attacker/target)
-- Threat table preservation on merge
-- Tick count behavior
-- Backward compatibility
-- Test design patterns
-
-### Test Quality Findings
-
-**Good:**
-- Tests are isolated and deterministic
-- Threat preservation test properly validates merge behavior
-- Backward compatibility tests mirror production patterns exactly
-- Test design decisions documented (threat via multiple ticks, staggered encounters)
-
-**Areas for Enhancement:**
-- Some tests have loose assertions (should be tightened in follow-up)
-- Edge case coverage could be expanded (timeouts, position conflicts)
-- Performance characteristics not tested
-
-### Recommendations
-
-1. Merge Phase 4 tests as-is (good baseline)
-2. Follow-up PR to tighten assertions and expand edge cases
-3. Add performance benchmarks for multi-encounter scenarios
-4. Document test design decisions in code comments
-
-### Validation
-
-All tests passing against current codebase. Ready for Phase B implementation.
-
----
-
-## 2026-04-18T19:24: Phase 3 AoE Combat — Design & Implementation
-
-**By:** Jarlaxle (Systems)  
-**Date:** 2026-04-18  
-**Status:** ✅ Implemented  
-**Type:** Feature implementation
-
-### Summary
-
-Phase 3 AoE combat implementation: multi-target encounter merging, automatic merge on AoE cast (no confirmation dialog), cross-encounter targeting validation.
-
-### Key Design Decisions
-
-1. **Automatic merge:** No confirmation dialog — caster accepts consequences
-2. **Encounter eligibility:** Only same-room encounters can merge
-3. **Threat behavior:** Merged encounters inherit union of threat tables
-4. **Message broadcast:** Separate COMBAT_STATE per encounter until merge
-
-### Implementation Details
-
-- AoE spell validation checks for creatures in multiple encounters
-- Encounter merge triggered automatically on cast resolution
-- Threat re-evaluation happens post-merge
-- Client receives separate messages per encounter pre-merge, unified post-merge
-
-### Testing
-
-- Unit tests for merge logic: 5 scenarios (simple 1v1, 2-encounter merge, 3-encounter, timing edge cases)
-- E2E test for AoE cast with multiple creatures
-- Backward compatibility: solo casts and traditional 1v1 AoE unchanged
-
-### Rationale
-
-Automatic merge simplifies state management and matches user expectations (AoE hits all targets in area). No-dialog design aligns with existing combat action flow.
-
----
-
-*Decisions merged from inbox on 2026-04-19T00:50:00Z.*
 

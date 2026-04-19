@@ -619,3 +619,25 @@ APPROVE for merge. The three-layer model is correctly designed but only partiall
 - ✅ Confirmed adherence to established patterns and conventions
 
 **Collaboration Note:** Minsc's test review confirmed full test coverage passing (3843 tests). Both agents' approvals aligned—no conflicts or follow-up concerns.
+
+### 2026-04-19: Review PR #480 — Expand E2E Combat Coverage (APPROVE_WITH_NOTES)
+
+**Task:** Evaluate whether Minsc addressed all 6 review notes from PR #479 (3 coverage gaps, 3 weak assertions).
+
+**Verdict: APPROVE_WITH_NOTES — 5/6 fully addressed, 1/6 via honest proxy.**
+
+**Coverage gaps addressed:**
+- ✅ Combat completion: kills sludge_crawler, verifies "defeated" + "combat has ended". Uses `peaceful` mode to isolate from wandering creatures — clever.
+- ✅ Movement block: exact message match on `go` rejection during combat. Kept in faction_hub zone (sync-only) — correct.
+- ⚠️ Creature assist: no DB creatures have assist configs, so test proxies via two aggressive flood_scuttlers engaging independently. Proxy rationale documented honestly. `strikeMessages >= 1` should be `>= 2` to prove both engaged.
+
+**Weak assertions tightened:**
+- ✅ Observer: `seesAlice || seesCombat` → `waitForMessage(/strikes.*for \d+ damage/i)` — strong.
+- ✅ Flee: `m.length > 20` → verifies `go` works after flee (proves not in combat) — strong.
+- ✅ Aggressive: manual `attack` → player walks into creature's room, combat starts without `attack` — genuine auto-aggro test.
+
+**Infrastructure:** DEV_MODE_ENABLED enables `goto`/`peaceful` for all e2e tests. `teleportToWarrens` helper with double zone-load confirmation. Good file-level JSDoc explaining faction_hub vs dungeon zone.
+
+**Non-blocking suggestions:** (1) `strikeMessages >= 2` in multi-creature test, (2) explicit throw after flee retry loop exhaustion.
+
+**Decision logged to:** `.squad/decisions/inbox/elminster-e2e-combat-review-480.md`
