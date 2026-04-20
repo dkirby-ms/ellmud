@@ -9,7 +9,7 @@ import {
   Shield,
   X,
 } from "lucide-react";
-import { useAppStore } from "../store";
+import { useAuthStore } from "../store/auth.js";
 import { useSettings } from "../hooks/useSettings";
 import { useFlags } from "../hooks/useFlags";
 
@@ -58,8 +58,8 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const username = useAppStore(s => s.username);
-  const playerId = useAppStore(s => s.playerId);
+  const username = useAuthStore(s => s.username);
+  const playerId = useAuthStore(s => s.playerId);
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =

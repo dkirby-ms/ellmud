@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useAppStore } from '../store.js';
+import { useConnectionStore } from '../store/connection.js';
 import { sendToggleFlag } from '../services/connection.js';
 import type { UserFlagType } from '@ellmud/shared';
 
@@ -37,7 +37,7 @@ export interface UseFlagsReturn {
 }
 
 export function useFlags(): UseFlagsReturn {
-  const room = useAppStore(s => s.room);
+  const room = useConnectionStore(s => s.room);
   const [flags, setFlags] = useState<FlagState>(loadFromLocalStorage);
 
   const toggleFlag = useCallback(

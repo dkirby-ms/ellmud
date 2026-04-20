@@ -10,7 +10,7 @@
  */
 
 import { forwardRef } from 'react';
-import { useAppStore } from '../store.js';
+import { useTerminalStore } from '../store/terminal.js';
 
 /** All directions the compass can display, in layout order. */
 const ALL_DIRECTIONS = [
@@ -38,7 +38,7 @@ interface CompassControlProps {
 }
 
 const CompassControl = forwardRef<HTMLDivElement, CompassControlProps>(function CompassControl({ onNavigate }, ref) {
-  const roomHeader = useAppStore(s => s.roomHeader);
+  const roomHeader = useTerminalStore(s => s.roomHeader);
   const exits = roomHeader?.exits ?? [];
   const exitSet = new Set(exits.map((e) => e.toLowerCase()));
 

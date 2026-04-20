@@ -5,7 +5,8 @@
  * Pulls all data from the Zustand store so it updates reactively.
  */
 
-import { useAppStore } from '../store.js';
+import { useCombatStore } from '../store/combat.js';
+import { useTerminalStore } from '../store/terminal.js';
 
 function hpColor(hp: number, maxHp: number): string {
   if (maxHp <= 0) return 'mud-prompt-hp-critical';
@@ -25,12 +26,12 @@ function stanceLabel(inCombat: boolean, pendingAction: string | null): string {
 }
 
 export default function MudPrompt() {
-  const hp = useAppStore(s => s.playerHp);
-  const maxHp = useAppStore(s => s.playerMaxHp);
-  const inCombat = useAppStore(s => s.inCombat);
-  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
-  const statusEffects = useAppStore(s => s.statusEffects);
-  const roomHeader = useAppStore(s => s.roomHeader);
+  const hp = useCombatStore(s => s.playerHp);
+  const maxHp = useCombatStore(s => s.playerMaxHp);
+  const inCombat = useCombatStore(s => s.inCombat);
+  const pendingCombatAction = useCombatStore(s => s.pendingCombatAction);
+  const statusEffects = useCombatStore(s => s.statusEffects);
+  const roomHeader = useTerminalStore(s => s.roomHeader);
 
   const stance = stanceLabel(inCombat, pendingCombatAction);
   const effects = statusEffects ?? [];

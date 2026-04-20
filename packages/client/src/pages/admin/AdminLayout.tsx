@@ -11,7 +11,7 @@ import {
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 import { useVersion } from "../../hooks/useVersion";
-import { useAppStore } from "../../store";
+import { useAuthStore } from "../../store/auth.js";
 import { hasMinRole } from "@ellmud/shared";
 
 interface SearchableEntity {
@@ -70,9 +70,9 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const version = useVersion();
-  const appAuthenticated = useAppStore(s => s.authenticated);
-  const appUsername = useAppStore(s => s.username);
-  const appUserRole = useAppStore(s => s.userRole);
+  const appAuthenticated = useAuthStore(s => s.authenticated);
+  const appUsername = useAuthStore(s => s.username);
+  const appUserRole = useAuthStore(s => s.userRole);
 
   // Determine if the user has admin/content-dev role from their game session
   const hasAdminRole = appAuthenticated && hasMinRole(appUserRole, 'content-dev');
