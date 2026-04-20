@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useAppContext } from '../store.js';
+import { useAppStore } from '../store.js';
 import { sendToggleFlag } from '../services/connection.js';
 import type { UserFlagType } from '@ellmud/shared';
 
@@ -37,7 +37,7 @@ export interface UseFlagsReturn {
 }
 
 export function useFlags(): UseFlagsReturn {
-  const { state } = useAppContext();
+  const room = useAppStore(s => s.room);
   const [flags, setFlags] = useState<FlagState>(loadFromLocalStorage);
 
   const toggleFlag = useCallback(
@@ -49,11 +49,11 @@ export function useFlags(): UseFlagsReturn {
       });
 
       // Send to server if connected to a room
-      if (state.room) {
-        sendToggleFlag(state.room, { flag, enabled });
+      if (room) {
+        sendToggleFlag(room, { flag, enabled });
       }
     },
-    [state.room],
+    [room],
   );
 
   return { flags, toggleFlag };
