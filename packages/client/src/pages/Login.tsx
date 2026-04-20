@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router";
 import { login, register, ApiError } from "../services/api";
-import { useAppContext } from "../store";
+import { useAppStore } from "../store";
 import { useDevAutoLogin } from "../hooks/useDevAutoLogin";
 
 export default function Login() {
-  const { state, dispatch } = useAppContext();
+  const authenticated = useAppStore(s => s.authenticated);
+  const dispatch = useAppStore(s => s.dispatch);
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -50,7 +51,7 @@ export default function Login() {
 
   // Already authenticated — skip straight to character select
   // NOTE: This must come AFTER all hooks to satisfy React's rules of hooks.
-  if (state.authenticated) {
+  if (authenticated) {
     return <Navigate to="/characters" replace />;
   }
 

@@ -12,7 +12,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { logout as apiLogout } from "../services/api";
-import { useAppContext } from "../store";
+import { useAppStore } from "../store";
 import { useSettings } from "../hooks/useSettings";
 import { useFlags } from "../hooks/useFlags";
 
@@ -56,7 +56,10 @@ const categories: {
 ];
 
 export default function Settings() {
-  const { state, dispatch } = useAppContext();
+  const token = useAppStore(s => s.token);
+  const settingsUsername = useAppStore(s => s.username);
+  const playerId = useAppStore(s => s.playerId);
+  const dispatch = useAppStore(s => s.dispatch);
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =
@@ -72,8 +75,8 @@ export default function Settings() {
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);
     try {
-      if (state.token) {
-        await apiLogout(state.token);
+      if (token) {
+        await apiLogout(token);
       }
     } catch {
       // Server may be unreachable — still clear local state
@@ -81,7 +84,7 @@ export default function Settings() {
       dispatch({ type: "LOGOUT" });
       navigate("/");
     }
-  }, [state.token, dispatch, navigate]);
+  }, [token, dispatch, navigate]);
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -154,7 +157,7 @@ export default function Settings() {
                   </label>
                   <input
                     type="text"
-                    value={state.username ?? "Unknown"}
+                    value={settingsUsername ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary font-sans"
                   />
@@ -167,7 +170,7 @@ export default function Settings() {
                   </label>
                   <input
                     type="text"
-                    value={state.playerId ?? "Unknown"}
+                    value={playerId ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-disabled font-mono text-xs"
                   />
