@@ -20,7 +20,7 @@ import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
 import WhoListModal from "../components/WhoListModal.js";
 import HelpModal from "../components/HelpModal.js";
-import { useAppContext } from "../store.js";
+import { useAppStore } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
@@ -34,7 +34,16 @@ export default function ZoneExploration() {
   const navigate = useNavigate();
   const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
-  const { state, dispatch } = useAppContext();
+  const token = useAppStore(s => s.token);
+  const messages = useAppStore(s => s.messages);
+  const connectionStatus = useAppStore(s => s.connectionStatus);
+  const inCombat = useAppStore(s => s.inCombat);
+  const roomHeader = useAppStore(s => s.roomHeader);
+  const username = useAppStore(s => s.username);
+  const email = useAppStore(s => s.email);
+  const combatTick = useAppStore(s => s.combatTick);
+  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
+  const dispatch = useAppStore(s => s.dispatch);
 
   // Derive zone mode: /zone (hub) vs /zone/:zoneId (specific zone)
   const isHub = !zoneId;
@@ -42,11 +51,11 @@ export default function ZoneExploration() {
 
   // Resolve the player's faction hub via /api/spawn-zone
   useEffect(() => {
-    if (!isHub || !state.token) return;
-    fetchSpawnZone(state.token)
+    if (!isHub || !token) return;
+    fetchSpawnZone(token)
       .then(res => setSpawnTarget(res.target))
       .catch(() => setSpawnTarget('zone:the-refuge'));
-  }, [isHub, state.token]);
+  }, [isHub, token]);
 
   const roomName = isHub ? (spawnTarget ?? '') : 'zone';
 
@@ -73,7 +82,7 @@ export default function ZoneExploration() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showWho, setShowWho] = useState(false);
-  const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
+  const { containerRef: narrativeRef, bottomRef } = useAutoScroll(messages);
 
   // ─── Focus persistence across zone transitions ───────────────────────────────
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +110,7 @@ export default function ZoneExploration() {
   // If the compass had focus, re-focus the first available compass button
   // instead of stealing focus to the prompt.
   useEffect(() => {
-    if (state.connectionStatus === "connected") {
+    if (connectionStatus === "connected") {
       requestAnimationFrame(() => {
         if (lastFocusAreaRef.current === 'compass') {
           const btn = compassRef.current?.querySelector<HTMLButtonElement>(
@@ -115,29 +124,29 @@ export default function ZoneExploration() {
         inputRef.current?.focus();
       });
     }
-  }, [state.connectionStatus]);
+  }, [connectionStatus]);
 
   // Phase 1: Arrow key / numpad direction shortcuts (only when input is not focused)
   useDirectionKeys({
     onMove: handleExitClick,
     inputRef,
-    enabled: state.connectionStatus === "connected",
+    enabled: connectionStatus === "connected",
   });
 
   // Abort any active speedwalk when combat starts
   useEffect(() => {
-    if (state.inCombat) {
+    if (inCombat) {
       speedwalkAbortRef.current = true;
     }
-  }, [state.inCombat]);
+  }, [inCombat]);
 
   // Logout handler
 
   // Derive room info from server state
-  const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
-  const zoneName = state.roomHeader?.zoneName;
-  const roomType = state.roomHeader?.roomType;
-  const roomSlug = state.roomHeader?.roomSlug;
+  const currentRoom = roomHeader?.roomName ?? "Connecting...";
+  const zoneName = roomHeader?.zoneName;
+  const roomType = roomHeader?.roomType;
+  const roomSlug = roomHeader?.roomSlug;
 
   const speedwalkMsgCounter = useRef(0);
 
@@ -170,7 +179,7 @@ export default function ZoneExploration() {
       // Single direction letters (n/s/e/w/u/d) fall through to normal
       // command handling so they don't trigger false "Speedwalk" messages.
       if (shouldTreatAsSpeedwalk(trimmed)) {
-        if (state.inCombat) {
+        if (inCombat) {
           addSystemMessage("Speedwalk blocked — you are in combat!");
           return;
         }
@@ -200,7 +209,7 @@ export default function ZoneExploration() {
 
       sendCommand(command);
     },
-    [command, sendCommand, handleExitClick, state.inCombat]
+    [command, sendCommand, handleExitClick, inCombat]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -245,7 +254,7 @@ export default function ZoneExploration() {
 
   // Map connection status for display
   const connectionIndicator = () => {
-    switch (state.connectionStatus) {
+    switch (connectionStatus) {
       case "connected":
         return (
           <span className="text-success text-xs font-mono">
@@ -296,7 +305,7 @@ export default function ZoneExploration() {
             </button>
           )}
           <span className="text-text-secondary text-sm font-sans">
-            {state.username ?? state.email ?? "Unknown"}
+            {username ?? email ?? "Unknown"}
           </span>
           <button
             onClick={() => navigate("/hall-of-fame")}
@@ -358,7 +367,7 @@ export default function ZoneExploration() {
             </h2>
           </div>
 
-          {/* Narrative text — render from real AppContext messages */}
+          {/* Narrative text — render from real store messages */}
           <div
             ref={narrativeRef}
             onClick={handleNarrativeClick}
@@ -366,7 +375,7 @@ export default function ZoneExploration() {
             role="log"
             aria-label="Game narrative"
           >
-            {state.messages.map((msg) => (
+            {messages.map((msg) => (
               <div key={msg.id}>
                 {msg.type === "header" && (
                   <div>
@@ -477,11 +486,11 @@ export default function ZoneExploration() {
                 onChange={(e) => setCommand(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  state.connectionStatus === "connected"
+                  connectionStatus === "connected"
                     ? "Type a command..."
                     : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
                 }
-                disabled={state.connectionStatus !== "connected"}
+                disabled={connectionStatus !== "connected"}
                 className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
                 style={{ fontSize: "1rem" }}
                 autoFocus
@@ -504,34 +513,34 @@ export default function ZoneExploration() {
       </div>
 
       {/* Combat Action Bar */}
-      {state.inCombat && (
+      {inCombat && (
         <div className="bg-bg-elevated border-t-2 border-danger px-6 py-3">
           <div className="flex items-center justify-center gap-2">
             <span
               className="text-danger text-sm mr-2 font-sans"
             >
-              ⚔ COMBAT — Tick {state.combatTick}
+              ⚔ COMBAT — Tick {combatTick}
             </span>
             <div
               data-testid="tick-timer-bar"
               role="progressbar"
-              aria-valuenow={state.combatTick}
+              aria-valuenow={combatTick}
               aria-valuemin={0}
               aria-valuemax={10}
               className="w-24 h-1.5 bg-bg-elevated rounded-full overflow-hidden mr-4"
             >
               <div
                 className="h-full bg-danger transition-all"
-                style={{ width: `${Math.min(state.combatTick * 10, 100)}%` }}
+                style={{ width: `${Math.min(combatTick * 10, 100)}%` }}
               ></div>
             </div>
             {combatActions.map(({ label, action }, i) => (
               <button
                 key={action}
                 onClick={() => handleCombatAction(action)}
-                disabled={state.pendingCombatAction != null}
+                disabled={pendingCombatAction != null}
                 className={`px-3 py-1 bg-bg-panel hover:bg-accent-gold hover:text-bg-primary text-text-primary rounded text-sm transition-colors border border-border-muted ${
-                  state.pendingCombatAction != null ? "opacity-50 cursor-not-allowed" : ""
+                  pendingCombatAction != null ? "opacity-50 cursor-not-allowed" : ""
                 } font-sans`}
               >
                 <span className="text-text-secondary mr-1 text-xs">{i + 1}</span>

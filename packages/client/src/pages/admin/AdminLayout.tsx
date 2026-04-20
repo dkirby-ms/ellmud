@@ -11,7 +11,7 @@ import {
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 import { useVersion } from "../../hooks/useVersion";
-import { useAppContext } from "../../store";
+import { useAppStore } from "../../store";
 import { hasMinRole } from "@ellmud/shared";
 
 interface SearchableEntity {
@@ -70,10 +70,12 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const version = useVersion();
-  const { state: appState } = useAppContext();
+  const appAuthenticated = useAppStore(s => s.authenticated);
+  const appUsername = useAppStore(s => s.username);
+  const appUserRole = useAppStore(s => s.userRole);
 
   // Determine if the user has admin/content-dev role from their game session
-  const hasAdminRole = appState.authenticated && hasMinRole(appState.userRole, 'content-dev');
+  const hasAdminRole = appAuthenticated && hasMinRole(appUserRole, 'content-dev');
 
   const [authenticated, setAuthenticated] = useState(() => hasAdminRole || !!getAdminToken());
   const [tokenInput, setTokenInput] = useState("");
@@ -386,10 +388,10 @@ export default function AdminLayout() {
           </span>
 
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0A0B0F] font-bold">{(appState.username ?? 'A')[0].toUpperCase()}</div>
+            <div className="w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0A0B0F] font-bold">{(appUsername ?? 'A')[0].toUpperCase()}</div>
             <div>
-              <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>{appState.username ?? 'Admin'}</p>
-              <p className="text-[#4A4B55] text-xs" style={{ fontFamily: "var(--font-sans)" }}>{appState.userRole}</p>
+              <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>{appUsername ?? 'Admin'}</p>
+              <p className="text-[#4A4B55] text-xs" style={{ fontFamily: "var(--font-sans)" }}>{appUserRole}</p>
             </div>
           </div>
         </div>

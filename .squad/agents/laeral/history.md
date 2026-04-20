@@ -49,6 +49,27 @@
 
 ---
 
+## Learnings
+
+### 2026-04-18: ANSI Color Design for Creature/Room/Item Descriptions (COMPLETED)
+
+**Design decisions:**
+- **Creature room_descriptions:** Wrap in `[bright-red]` (aggressive) or `[bright-cyan]` (passive) to signal threat level at a glance. Aggressiveness matters more than tier for player safety.
+- **Room descriptions:** Keep plain text (no color). Color highlights entities, not narrative setting. Preserves readability.
+- **Item room_descriptions:** Keep plain text. Cyan outer wrapper (from Drizzt's implementation) already provides visual distinction. No inner color needed.
+- **Nested tags:** Outer wrapper `[yellow]` + inner `[bright-red]` work together. ANSI parser handles nesting correctly.
+- **Rationale:** Bright red = immediate danger signal. Bright cyan = interactive but non-threatening. Minimal color use prevents visual fatigue.
+
+**Deliverable Status:**
+- ✅ Design spec finalized and merged to `.squad/decisions.md`
+- ✅ Orchestration log: `.squad/orchestration-log/2026-04-20T01:13:00Z-laeral.md`
+- ✅ Session log: `.squad/log/2026-04-20T01:13:00Z-ansi-description-colors.md`
+- ⏳ Awaiting Bruenor: migration 023_creature_description_colors.sql (86 creatures, 3 migrations affected)
+
+**Key insight:** Color for scanability (threat identification) > color for aesthetics. Less is more in terminal UI.
+
+---
+
 ## Detailed History
 
 Full session logs and dated entries have been moved to `history-archive.md` to keep this file compact.

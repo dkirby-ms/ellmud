@@ -4,6 +4,31 @@
 
 ---
 
+### 2026-04-20: Creature ANSI Color Migration (023)
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Decision:** Added ANSI color tags to all creature room_description fields via SQL migration 023
+- **Aggressive creatures** (`aggressive = true`): Wrapped in `[bright-red]...[/bright-red]`
+- **Passive creatures** (`aggressive = false`): Wrapped in `[bright-cyan]...[/bright-cyan]`
+
+**Rationale:** Per Laeral's design spec, visual differentiation helps players immediately identify threat level when entering a room. Tags applied at data layer, parsed client-side by existing ANSI parser.
+
+**Files Changed:**
+- `packages/server/src/db/migrations/023_creature_description_colors.sql` — New migration
+- `packages/server/src/__tests__/creature-appearance.test.ts` — Updated test assertions
+
+**Test Results:** All 77 creature-related tests pass ✓
+
+**Implementation Notes:**
+- SQL pattern uses string concatenation for efficient single-pass UPDATE
+- No hardcoded creature definitions in TypeScript (all database-driven)
+- No changes to room descriptions or item descriptions (creatures only)
+
+**Orchestration Status:** Logged to `.squad/decisions/decisions.md`
+
+---
+
 ## Core Context
 
 **Role:** Documentation
@@ -24,6 +49,7 @@
   - `preferred_rooms` and `forbidden_rooms` are TEXT arrays: `'{corridor,dead_end}'`
   - `slug` = `type` (snake_case) for all creatures
   - `idle_ticks_min/max` calculated with 10x multiplier pattern from 002
+- **ANSI color migration (023):** ASSIGNED — Add [bright-red] tags for aggressive creatures and [bright-cyan] for passive creatures. Update all 86 creature room_descriptions across migrations 002, 011, 022. Update test assertions to expect new colored output.
 - **Branch:** `squad/391-bestiary-seed`
 - **PR:** #399 to dev
 - **Files:** 1 new migration file, 685 lines
@@ -35,6 +61,7 @@
 - Always verify loot item IDs exist before referencing them in JSONB loot tables
 - Use `ON CONFLICT DO NOTHING` for idempotent migrations that might overlap with existing seed data
 - Node.js string literal escaping: `str.replace(/'/g, "''"` for SQL single-quote escaping
+- **ANSI color migration (023):** Added [bright-red] tags for aggressive creatures and [bright-cyan] for passive creatures. Used UPDATE with string concatenation (`'[bright-red]' || room_description || '[/bright-red]'`) to wrap existing descriptions. Test assertions updated to match new colored output.
 
 ### Container Items Implementation (2025-07-24)
 - **PR:** #430 (squad/container-items → dev)
