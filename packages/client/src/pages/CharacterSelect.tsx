@@ -11,7 +11,7 @@ import {
   Crosshair,
   Shirt,
 } from "lucide-react";
-import { useAppContext } from "../store";
+import { useAppStore } from "../store";
 import {
   fetchCharacters,
   createCharacter,
@@ -211,7 +211,10 @@ function CharacterDetailPanel({ char }: { char: CharacterSummary }) {
 // ─── Main Component ───────────────────────────────────────────────────────
 
 export default function CharacterSelect() {
-  const { state, dispatch } = useAppContext();
+  const token = useAppStore(s => s.token);
+  const username = useAppStore(s => s.username);
+  const email = useAppStore(s => s.email);
+  const dispatch = useAppStore(s => s.dispatch);
   const navigate = useNavigate();
 
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
@@ -224,14 +227,13 @@ export default function CharacterSelect() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [highlightedCharId, setHighlightedCharId] = useState<string | null>(null);
 
-  const token = state.token!;
 
   const highlightedChar = characters.find((c) => c.id === highlightedCharId) ?? null;
 
   const loadCharacters = useCallback(async () => {
     setError(null);
     try {
-      const chars = await fetchCharacters(token);
+      const chars = await fetchCharacters(token!);
       setCharacters(chars);
       if (chars.length === 0) setIsCreating(true);
     } catch (err) {
@@ -253,8 +255,8 @@ export default function CharacterSelect() {
     setSubmitting(true);
     setError(null);
     try {
-      await createCharacter(token, { name, startingZoneSlug: selectedZone });
-      const chars = await fetchCharacters(token);
+      await createCharacter(token!, { name, startingZoneSlug: selectedZone });
+      const chars = await fetchCharacters(token!);
       setCharacters(chars);
       setNewCharName(generateRandomName());
       setSelectedZone("");
@@ -270,7 +272,7 @@ export default function CharacterSelect() {
     setSubmitting(true);
     setError(null);
     try {
-      const selected = await selectCharacter(token, char.id);
+      const selected = await selectCharacter(token!, char.id);
       dispatch({ type: "SET_ACTIVE_CHARACTER", character: selected });
       navigate("/zone");
     } catch (err) {
@@ -288,7 +290,7 @@ export default function CharacterSelect() {
     setSubmitting(true);
     setError(null);
     try {
-      await deleteCharacter(token, charId);
+      await deleteCharacter(token!, charId);
       setCharacters((prev) => prev.filter((c) => c.id !== charId));
       setDeleteConfirm(null);
       if (highlightedCharId === charId) setHighlightedCharId(null);
@@ -301,9 +303,9 @@ export default function CharacterSelect() {
   };
 
   const handleLogout = async () => {
-    if (state.token) {
+    if (token) {
       try {
-        await apiLogout(state.token);
+        await apiLogout(token);
       } catch {
         /* best effort */
       }
@@ -332,7 +334,7 @@ export default function CharacterSelect() {
       <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="text-text-secondary text-sm font-sans">
-            {state.username ?? state.email ?? "Unknown"}
+            {username ?? email ?? "Unknown"}
           </span>
           <button
             onClick={() => navigate("/hall-of-fame")}

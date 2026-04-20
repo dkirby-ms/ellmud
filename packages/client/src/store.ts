@@ -1,9 +1,14 @@
 /**
- * App state — minimal React context store.
+ * App state — Zustand store.
  * The server is the source of truth; we only track UI-relevant state.
+ *
+ * Migration from React Context + useReducer to Zustand.
+ * The store is backed by the existing appReducer for safe incremental migration.
  */
 
-import { createContext, useContext } from 'react';
+import { create } from 'zustand';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
+
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
@@ -293,17 +298,39 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-// ─── Context ─────────────────────────────────────────────────────────────────
+// ─── Zustand Store ───────────────────────────────────────────────────────────
 
-export interface AppContextValue {
-  state: AppState;
-  dispatch: React.Dispatch<AppAction>;
+export const useAppStore = create<AppState & { dispatch: (action: AppAction) => void }>()(
+  subscribeWithSelector(
+    devtools(
+      (set) => ({
+        ...initialState,
+        dispatch: (action: AppAction) => set(
+          (prev) => {
+            const { dispatch: _, ...state } = prev;
+            const next = appReducer(state as AppState, action);
+            return next;
+          },
+          undefined,
+          // Label the devtools action with the action type
+          action.type,
+        ),
+      }),
+      { name: 'ellmud-store' },
+    ),
+  ),
+);
+
+// ─── Test Helpers ────────────────────────────────────────────────────────────
+
+/** Reset store to initial state. Call in beforeEach for test isolation. */
+export function resetAppStore(): void {
+  useAppStore.setState({ ...initialState });
 }
 
-export const AppContext = createContext<AppContextValue | null>(null);
-
-export function useAppContext(): AppContextValue {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useAppContext must be used within AppProvider');
-  return ctx;
+/** Initialize store with partial state. Useful for test setup. */
+export function initializeAppStore(partial: Partial<AppState>): void {
+  useAppStore.setState({ ...initialState, ...partial });
 }
+
+

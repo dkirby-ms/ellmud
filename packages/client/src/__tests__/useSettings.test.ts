@@ -4,10 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import React from 'react';
-import { AppContext } from '../store.js';
-import type { AppContextValue, AppState } from '../store.js';
-import { initialState } from '../store.js';
+import { initializeAppStore, resetAppStore } from '../store.js';
 import { useSettings } from '../hooks/useSettings.js';
 import type { ResolvedSettings } from '../hooks/useSettings.js';
 
@@ -33,17 +30,6 @@ const mockUpdate = updateUserSettings as ReturnType<typeof vi.fn>;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeState(overrides: Partial<AppState> = {}): AppState {
-  return { ...initialState, ...overrides };
-}
-
-function makeWrapper(state: AppState) {
-  const value: AppContextValue = { state, dispatch: vi.fn() };
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(AppContext.Provider, { value }, children);
-  };
-}
-
 const DEFAULTS: ResolvedSettings = {
   display: { fontSize: 16 },
   narration: { verbosity: 'standard', narrationStyle: 'default' },
@@ -53,6 +39,7 @@ const DEFAULTS: ResolvedSettings = {
 
 describe('useSettings', () => {
   beforeEach(() => {
+    resetAppStore();
     localStorage.clear();
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ config: {} });
@@ -66,9 +53,7 @@ describe('useSettings', () => {
   // ── Loading from localStorage ────────────────────────────────────────────
 
   it('loads defaults when localStorage is empty', () => {
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState()),
-    });
+    const { result } = renderHook(() => useSettings());
     expect(result.current.settings).toEqual(DEFAULTS);
   });
 
@@ -77,9 +62,7 @@ describe('useSettings', () => {
     localStorage.setItem('ellmud_verbosity', 'verbose');
     localStorage.setItem('ellmud_narrationStyle', 'gothic');
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState()),
-    });
+    const { result } = renderHook(() => useSettings());
 
     expect(result.current.settings.display.fontSize).toBe(20);
     expect(result.current.settings.narration.verbosity).toBe('verbose');
@@ -89,9 +72,8 @@ describe('useSettings', () => {
   // ── No API calls when not authenticated ──────────────────────────────────
 
   it('does not call API when token is null', () => {
-    renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: null })),
-    });
+    initializeAppStore({ token: null });
+    renderHook(() => useSettings());
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -105,9 +87,8 @@ describe('useSettings', () => {
       },
     });
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'test-token', authenticated: true })),
-    });
+    initializeAppStore({ token: 'test-token', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     expect(mockFetch).toHaveBeenCalledWith('test-token');
 
@@ -131,9 +112,8 @@ describe('useSettings', () => {
       },
     });
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     // Initially loads from localStorage
     expect(result.current.settings.display.fontSize).toBe(14);
@@ -160,9 +140,8 @@ describe('useSettings', () => {
       },
     });
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     await waitFor(() => {
       expect(result.current.settings.display.fontSize).toBe(20);
@@ -177,9 +156,8 @@ describe('useSettings', () => {
     localStorage.setItem('ellmud_fontSize', '14');
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -191,9 +169,7 @@ describe('useSettings', () => {
   // ── updateSetting ────────────────────────────────────────────────────────
 
   it('updateSetting updates state and writes to localStorage', () => {
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState()),
-    });
+    const { result } = renderHook(() => useSettings());
 
     act(() => {
       result.current.updateSetting('display', 'fontSize', 20);
@@ -204,9 +180,8 @@ describe('useSettings', () => {
   });
 
   it('updateSetting sends PUT to server when authenticated', () => {
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     act(() => {
       result.current.updateSetting('narration', 'verbosity', 'terse');
@@ -216,9 +191,8 @@ describe('useSettings', () => {
   });
 
   it('updateSetting does not call PUT when no token', () => {
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: null })),
-    });
+    initializeAppStore({ token: null });
+    const { result } = renderHook(() => useSettings());
 
     act(() => {
       result.current.updateSetting('display', 'fontSize', 18);
@@ -232,9 +206,8 @@ describe('useSettings', () => {
   it('updateSetting handles server error gracefully', async () => {
     mockUpdate.mockRejectedValueOnce(new Error('Server down'));
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     act(() => {
       result.current.updateSetting('display', 'fontSize', 22);
@@ -251,9 +224,8 @@ describe('useSettings', () => {
     let resolveFetch!: (value: unknown) => void;
     mockFetch.mockReturnValueOnce(new Promise((r) => { resolveFetch = r; }));
 
-    const { result } = renderHook(() => useSettings(), {
-      wrapper: makeWrapper(makeState({ token: 'tok', authenticated: true })),
-    });
+    initializeAppStore({ token: 'tok', authenticated: true });
+    const { result } = renderHook(() => useSettings());
 
     // Should be loading
     expect(result.current.isLoading).toBe(true);

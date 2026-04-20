@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { login, register } from '../services/api.js';
-import { useAppContext } from '../store.js';
+import { useAppStore } from '../store.js';
 
 /**
  * Dev mode auto-login hook — OPT-IN only.
@@ -11,14 +11,15 @@ import { useAppContext } from '../store.js';
  * On failure (server not running), silently continues to AuthScreen.
  */
 export function useDevAutoLogin(): void {
-  const { state, dispatch } = useAppContext();
+  const authenticated = useAppStore(s => s.authenticated);
+  const dispatch = useAppStore(s => s.dispatch);
   const attemptedRef = useRef(false);
 
   useEffect(() => {
     if (
       import.meta.env.VITE_DEV_AUTO_LOGIN !== 'true' ||
       import.meta.env.VITE_ALLOW_LOCAL_AUTH === 'false' ||
-      state.authenticated ||
+      authenticated ||
       attemptedRef.current
     ) {
       return;
@@ -41,5 +42,5 @@ export function useDevAutoLogin(): void {
         // Server not running or other failure — fall back to AuthScreen
       }
     })();
-  }, [state.authenticated, dispatch]);
+  }, [authenticated, dispatch]);
 }

@@ -9,7 +9,7 @@ import {
   Shield,
   X,
 } from "lucide-react";
-import { useAppContext } from "../store";
+import { useAppStore } from "../store";
 import { useSettings } from "../hooks/useSettings";
 import { useFlags } from "../hooks/useFlags";
 
@@ -58,7 +58,8 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { state } = useAppContext();
+  const username = useAppStore(s => s.username);
+  const playerId = useAppStore(s => s.playerId);
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =
@@ -152,7 +153,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   </label>
                   <input
                     type="text"
-                    value={state.username ?? "Unknown"}
+                    value={username ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary font-sans"
                   />
@@ -165,7 +166,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   </label>
                   <input
                     type="text"
-                    value={state.playerId ?? "Unknown"}
+                    value={playerId ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-disabled font-mono text-xs"
                   />

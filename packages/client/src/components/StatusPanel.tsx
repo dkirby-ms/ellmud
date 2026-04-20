@@ -15,7 +15,7 @@ import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
 import { RoomOccupants } from "./RoomOccupants.js";
 import { CombatHUD } from "./CombatHUD.js";
-import { useAppContext, type StatusEffect, type EnemyStatus, type CombatStats, type EffectiveStats } from "../store.js";
+import { useAppStore, type StatusEffect, type EnemyStatus, type CombatStats, type EffectiveStats } from "../store.js";
 import type { BaseStatsMessage } from "@ellmud/shared";
 import { useVersion } from "../hooks/useVersion.js";
 
@@ -82,13 +82,38 @@ export function StatusPanel({
   mapState,
   onToggleFullMap,
 }: StatusPanelProps) {
-  const { state } = useAppContext();
+  // Combat state
+  const playerHp = useAppStore(s => s.playerHp);
+  const playerMaxHp = useAppStore(s => s.playerMaxHp);
+  const playerStamina = useAppStore(s => s.playerStamina);
+  const playerMaxStamina = useAppStore(s => s.playerMaxStamina);
+  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
+  const inCombat = useAppStore(s => s.inCombat);
+  const combatCombatants = useAppStore(s => s.combatCombatants);
+  const combatHostileIds = useAppStore(s => s.combatHostileIds);
+  const combatStats = useAppStore(s => s.combatStats);
+  const enemyStatus = useAppStore(s => s.enemyStatus);
+
+  // Character state
+  const rawPosture: string = useAppStore(s => s.posture);
+  const statusEffects = useAppStore(s => s.statusEffects);
+  const loadout = useAppStore(s => s.loadout);
+  const inventory = useAppStore(s => s.inventory);
+  const effectiveStats = useAppStore(s => s.effectiveStats);
+  const baseStats = useAppStore(s => s.baseStats);
+  const statPointsAvailable = useAppStore(s => s.statPointsAvailable);
+
+  // Room state
+  const roomOccupants = useAppStore(s => s.roomOccupants);
+  const soundCues = useAppStore(s => s.soundCues);
+  const roomHeader = useAppStore(s => s.roomHeader);
+
   const version = useVersion();
   const [activeTab, setActiveTab] = useState<StatusTab>("environment");
 
   // ─── HP / Stamina / Posture ────────────────────────────────────────────────
-  const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
-  const staminaPercent = state.playerMaxStamina > 0 ? state.playerStamina / state.playerMaxStamina : 0;
+  const hpPercent = playerMaxHp > 0 ? playerHp / playerMaxHp : 0;
+  const staminaPercent = playerMaxStamina > 0 ? playerStamina / playerMaxStamina : 0;
   const healthState = hpPercent > 0.6
     ? { label: 'Healthy', color: 'text-success', barClass: 'status-bar-hp-healthy', numericClass: 'status-numeric-hp-healthy', pulse: false }
     : hpPercent >= 0.3
@@ -96,10 +121,8 @@ export function StatusPanel({
     : { label: 'Critical', color: 'text-danger', barClass: 'status-bar-hp-critical', numericClass: 'status-numeric-hp-critical', pulse: true };
 
   // Posture from AppState, with combat action override (#404)
-  const posture = state.pendingCombatAction
-    ?? state.posture.charAt(0).toUpperCase() + state.posture.slice(1);
-
-  const enemyStatus = state.enemyStatus;
+  const posture = pendingCombatAction
+    ?? rawPosture.charAt(0).toUpperCase() + rawPosture.slice(1);
 
   return (
     <div className="w-[30%] bg-bg-panel border-l border-border-muted flex flex-col" data-testid="status-panel">
@@ -116,17 +139,17 @@ export function StatusPanel({
                 {healthState.label}
               </span>
               <span className={`text-xs font-mono ${healthState.numericClass}`}>
-                {state.playerHp}/{state.playerMaxHp}
+                {playerHp}/{playerMaxHp}
               </span>
             </div>
           </div>
           <div
             className="status-bar"
             role="progressbar"
-            aria-label={`Health: ${state.playerHp} of ${state.playerMaxHp}`}
-            aria-valuenow={state.playerHp}
+            aria-label={`Health: ${playerHp} of ${playerMaxHp}`}
+            aria-valuenow={playerHp}
             aria-valuemin={0}
-            aria-valuemax={state.playerMaxHp}
+            aria-valuemax={playerMaxHp}
           >
             <div
               className={`status-bar-fill ${healthState.barClass}`}
@@ -140,16 +163,16 @@ export function StatusPanel({
           <div className="flex justify-between items-center mb-1">
             <span className="text-text-disabled text-xs font-sans">Stamina</span>
             <span className="text-xs font-mono status-numeric-stamina">
-              {state.playerStamina}/{state.playerMaxStamina}
+              {playerStamina}/{playerMaxStamina}
             </span>
           </div>
           <div
             className="status-bar"
             role="progressbar"
-            aria-label={`Stamina: ${state.playerStamina} of ${state.playerMaxStamina}`}
-            aria-valuenow={state.playerStamina}
+            aria-label={`Stamina: ${playerStamina} of ${playerMaxStamina}`}
+            aria-valuenow={playerStamina}
             aria-valuemin={0}
-            aria-valuemax={state.playerMaxStamina}
+            aria-valuemax={playerMaxStamina}
           >
             <div
               className="status-bar-fill status-bar-stamina"
@@ -166,11 +189,11 @@ export function StatusPanel({
       </div>
 
       {/* Status Effects */}
-      {state.statusEffects && state.statusEffects.length > 0 && (
+      {statusEffects && statusEffects.length > 0 && (
         <div className="px-4 py-2 border-b border-border-muted" data-testid="status-effects">
           <h3 className="text-text-secondary text-xs mb-1.5 font-sans">STATUS EFFECTS</h3>
           <div className="flex flex-wrap gap-1.5">
-            {state.statusEffects.map((effect) => {
+            {statusEffects.map((effect) => {
               const type = getEffectType(effect);
               return (
                 <span
@@ -213,30 +236,30 @@ export function StatusPanel({
             onNavigate={onNavigate}
             mapState={mapState}
             onToggleFullMap={onToggleFullMap}
-            inCombat={state.inCombat}
+            inCombat={inCombat}
             enemyStatus={enemyStatus}
-            roomOccupants={state.roomOccupants}
-            combatCombatants={state.combatCombatants}
-            combatHostileIds={state.combatHostileIds}
+            roomOccupants={roomOccupants}
+            combatCombatants={combatCombatants}
+            combatHostileIds={combatHostileIds}
           />
         )}
         {activeTab === "gear" && (
           <GearTab
-            loadout={state.loadout}
-            inventory={state.inventory}
+            loadout={loadout}
+            inventory={inventory}
             onOpenInventory={onOpenInventory}
           />
         )}
         {activeTab === "character" && (
           <CharacterTab
-            soundCues={state.soundCues}
+            soundCues={soundCues}
             onSendCommand={onSendCommand}
             onOpenInventory={onOpenInventory}
-            combatStats={state.combatStats}
-            effectiveStats={state.effectiveStats}
-            baseStats={state.baseStats}
-            statPointsAvailable={state.statPointsAvailable}
-            isTrainingRoom={state.roomHeader?.roomType === 'feature_training'}
+            combatStats={combatStats}
+            effectiveStats={effectiveStats}
+            baseStats={baseStats}
+            statPointsAvailable={statPointsAvailable}
+            isTrainingRoom={roomHeader?.roomType === 'feature_training'}
           />
         )}
       </div>
