@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-04-20: Zustand Evaluation Complete
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Assignment:** Architectural evaluation of Zustand as replacement for Context + useReducer client state monolith.
+
+**Deliverable:** `.squad/decisions/inbox/elminster-zustand-evaluation.md`
+
+**Key Findings:**
+- Zustand is architecturally appropriate for ellmud's needs
+- 4-phase incremental migration recommended (auth → terminal → combat → connection)
+- Selector pattern solves primary re-render granularity issue
+- Store-outside-React eliminates stale closure problems in message handlers
+- Partnered with Regis (state audit) for complete evaluation
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-20T01:30:00Z-elminster.md`
+
+---
+
 ## Core Context
 
 **Role:** Workflow Engine
@@ -641,3 +660,67 @@ APPROVE for merge. The three-layer model is correctly designed but only partiall
 **Non-blocking suggestions:** (1) `strikeMessages >= 2` in multi-creature test, (2) explicit throw after flee retry loop exhaustion.
 
 **Decision logged to:** `.squad/decisions/inbox/elminster-e2e-combat-review-480.md`
+
+### 2025-07-24: Zustand Adoption Evaluation — Client State Management
+
+**Task:** Architectural assessment of whether adopting Zustand would simplify client-side state management.
+
+**Current pattern:** React Context + useReducer with a monolithic AppState (30+ fields), single appReducer (~25 action types), consumed via useAppContext() across ~30 files. WebSocket handlers in useZoneConnection (~450 lines) dispatch 3-5 actions per message.
+
+**Verdict: RECOMMEND ✅ — Incremental migration**
+
+**Key findings:**
+- Re-render blast radius is the primary concern: every dispatch re-renders all context consumers. In a real-time game with combat ticks arriving 10-50x/sec, this is a performance landmine.
+- Zustand selectors solve this directly — components subscribe only to the state they use.
+- Store slices (auth, combat, inventory, connection) map cleanly to existing state domains.
+- WebSocket handlers can call store methods directly without React dependency or dispatch ceremony.
+- Migration scope: ~30-40 files, ~3-5 days, can be done in 4 incremental phases.
+- Risk profile: manageable. Biggest risk is useZoneConnection rewrite (highest complexity, highest benefit).
+
+**Conditions:** Incremental migration (no big-bang), move Colyseus Room out of store, split into domain slices from day one, keep connection.ts framework-agnostic.
+
+## Learnings
+
+- Client state is React Context + useReducer with a single monolithic AppState blob consumed by ~30 files. No selector layer exists — every dispatch triggers re-renders across the entire consumer tree.
+- useZoneConnection.ts (~450 lines) is the central WebSocket→state bridge: 15+ Colyseus message handlers each dispatch multiple actions. This is both the most complex and most performance-critical file on the client.
+- The Colyseus Room instance is stored in both AppState.room (reactive context) and roomRef (useRef). The context copy is unnecessary and should be a ref only.
+- connection.ts uses a MessageHandlers interface pattern that cleanly decouples transport from state — any state management migration should preserve this separation.
+
+---
+
+### 2026-04-20: Zustand Client State Management Evaluation (Architect)
+
+**Status:** ✅ Complete — Recommendation delivered
+
+**Task:** Conduct architectural evaluation of adopting Zustand to replace React Context + useReducer for client state management.
+
+**Scope:** 
+- Assess Zustand fit for real-time multiplayer game architecture
+- Compare alternatives (Redux Toolkit, Jotai, Valtio)
+- Design incremental 4-phase migration strategy
+- Estimate effort and identify risks
+
+**Key Recommendation:** ✅ **ADOPT ZUSTAND**
+
+**Highest-value win:** Selector-based subscriptions eliminate re-render blast radius from high-frequency WebSocket updates (10-50 state changes/sec during combat). Every context change currently triggers entire component tree re-render; Zustand selectors re-render only affected components.
+
+**Proposed 4-Phase Migration:**
+1. **Phase 1 (1 day):** Parallel store — Zustand coexists with Context, both functional
+2. **Phase 2 (1 day):** Migrate WebSocket handlers — highest-risk/highest-reward. Eliminates dispatch ceremony from `useZoneConnection.ts` (577 lines)
+3. **Phase 3 (1-2 days):** Migrate components (23 files) — mechanical find-replace to selectors
+4. **Phase 4 (0.5 day):** Remove Context, cleanup tests
+
+**Total effort:** 3.5-4.5 days focused work, incremental phases allow rollback at any point.
+
+**Files affected:** ~30-40 files (store.ts, 8 hooks, 12 components, 6 pages, 1 service, 10-15 tests)
+
+**Deliverable:** `.squad/decisions/inbox/elminster-zustand-evaluation.md` (139 lines) — merged to decisions.md
+
+**Process:**
+- Paired evaluation with Regis (frontend audit of current state)
+- Both agreed on fit and migration approach
+- Condition: move Colyseus Room out of store (belongs in ref, not reactive state)
+- Condition: split into domain slices from day one (don't recreate monolithic store)
+
+**Next:** Team planning for Phase 1 prep (store slices sketch, Zustand docs review)
+

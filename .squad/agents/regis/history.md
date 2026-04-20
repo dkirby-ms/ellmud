@@ -84,6 +84,29 @@ Additionally, ghost rooms (rooms not on current floor) showed spurious badges, a
 
 # Regis — Client Developer History
 
+### 2026-04-20: Client State Management Audit — Zustand Evaluation
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Assignment:** Detailed audit of current Context + useReducer implementation and Zustand fit assessment.
+
+**Deliverable:** `.squad/decisions/inbox/regis-client-state-audit.md`
+
+**Audit Results:**
+- Current: Context + useReducer with 30 flat fields, 25 action types, monolithic reducer
+- **Primary Issue:** No selector granularity — all consumers re-render on any state change
+- `useZoneConnection.ts`: 577 lines, 15 inline handlers, grows linearly with new messages
+- Message handler duplication in `connect()` and `switchRoom()` (maintenance trap)
+- 19 consumer files + 15 test files = 34 files affected by migration
+- **Zustand Opportunities (ranked):** Selectors (HIGH) → Slices (HIGH) → Store-outside-React (MEDIUM) → DevTools (LOW)
+- **Migration Risk:** Medium (34 files, ~3-4 weeks estimated)
+
+**Partnered with Elminster for architectural perspective and migration strategy.** Combined findings inform 4-phase rollout plan.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-20T01:30:00Z-regis.md`
+
+---
+
 ## Learnings & Assignments
 
 ### 2026-04-17: Issue #467 — Combat HUD Phase A (Client)
@@ -154,3 +177,84 @@ Elminster completed comprehensive architecture review of PR #470 (re-PR of #469 
 **No revisions requested. Ready to merge to `dev`.**
 
 See `.squad/decisions/decisions.md` for full review details.
+
+### 2025-07-25: Client State Management Audit (Zustand Migration Assessment)
+
+**Status:** ✅ Complete — Audit written to `.squad/decisions/inbox/regis-client-state-audit.md`
+
+**Key Findings:**
+- Current pattern: React Context + useReducer with 30 flat state fields, 25 action types, monolithic reducer
+- **No selector granularity** — every `useAppContext()` consumer re-renders on any state change (biggest perf issue)
+- `useZoneConnection.ts` is 577 lines with 15 inline message handlers; grows with every new server message
+- `connection.ts` has duplicated handler registration in both `connect()` and `switchRoom()` (maintenance trap)
+- 19 consumer files, 15 test files with manual AppContext.Provider boilerplate
+- Multi-dispatch in async Colyseus callbacks may bypass React batching
+
+**Zustand Opportunities (ranked):**
+1. **Selectors** (HIGH) — fix re-render problem, components subscribe to specific slices
+2. **Slice pattern** (HIGH) — split monolith into auth/combat/terminal/equipment/connection slices
+3. **Store outside React** (MEDIUM) — message handlers call `useStore.getState()` directly, eliminating stale closure issues and the 577-line hook
+4. **DevTools middleware** (LOW but free) — currently zero state debugging tooling
+
+**Migration Risk:** Medium. ~19 consumer files + ~15 test files. Combat slice is highest-risk/highest-reward. Recommended order: auth → terminal → combat → connection.
+
+---
+
+### 2026-04-20: Client State Audit for Zustand Migration (Frontend Dev)
+
+**Status:** ✅ Complete — Audit delivered, paired with Elminster evaluation
+
+**Task:** Audit current React Context + useReducer state management. Map surface area, identify pain points, confirm Zustand compatibility. NO CODE CHANGES — fact-finding only.
+
+**Key Findings:**
+
+**Four Critical Pain Points:**
+1. **No selector granularity (HIGH):** Every component calling `useAppContext()` re-renders on ANY state change. Combat tick updates trigger re-renders in inventory panel, settings modal, compass — components that don't use that state. This is the #1 performance problem in real-time game with 10-50 updates/sec.
+
+2. **Monolithic 577-line WebSocket handler hook (HIGH):** `useZoneConnection.ts` contains 15 inline message handlers (~300 lines). Each new server message type adds ~20 lines. File is hard to navigate, test in isolation, and reason about. Largest refactor target.
+
+3. **Duplicated handler registration (MEDIUM):** `connection.ts` `connect()` and `switchRoom()` have identical 35-line handler registration blocks. Every new message type requires updates in 4 places (MessageHandlers interface, both functions, hook). Maintenance trap.
+
+4. **Test boilerplate sprawl (MEDIUM):** 9 test files manually create identical `useReducer(appReducer, state)` + `AppContext.Provider` wrappers (~15 lines each).
+
+**Surface Area Metrics:**
+- 26 files importing from `store.ts` (7 direct + 19 via `useAppContext`)
+- 19 components consuming state
+- ~56 `dispatch()` call sites
+- ~100+ `state.` property accesses in TSX across 13 component files
+- 15 test files touching store/dispatch
+- 9 test files with manual provider boilerplate
+
+**Current State Structure:**
+- 30 top-level fields in monolithic `AppState`
+- 25 action types
+- Single 78-line reducer switch/case
+- Domains (auth, combat, inventory, connection, terminal) all flattened to root level
+
+**Zustand Migration Opportunities (HIGH-VALUE):**
+1. **Selectors fix re-render problem** — `useStore(s => s.playerHp)` re-renders ONLY when playerHp changes. Single biggest win.
+2. **Store slices enable domain separation** — `createAuthSlice`, `createCombatSlice`, `createInventorySlice`, etc. Each owns its state + actions.
+3. **`subscribeWithSelector` moves handlers outside React** — WebSocket handlers call store methods directly, no dispatch indirection, no closure staling, eliminates ref workarounds.
+
+**Recommended Migration Order:**
+1. Auth slice (fewest dependencies, easiest)
+2. Terminal/messages slice
+3. Combat slice (most complex, biggest win)
+4. Connection + WebSocket handlers (riskiest, requires careful testing)
+5. Remove Context, update all tests
+
+**Risk Assessment:**
+- 19 consumer files (MEDIUM) — mechanical find-replace
+- 15 test files (MEDIUM) — simpler patterns with Zustand
+- connection.ts handler registration (LOW) — Zustand store accessible outside React
+- **useZoneConnection.ts (HIGH)** — largest refactor, requires careful testing
+
+**Deliverable:** `.squad/decisions/inbox/regis-client-state-audit.md` (206 lines) — merged to decisions.md
+
+**Process:**
+- Paired audit with Elminster (architectural evaluation)
+- Both agreed on pain points and Zustand fit
+- Elminster designing phased migration; Regis providing implementation surface analysis
+
+**Next:** Await Phase 1 planning. Ready to begin migration when team prioritizes.
+

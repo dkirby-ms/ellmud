@@ -4,6 +4,31 @@
 
 ---
 
+### 2026-04-20: Creature ANSI Color Migration (023)
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Decision:** Added ANSI color tags to all creature room_description fields via SQL migration 023
+- **Aggressive creatures** (`aggressive = true`): Wrapped in `[bright-red]...[/bright-red]`
+- **Passive creatures** (`aggressive = false`): Wrapped in `[bright-cyan]...[/bright-cyan]`
+
+**Rationale:** Per Laeral's design spec, visual differentiation helps players immediately identify threat level when entering a room. Tags applied at data layer, parsed client-side by existing ANSI parser.
+
+**Files Changed:**
+- `packages/server/src/db/migrations/023_creature_description_colors.sql` — New migration
+- `packages/server/src/__tests__/creature-appearance.test.ts` — Updated test assertions
+
+**Test Results:** All 77 creature-related tests pass ✓
+
+**Implementation Notes:**
+- SQL pattern uses string concatenation for efficient single-pass UPDATE
+- No hardcoded creature definitions in TypeScript (all database-driven)
+- No changes to room descriptions or item descriptions (creatures only)
+
+**Orchestration Status:** Logged to `.squad/decisions/decisions.md`
+
+---
+
 ## Core Context
 
 **Role:** Documentation
