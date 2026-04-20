@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAppStore } from '../store.js';
+import { useConnectionStore } from '../store/connection.js';
 import { sendRequestPlayerList } from '../services/connection.js';
 import { MessageTypes, type PlayerListEntry } from '@ellmud/shared';
 
@@ -17,7 +17,7 @@ export interface UseWhoListReturn {
 }
 
 export function useWhoList(active: boolean): UseWhoListReturn {
-  const room = useAppStore(s => s.room);
+  const room = useConnectionStore(s => s.room);
   const [players, setPlayers] = useState<PlayerListEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const requestedRef = useRef(false);

@@ -20,7 +20,10 @@ import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
 import WhoListModal from "../components/WhoListModal.js";
 import HelpModal from "../components/HelpModal.js";
-import { useAppStore } from "../store.js";
+import { useAuthStore } from "../store/auth.js";
+import { useTerminalStore } from "../store/terminal.js";
+import { useCombatStore } from "../store/combat.js";
+import { useConnectionStore } from "../store/connection.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
@@ -34,16 +37,16 @@ export default function ZoneExploration() {
   const navigate = useNavigate();
   const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
-  const token = useAppStore(s => s.token);
-  const messages = useAppStore(s => s.messages);
-  const connectionStatus = useAppStore(s => s.connectionStatus);
-  const inCombat = useAppStore(s => s.inCombat);
-  const roomHeader = useAppStore(s => s.roomHeader);
-  const username = useAppStore(s => s.username);
-  const email = useAppStore(s => s.email);
-  const combatTick = useAppStore(s => s.combatTick);
-  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
-  const dispatch = useAppStore(s => s.dispatch);
+  const token = useAuthStore(s => s.token);
+  const messages = useTerminalStore(s => s.messages);
+  const connectionStatus = useConnectionStore(s => s.connectionStatus);
+  const inCombat = useCombatStore(s => s.inCombat);
+  const roomHeader = useTerminalStore(s => s.roomHeader);
+  const username = useAuthStore(s => s.username);
+  const email = useAuthStore(s => s.email);
+  const combatTick = useCombatStore(s => s.combatTick);
+  const pendingCombatAction = useCombatStore(s => s.pendingCombatAction);
+  const terminalDispatch = useTerminalStore(s => s.dispatch);
 
   // Derive zone mode: /zone (hub) vs /zone/:zoneId (specific zone)
   const isHub = !zoneId;
@@ -152,7 +155,7 @@ export default function ZoneExploration() {
 
   const addSystemMessage = useCallback(
     (text: string) => {
-      dispatch({
+      terminalDispatch({
         type: "ADD_MESSAGE",
         message: {
           id: `sw-${++speedwalkMsgCounter.current}`,
@@ -162,7 +165,7 @@ export default function ZoneExploration() {
         },
       });
     },
-    [dispatch]
+    [terminalDispatch]
   );
 
   const handleSubmit = useCallback(

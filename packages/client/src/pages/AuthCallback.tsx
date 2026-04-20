@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { useAppStore } from "../store";
+import { useAuthStore } from "../store/auth.js";
 
 /**
  * OAuth callback handler
@@ -8,7 +8,7 @@ import { useAppStore } from "../store";
  */
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
-  const dispatch = useAppStore(s => s.dispatch);
+  const dispatch = useAuthStore(s => s.dispatch);
   const navigate = useNavigate();
 
   useEffect(() => {

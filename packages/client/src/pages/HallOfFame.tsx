@@ -6,7 +6,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Skull, TrendingUp, Map, Swords } from "lucide-react";
-import { useAppStore } from "../store.js";
+import { useAuthStore } from "../store/auth.js";
 import { fetchHallOfFame, fetchHallOfFameStats } from "../services/api.js";
 import type { HallOfFameEntry, HallOfFameStats } from "../services/api.js";
 
@@ -34,9 +34,9 @@ function formatDate(isoDate: string): string {
 
 export default function HallOfFame() {
   const navigate = useNavigate();
-  const token = useAppStore(s => s.token);
-  const username = useAppStore(s => s.username);
-  const email = useAppStore(s => s.email);
+  const token = useAuthStore(s => s.token);
+  const username = useAuthStore(s => s.username);
+  const email = useAuthStore(s => s.email);
   const [entries, setEntries] = useState<HallOfFameEntry[]>([]);
   const [stats, setStats] = useState<HallOfFameStats | null>(null);
   const [loading, setLoading] = useState(true);
