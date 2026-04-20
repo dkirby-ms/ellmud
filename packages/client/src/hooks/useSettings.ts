@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAppStore } from '../store.js';
+import { useAuthStore } from '../store/auth.js';
 import { fetchUserSettings, updateUserSettings } from '../services/settings-api.js';
 import type { UserSettingsConfig } from '../services/settings-api.js';
 
@@ -71,7 +71,7 @@ export interface UseSettingsReturn {
 }
 
 export function useSettings(): UseSettingsReturn {
-  const token = useAppStore(s => s.token);
+  const token = useAuthStore(s => s.token);
 
   const [settings, setSettings] = useState<ResolvedSettings>(loadFromLocalStorage);
   const [isLoading, setIsLoading] = useState(false);

@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { RouterProvider } from 'react-router';
 import { router } from './routes.js';
 import { Toaster } from 'sonner';
-import { useAppStore } from './store.js';
+import { useAuthStore } from './store/auth.js';
+import { logoutAll } from './store/index.js';
 import { onAuthError, validateToken, fetchMe } from './services/api.js';
 import { isValidRole } from '@ellmud/shared';
 import { shallow } from 'zustand/shallow';
@@ -16,7 +17,7 @@ function loadPersistedAuth(): void {
   const playerId = localStorage.getItem(PLAYER_KEY);
   const username = localStorage.getItem(USERNAME_KEY);
   if (token && playerId) {
-    useAppStore.setState({ authenticated: true, token, playerId, username });
+    useAuthStore.setState({ authenticated: true, token, playerId, username });
   }
 }
 
@@ -24,7 +25,7 @@ function loadPersistedAuth(): void {
 loadPersistedAuth();
 
 // Sync auth slice to localStorage whenever it changes
-useAppStore.subscribe(
+useAuthStore.subscribe(
   (state) => ({ authenticated: state.authenticated, token: state.token, playerId: state.playerId, username: state.username }),
   (authSlice) => {
     if (authSlice.authenticated && authSlice.token && authSlice.playerId) {
@@ -43,13 +44,13 @@ useAppStore.subscribe(
 );
 
 export function App(): React.JSX.Element {
-  const dispatch = useAppStore((s) => s.dispatch);
+  const dispatch = useAuthStore((s) => s.dispatch);
 
   // Register global 401 interceptor — any API call that gets a 401
   // automatically clears auth state so stale tokens don't linger.
   useEffect(() => {
-    onAuthError(() => dispatch({ type: 'LOGOUT' }));
-  }, [dispatch]);
+    onAuthError(() => logoutAll());
+  }, []);
 
   // Suppress the browser right-click menu across the entire app.
   useEffect(() => {
@@ -60,10 +61,10 @@ export function App(): React.JSX.Element {
 
   // Validate persisted token on mount (non-blocking).
   useEffect(() => {
-    const { authenticated, token } = useAppStore.getState();
+    const { authenticated, token } = useAuthStore.getState();
     if (authenticated && token) {
       validateToken(token).then((valid) => {
-        if (!valid) dispatch({ type: 'LOGOUT' });
+        if (!valid) logoutAll();
       });
       
       fetchMe(token).then((data) => {

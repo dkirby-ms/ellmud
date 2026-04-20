@@ -1,94 +1,43 @@
 /**
- * App state — Zustand store.
- * The server is the source of truth; we only track UI-relevant state.
+ * App state — Backward-compatible barrel re-exporting from domain slices.
  *
- * Migration from React Context + useReducer to Zustand.
- * The store is backed by the existing appReducer for safe incremental migration.
+ * ⚠️  DEPRECATED: Import directly from domain stores instead:
+ *   import { useAuthStore } from './store/auth.js';
+ *   import { useCombatStore } from './store/combat.js';
+ *   etc.
+ *
+ * This file preserves the old monolithic AppState/AppAction/appReducer
+ * interfaces so existing tests continue to pass without modification.
  */
-
-import { create } from 'zustand';
-import { devtools, subscribeWithSelector } from 'zustand/middleware';
 
 import type { Room } from '@colyseus/sdk';
 import type {
-  NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
-  EquipmentSlots, DisplayItem, CharacterSummary, UserRole, Posture,
+  RoomHeaderMessage, ZoneState, CombatAction, UserRole,
+  EquipmentSlots, DisplayItem, CharacterSummary, Posture,
   BaseStatsMessage, CombatantSnapshot,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
-// ─── Message types for terminal display ──────────────────────────────────────
+// Re-export domain types so old `import { ... } from '../store.js'` still works
+export type { TerminalMessage, SoundCue } from './store/terminal.js';
+export type { HpTier, EnemyStatus, StatusEffect } from './store/combat.js';
+export { getHpTier } from './store/combat.js';
+export type { InventoryItem, EffectiveStats, CombatStats } from './store/inventory.js';
 
-export interface TerminalMessage {
-  id: string;
-  text: string;
-  type: NarrationType | 'header' | 'combat';
-  timestamp: number;
-  combatSubtype?: 'hit_dealt' | 'hit_taken' | 'dodge' | 'defeated' | 'flee' | 'combat_end';
-}
+// Re-export domain stores for gradual migration
+export { useAuthStore } from './store/auth.js';
+export { useTerminalStore } from './store/terminal.js';
+export { useCombatStore } from './store/combat.js';
+export { useConnectionStore } from './store/connection.js';
+export { useInventoryStore } from './store/inventory.js';
+export { logoutAll, resetAllStores, initializeAllStores } from './store/index.js';
+import { resetAllStores, initializeAllStores } from './store/index.js';
 
-// ─── Sidebar / Combat UI types ───────────────────────────────────────────────
+// ─── Backward-compatible monolithic types ────────────────────────────────────
 
-export interface SoundCue {
-  id: string;
-  text: string;
-  timestamp: number;
-}
-
-export type HpTier = 'Uninjured' | 'Wounded' | 'Badly Wounded' | 'Near Death';
-
-export interface EnemyStatus {
-  name: string;
-  hp: number;
-  maxHp: number;
-  hpTier: HpTier;
-  telegraphedAction: string | null;
-}
-
-export interface InventoryItem {
-  id: string;
-  name: string;
-  tier: GearTier;
-  weight: number;
-}
-
-export interface StatusEffect {
-  id: string;
-  name: string;
-  duration: number;
-}
-
-/** Effective combat stats with equipment bonuses (#455) */
-export interface EffectiveStats {
-  maxHp: number;
-  attack: number;
-  armour: number;
-  shieldBlock: number;
-  dodge: number;
-}
-
-/** Player base combat stats (synced from server PlayerState) */
-export interface CombatStats {
-  maxHp: number;
-  unarmed: number;
-  oneHanded: number;
-  twoHanded: number;
-  ranged: number;
-  shieldBlock: number;
-  dodge: number;
-  armour: number;
-}
-
-export function getHpTier(hp: number, maxHp: number): HpTier {
-  if (maxHp <= 0) return 'Near Death';
-  const ratio = hp / maxHp;
-  if (ratio > 0.75) return 'Uninjured';
-  if (ratio > 0.4) return 'Wounded';
-  if (ratio > 0.15) return 'Badly Wounded';
-  return 'Near Death';
-}
-
-// ─── App state shape ─────────────────────────────────────────────────────────
+import type { TerminalMessage, SoundCue } from './store/terminal.js';
+import type { EnemyStatus, StatusEffect } from './store/combat.js';
+import type { InventoryItem, EffectiveStats, CombatStats } from './store/inventory.js';
 
 export interface AppState {
   authenticated: boolean;
@@ -127,7 +76,6 @@ export interface AppState {
   effectiveStats: EffectiveStats | null;
   baseStats: BaseStatsMessage | null;
   statPointsAvailable: number;
-  /** Live combatant snapshots from COMBAT_STATE messages (#467) */
   combatCombatants: CombatantSnapshot[];
   combatHostileIds: string[];
   combatPlayerTargetId: string | null;
@@ -163,8 +111,6 @@ export const initialState: AppState = {
   stashItems: [],
   pendingEquipAction: false,
   roomOccupants: { creatures: [], players: [] },
-  // TODO: Server needs to send combat stats via room state or player_state message.
-  // These are placeholder defaults until server-side sync is wired up.
   combatStats: {
     maxHp: 100,
     unarmed: 5,
@@ -183,7 +129,7 @@ export const initialState: AppState = {
   combatPlayerTargetId: null,
 };
 
-// ─── Actions ─────────────────────────────────────────────────────────────────
+// ─── Monolithic AppAction (union of all domain actions) ─────────────────────
 
 const MAX_SOUND_CUES = 20;
 
@@ -218,6 +164,10 @@ export type AppAction =
 
 const MAX_MESSAGES = 500;
 
+/**
+ * Monolithic reducer — kept for backward-compatible test imports.
+ * In production, each domain store uses its own reducer.
+ */
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'LOGIN_SUCCESS':
@@ -298,7 +248,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-// ─── Zustand Store ───────────────────────────────────────────────────────────
+// ─── Unified Zustand Store (backward compat — components should migrate) ────
+
+import { create } from 'zustand';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
 
 export const useAppStore = create<AppState & { dispatch: (action: AppAction) => void }>()(
   subscribeWithSelector(
@@ -312,7 +265,6 @@ export const useAppStore = create<AppState & { dispatch: (action: AppAction) => 
             return next;
           },
           undefined,
-          // Label the devtools action with the action type
           action.type,
         ),
       }),
@@ -326,11 +278,12 @@ export const useAppStore = create<AppState & { dispatch: (action: AppAction) => 
 /** Reset store to initial state. Call in beforeEach for test isolation. */
 export function resetAppStore(): void {
   useAppStore.setState({ ...initialState });
+  resetAllStores();
 }
 
 /** Initialize store with partial state. Useful for test setup. */
 export function initializeAppStore(partial: Partial<AppState>): void {
   useAppStore.setState({ ...initialState, ...partial });
+  initializeAllStores(partial as Record<string, unknown>);
 }
-
 

@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router";
 import { login, register, ApiError } from "../services/api";
-import { useAppStore } from "../store";
+import { useAuthStore } from "../store/auth.js";
 import { useDevAutoLogin } from "../hooks/useDevAutoLogin";
 
 export default function Login() {
-  const authenticated = useAppStore(s => s.authenticated);
-  const dispatch = useAppStore(s => s.dispatch);
+  const authenticated = useAuthStore(s => s.authenticated);
+  const dispatch = useAuthStore(s => s.dispatch);
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

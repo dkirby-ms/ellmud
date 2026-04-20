@@ -12,7 +12,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { logout as apiLogout } from "../services/api";
-import { useAppStore } from "../store";
+import { useAuthStore } from "../store/auth.js";
+import { logoutAll } from "../store/index.js";
 import { useSettings } from "../hooks/useSettings";
 import { useFlags } from "../hooks/useFlags";
 
@@ -56,10 +57,9 @@ const categories: {
 ];
 
 export default function Settings() {
-  const token = useAppStore(s => s.token);
-  const settingsUsername = useAppStore(s => s.username);
-  const playerId = useAppStore(s => s.playerId);
-  const dispatch = useAppStore(s => s.dispatch);
+  const token = useAuthStore(s => s.token);
+  const settingsUsername = useAuthStore(s => s.username);
+  const playerId = useAuthStore(s => s.playerId);
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =
@@ -81,10 +81,10 @@ export default function Settings() {
     } catch {
       // Server may be unreachable — still clear local state
     } finally {
-      dispatch({ type: "LOGOUT" });
+      logoutAll();
       navigate("/");
     }
-  }, [token, dispatch, navigate]);
+  }, [token, navigate]);
 
   return (
     <div className="min-h-screen bg-bg-primary">

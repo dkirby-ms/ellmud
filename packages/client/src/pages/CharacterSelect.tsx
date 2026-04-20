@@ -11,7 +11,9 @@ import {
   Crosshair,
   Shirt,
 } from "lucide-react";
-import { useAppStore } from "../store";
+import { useAuthStore } from "../store/auth.js";
+import { useInventoryStore } from "../store/inventory.js";
+import { logoutAll } from "../store/index.js";
 import {
   fetchCharacters,
   createCharacter,
@@ -211,10 +213,10 @@ function CharacterDetailPanel({ char }: { char: CharacterSummary }) {
 // ─── Main Component ───────────────────────────────────────────────────────
 
 export default function CharacterSelect() {
-  const token = useAppStore(s => s.token);
-  const username = useAppStore(s => s.username);
-  const email = useAppStore(s => s.email);
-  const dispatch = useAppStore(s => s.dispatch);
+  const token = useAuthStore(s => s.token);
+  const username = useAuthStore(s => s.username);
+  const email = useAuthStore(s => s.email);
+  const inventoryDispatch = useInventoryStore(s => s.dispatch);
   const navigate = useNavigate();
 
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
@@ -273,7 +275,7 @@ export default function CharacterSelect() {
     setError(null);
     try {
       const selected = await selectCharacter(token!, char.id);
-      dispatch({ type: "SET_ACTIVE_CHARACTER", character: selected });
+      inventoryDispatch({ type: "SET_ACTIVE_CHARACTER", character: selected });
       navigate("/zone");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to select character.");
@@ -310,7 +312,7 @@ export default function CharacterSelect() {
         /* best effort */
       }
     }
-    dispatch({ type: "LOGOUT" });
+    logoutAll();
     navigate("/");
   };
 

@@ -70,6 +70,61 @@
 
 ## Learnings
 
+### 2026-04-28: Domain Slices Architecture — Phase 4 Design
+
+**Task:** Design domain slice architecture for splitting monolithic Zustand store. Current: 34 fields, 1 reducer, 24 actions. Goal: 5 independent slices with clear boundaries, isolated reducers, minimal consumer migration churn.
+
+**Deliverable:** `.squad/decisions/inbox/elminster-domain-slices-architecture.md`
+
+**Architecture Decision:** Separate Zustand stores per domain (not StateCreator slices within single store).
+
+**Rationale:**
+- Clear field ownership & action namespacing (vs namespace collision in single store)
+- 5 small reducers (20–30 LOC each) vs 1 monolith (100+ LOC)
+- Independent DevTools entries per domain
+- No forced cross-slice subscriptions
+- Easier to test in isolation
+
+**Five Proposed Slices:**
+1. **Auth** (5 flds, 3 acts): authenticated, token, playerId, email, username, userRole
+2. **Terminal** (4 flds, 5 acts): messages[], soundCues[], roomHeader, zoneState
+3. **Combat** (13 flds, 6 acts): inCombat, combatTick, enemyStatus, hp/stamina, statusEffects, combatants, posture
+4. **Connection** (3 flds, 4 acts): room, connectionStatus, error
+5. **Inventory** (10 flds, 9 acts): inventory, loadout, stashItems, combatStats, effectiveStats, activeCharacter, roomOccupants
+
+**Migration Strategy:** 5 phases (A–E), each additive:
+- Phase A: Create 5 new stores (old store unchanged; 391 tests still pass)
+- Phase B: Compatibility layer (parallel stores coexist)
+- Phase C: Migrate consumers one by one (7 PRs, low risk)
+- Phase D: Remove monolithic store
+- Phase E: Optimize selectors (optional post-stabilization)
+
+**Key Design Decision:** Separate stores chosen over StateCreator slices because:
+- Avoids namespace collision; each slice has dedicated dispatch/selector namespace
+- Better aligned with "domain slice" mental model
+- Easier to test each slice independently
+- Phase A→D allows rollback at any point if issues arise
+
+**Risk Mitigation:**
+- Low risk: Auth, Terminal, Inventory (isolated, clear boundaries)
+- Medium risk: useZoneConnection (dispatches to all 5; mitigation: centralize dispatch refs)
+- High risk (mitigated): Logout cascade (provide `logoutAll()` helper)
+
+**Backward Compatibility:** Phase B allows old `useAppStore()` and new domain stores to coexist. No consumers are forced to migrate until Phase D.
+
+**Pattern Example:**
+```typescript
+const useAuthStore = createStore('auth', initialAuthState, authReducer);
+// useAuthStore(state => state.authenticated), useAuthStore(s => s.dispatch)
+// Works like useAppStore but only owns auth domain
+```
+
+**Testing:** All 391 tests pass throughout migration. No new test framework needed; re-run existing suite after each PR.
+
+**Next Steps:** Stakeholder review, Phase A implementation (create 5 new store files), assign Phases 1–7 to team.
+
+---
+
 ### 2025-07-27: PR #483 Review — Zustand Migration (APPROVED)
 
 **Task:** Architectural review of Context → Zustand migration PR.
