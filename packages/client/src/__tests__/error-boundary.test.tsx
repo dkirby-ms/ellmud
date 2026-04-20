@@ -10,11 +10,10 @@
  * ErrorFallback component and wires it as errorElement in routes.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
-import { AppContext, appReducer, initialState, type AppState, type AppContextValue } from '../store.js';
+import { initializeAppStore, resetAppStore, type AppState } from '../store.js';
 import { ErrorFallback } from '../components/ErrorFallback.js';
 
 // Mock the api service to prevent real network calls
@@ -46,33 +45,26 @@ function CrashingComponent() {
 }
 
 /**
- * Renders custom routes with AppContext wrapping a memory router.
+ * Renders custom routes with a memory router, using the Zustand store for state.
  */
 function renderWithRouter(
   initialPath: string,
   customRoutes: Parameters<typeof createMemoryRouter>[0],
   stateOverrides: Partial<AppState> = {},
 ) {
-  const state = { ...initialState, ...stateOverrides };
+  initializeAppStore(stateOverrides);
 
   const router = createMemoryRouter(customRoutes, {
     initialEntries: [initialPath],
   });
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 describe('Error Boundaries', () => {
+  beforeEach(() => {
+    resetAppStore();
+  });
   describe('ErrorFallback component renders on route crash', () => {
     it('renders ErrorFallback instead of a white screen when a route throws', async () => {
       const testRoutes = [

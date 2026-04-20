@@ -9,12 +9,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useReducer, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import {
-  AppContext,
-  appReducer,
-  initialState,
-  type AppState,
+  initializeAppStore,
+  resetAppStore,
+  useAppStore,
 } from '../store.js';
 import CompassControl from '../components/CompassControl.js';
 
@@ -23,17 +22,8 @@ import CompassControl from '../components/CompassControl.js';
  * - Tracks last focus area (compass vs prompt) via focusin listener
  * - On connectionStatus → "connected", restores focus to the appropriate element
  */
-function FocusHarness({
-  initialStatus = 'connected' as AppState['connectionStatus'],
-  exits = ['north', 'south', 'east'],
-}) {
-  const merged: AppState = {
-    ...initialState,
-    connectionStatus: initialStatus,
-    roomHeader: { roomName: 'Test Room', exits, stability: 1 },
-  };
-
-  const [state, dispatch] = useReducer(appReducer, merged);
+function FocusHarness() {
+  const connectionStatus = useAppStore((s) => s.connectionStatus);
   const inputRef = useRef<HTMLInputElement>(null);
   const compassRef = useRef<HTMLDivElement>(null);
   const lastFocusAreaRef = useRef<'compass' | 'prompt'>('prompt');
@@ -52,7 +42,7 @@ function FocusHarness({
   }, []);
 
   useEffect(() => {
-    if (state.connectionStatus === 'connected') {
+    if (connectionStatus === 'connected') {
       requestAnimationFrame(() => {
         if (lastFocusAreaRef.current === 'compass') {
           const btn = compassRef.current?.querySelector<HTMLButtonElement>(
@@ -66,29 +56,27 @@ function FocusHarness({
         inputRef.current?.focus();
       });
     }
-  }, [state.connectionStatus]);
+  }, [connectionStatus]);
 
   const onNavigate = useCallback(() => {}, []);
 
-  // Expose dispatch for tests to simulate zone transitions
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <>
       <CompassControl ref={compassRef} onNavigate={onNavigate} />
       <input
         ref={inputRef}
         data-testid="command-input"
-        disabled={state.connectionStatus !== 'connected'}
+        disabled={connectionStatus !== 'connected'}
       />
-      {/* Expose dispatch via a button so tests can trigger status changes */}
       <button
         data-testid="sim-disconnect"
-        onClick={() => dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' })}
+        onClick={() => useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' })}
       />
       <button
         data-testid="sim-reconnect"
-        onClick={() => dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' })}
+        onClick={() => useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' })}
       />
-    </AppContext.Provider>
+    </>
   );
 }
 
@@ -101,11 +89,16 @@ async function flushRAF() {
 
 describe('Compass focus persistence across zone transitions (#362)', () => {
   beforeEach(() => {
+    resetAppStore();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   it('restores focus to the command input when prompt had focus', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    initializeAppStore({
+      connectionStatus: 'connected',
+      roomHeader: { roomName: 'Test Room', exits: ['north', 'south', 'east'], stability: 1 },
+    });
     render(<FocusHarness />);
     await flushRAF();
 
@@ -124,6 +117,10 @@ describe('Compass focus persistence across zone transitions (#362)', () => {
 
   it('restores focus to a compass button when compass had focus', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    initializeAppStore({
+      connectionStatus: 'connected',
+      roomHeader: { roomName: 'Test Room', exits: ['north', 'south', 'east'], stability: 1 },
+    });
     render(<FocusHarness />);
     await flushRAF();
 
@@ -144,7 +141,11 @@ describe('Compass focus persistence across zone transitions (#362)', () => {
 
   it('falls back to input if compass had focus but no exits are available', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<FocusHarness exits={['north']} />);
+    initializeAppStore({
+      connectionStatus: 'connected',
+      roomHeader: { roomName: 'Test Room', exits: ['north'], stability: 1 },
+    });
+    render(<FocusHarness />);
     await flushRAF();
 
     // Focus the north compass button
@@ -169,7 +170,11 @@ describe('Compass focus persistence across zone transitions (#362)', () => {
   });
 
   it('defaults to prompt focus on initial connection', async () => {
-    render(<FocusHarness initialStatus="connecting" />);
+    initializeAppStore({
+      connectionStatus: 'connecting',
+      roomHeader: { roomName: 'Test Room', exits: ['north', 'south', 'east'], stability: 1 },
+    });
+    render(<FocusHarness />);
 
     // Simulate the initial connection (no prior focus area)
     await act(async () => {
