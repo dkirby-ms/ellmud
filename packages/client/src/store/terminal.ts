@@ -44,7 +44,7 @@ export type TerminalAction =
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'ADD_SOUND_CUE'; cue: SoundCue }
   | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
-  | { type: 'SET_ZONE_STATE'; state: ZoneState };
+  | { type: 'SET_ZONE_STATE'; state: ZoneState | null };
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 

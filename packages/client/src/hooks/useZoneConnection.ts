@@ -280,7 +280,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
             useTerminalStore.getState().dispatch({ type: 'CLEAR_MESSAGES' });
             useInventoryStore.getState().dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: { creatures: [], players: [] } });
           }
-          useTerminalStore.getState().dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
+          useTerminalStore.getState().dispatch({ type: 'SET_ZONE_STATE', state: null });
           if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             updateOverlay(INITIAL_OVERLAY);
           }
