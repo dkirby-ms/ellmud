@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    bail: 1,
     pool: 'threads',
     testTimeout: 5000,
     coverage: {
