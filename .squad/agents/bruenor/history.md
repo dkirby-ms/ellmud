@@ -24,6 +24,7 @@
   - `preferred_rooms` and `forbidden_rooms` are TEXT arrays: `'{corridor,dead_end}'`
   - `slug` = `type` (snake_case) for all creatures
   - `idle_ticks_min/max` calculated with 10x multiplier pattern from 002
+- **ANSI color migration (023):** ASSIGNED — Add [bright-red] tags for aggressive creatures and [bright-cyan] for passive creatures. Update all 86 creature room_descriptions across migrations 002, 011, 022. Update test assertions to expect new colored output.
 - **Branch:** `squad/391-bestiary-seed`
 - **PR:** #399 to dev
 - **Files:** 1 new migration file, 685 lines
@@ -35,6 +36,7 @@
 - Always verify loot item IDs exist before referencing them in JSONB loot tables
 - Use `ON CONFLICT DO NOTHING` for idempotent migrations that might overlap with existing seed data
 - Node.js string literal escaping: `str.replace(/'/g, "''"` for SQL single-quote escaping
+- **ANSI color migration (023):** Added [bright-red] tags for aggressive creatures and [bright-cyan] for passive creatures. Used UPDATE with string concatenation (`'[bright-red]' || room_description || '[/bright-red]'`) to wrap existing descriptions. Test assertions updated to match new colored output.
 
 ### Container Items Implementation (2025-07-24)
 - **PR:** #430 (squad/container-items → dev)

@@ -1,3 +1,125 @@
+## 2026-04-18T00:00:00Z: ANSI Color Tags for Room Display (Drizzt)
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-04-18  
+**Status:** ✅ Implemented
+
+### Context
+
+Room display output (`look`, `go`, `goto` commands) shows creatures, items, exits, and players in linear text. Without visual distinction, players must read carefully to identify different entity types.
+
+### Decision
+
+Wrap room entities with ANSI color tags:
+- **Creatures:** `[yellow]...[/yellow]` — danger/attention color for threats
+- **Items:** `[cyan]...[/cyan]` — loot/interactable objects
+- **Exits:** `[dim]Exits: ...[/dim]` — de-emphasize structural info
+- **Players:** `[green]...[/green]` — friendly presence
+- **Room descriptions:** No color wrap — maintain narrative readability
+
+### Implementation
+
+Modified 4 handler files:
+- `look.ts` — `showFullRoom()` and `showDarkRoom()`
+- `go.ts` — `handleGo()` for lit and dark rooms
+- `goto.ts` — `handleGoto()` for lit and dark rooms
+- `player-display.ts` — `formatPlayerLines()`
+
+Updated 2 test files (20 test cases) to expect color tags:
+- `creature-appearance.test.ts`
+- `item-appearance.test.ts`
+
+### Rationale
+
+1. **Improved scanability:** Quick identification of threats (yellow), loot (cyan), friendly players (green)
+2. **Consistent with MUD traditions:** Color-coded room descriptions are standard
+3. **Minimal risk:** ANSI parser already tested, tags are additive (no breaking changes)
+4. **Nested tags handled correctly:** Parser resolves inner tags (e.g., `[yellow][red]text[/red][/yellow]`) properly
+
+### Test Coverage
+
+All 251 tests passing, including:
+- 10 creature appearance tests (look, go, goto with color tags)
+- 10 item appearance tests (look, go, goto with color tags)
+- Nested ANSI tag tests
+
+---
+
+## 2026-04-18T00:00:00Z: ANSI Color Scheme Design — Creature/Room/Item Descriptions (Laeral)
+
+**By:** Laeral (Content Designer)  
+**Date:** 2026-04-18  
+**Status:** Design Spec for Implementation
+
+### Context
+
+Creatures blend into room descriptions. Players must read carefully to identify threats. Building on Drizzt's outer color wrappers to add inner colors for creature descriptions.
+
+### Design Decisions
+
+#### Creature room_descriptions
+- **Aggressive creatures:** `[bright-red]...[/bright-red]` — immediate danger signal
+- **Passive creatures:** `[bright-cyan]...[/bright-cyan]` — interactive but non-threatening
+- **Rationale:** Aggressiveness matters more than tier for player safety
+
+#### Room descriptions
+- **NO color wrapping** — maintain narrative readability and mood
+- Color should highlight entities (interactive things), not setting
+- Exception: content-level decisions for specific phrases per room
+
+#### Item room_descriptions
+- **NO additional color wrapping** — cyan outer wrapper sufficient
+- Cyan already makes items visually distinct
+- Adding more color creates redundancy
+- Consistency: if creatures get inner color, items don't need it (no threat differentiation)
+
+### Technical Implementation
+
+**SQL pattern (for Bruenor's migration):**
+```sql
+UPDATE creature_definitions
+SET room_description = '[bright-red]' || room_description || '[/bright-red]'
+WHERE aggressive = true;
+
+UPDATE creature_definitions
+SET room_description = '[bright-cyan]' || room_description || '[/bright-cyan]'
+WHERE aggressive = false;
+```
+
+**Affected creatures:** 86 total across migrations 002, 011, 022
+
+**Nested tag example:**
+- Output: `[yellow][bright-red]A drowned revenant...[/bright-red][/yellow]`
+- Parser handles nested tags correctly; no conflicts with Drizzt's outer wrapper
+
+### Color Palette Summary
+
+| Entity Type | Outer Wrapper | Inner Color | Combined Effect |
+|-------------|---|---|---|
+| Room description | none | none | Plain text |
+| Exits | `[dim]` | n/a | Dim gray |
+| Items | `[cyan]` | none | Cyan |
+| Aggressive creatures | `[yellow]` | `[bright-red]` | Yellow + bright red |
+| Passive creatures | `[yellow]` | `[bright-cyan]` | Yellow + bright cyan |
+| Players | `[green]` | n/a | Green |
+
+### Test Checklist
+
+- [ ] All 86 creature room_descriptions have bright-red or bright-cyan tags
+- [ ] Nested tag rendering works in ANSI parser
+- [ ] Test assertions updated for inner color tags
+- [ ] Room descriptions remain plain
+- [ ] Item room_descriptions remain plain (outer cyan only)
+- [ ] Terminal output readable (not overwhelming with color)
+
+### Next Steps
+
+Bruenor (migration writer):
+- Write migration 023_creature_description_colors.sql
+- Update creature_definitions with bright-red/bright-cyan tags
+- Update test assertions in creature-appearance.test.ts, narrative.test.ts, wave3-narration-contracts.test.ts
+
+---
 ## 2026-04-19T11:30:00Z: E2E Combat Coverage Expansion (PR #480)
 
 **By:** Minsc (QA), Elminster (Review Lead)  
@@ -2389,4 +2511,3 @@ Added these paths to `paths-ignore` in both `pull_request` and `push` triggers:
 ### Rationale
 
 These paths contain no application code. Skipping CI for them saves runner minutes and reduces noise. If a workflow change itself needs validation, `workflow_dispatch` can be used manually.
-
