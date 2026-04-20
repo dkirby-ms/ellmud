@@ -1,9 +1,8 @@
-import { useReducer, useEffect } from 'react';
+import { useEffect } from 'react';
 import { RouterProvider } from 'react-router';
 import { router } from './routes.js';
 import { Toaster } from 'sonner';
-import { AppContext, appReducer, initialState } from './store.js';
-import type { AppState } from './store.js';
+import { useAppStore } from './store.js';
 import { onAuthError, validateToken, fetchMe } from './services/api.js';
 import { isValidRole } from '@ellmud/shared';
 
@@ -11,57 +10,21 @@ const TOKEN_KEY = 'ellmud_token';
 const PLAYER_KEY = 'ellmud_playerId';
 const USERNAME_KEY = 'ellmud_username';
 
-function loadPersistedState(): AppState {
+function loadPersistedAuth(): void {
   const token = localStorage.getItem(TOKEN_KEY);
   const playerId = localStorage.getItem(PLAYER_KEY);
   const username = localStorage.getItem(USERNAME_KEY);
   if (token && playerId) {
-    return { ...initialState, authenticated: true, token, playerId, username };
+    useAppStore.setState({ authenticated: true, token, playerId, username });
   }
-  return initialState;
 }
 
-export function App(): React.JSX.Element {
-  const [state, dispatch] = useReducer(appReducer, null as never, loadPersistedState);
+// Restore persisted auth on module load (before first render)
+loadPersistedAuth();
 
-  // Register global 401 interceptor — any API call that gets a 401
-  // automatically clears auth state so stale tokens don't linger.
-  useEffect(() => {
-    onAuthError(() => dispatch({ type: 'LOGOUT' }));
-  }, [dispatch]);
-
-  // Suppress the browser right-click menu across the entire app.
-  // Individual components (e.g. ZoneDesigner, LiveRoomDetail) provide
-  // their own custom context menus via onContextMenu + stopPropagation.
-  useEffect(() => {
-    const suppress = (e: MouseEvent) => e.preventDefault();
-    document.addEventListener('contextmenu', suppress);
-    return () => document.removeEventListener('contextmenu', suppress);
-  }, []);
-
-  // Validate persisted token on mount (non-blocking).
-  // If the server rejects it with 401, clear auth immediately.
-  // Also fetch username from /auth/me if missing (for existing sessions).
-  useEffect(() => {
-    if (state.authenticated && state.token) {
-      validateToken(state.token).then((valid) => {
-        if (!valid) dispatch({ type: 'LOGOUT' });
-      });
-      
-      // Fetch username and role if missing
-      if (state.token) {
-        fetchMe(state.token).then((data) => {
-          const role = data.role && isValidRole(data.role) ? data.role : 'player';
-          dispatch({ type: 'LOGIN_SUCCESS', token: state.token!, playerId: data.playerId, username: data.username, role });
-        }).catch(() => {
-          // Ignore errors - username/role fetch is non-blocking
-        });
-      }
-    }
-  }, []); // Only on initial mount
-
-  // Sync auth state to localStorage
-  useEffect(() => {
+// Sync auth slice to localStorage whenever it changes
+useAppStore.subscribe(
+  (state) => {
     if (state.authenticated && state.token && state.playerId) {
       localStorage.setItem(TOKEN_KEY, state.token);
       localStorage.setItem(PLAYER_KEY, state.playerId);
@@ -73,12 +36,46 @@ export function App(): React.JSX.Element {
       localStorage.removeItem(PLAYER_KEY);
       localStorage.removeItem(USERNAME_KEY);
     }
-  }, [state.authenticated, state.token, state.playerId, state.username]);
+  },
+);
+
+export function App(): React.JSX.Element {
+  const dispatch = useAppStore((s) => s.dispatch);
+
+  // Register global 401 interceptor — any API call that gets a 401
+  // automatically clears auth state so stale tokens don't linger.
+  useEffect(() => {
+    onAuthError(() => dispatch({ type: 'LOGOUT' }));
+  }, [dispatch]);
+
+  // Suppress the browser right-click menu across the entire app.
+  useEffect(() => {
+    const suppress = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', suppress);
+    return () => document.removeEventListener('contextmenu', suppress);
+  }, []);
+
+  // Validate persisted token on mount (non-blocking).
+  useEffect(() => {
+    const { authenticated, token } = useAppStore.getState();
+    if (authenticated && token) {
+      validateToken(token).then((valid) => {
+        if (!valid) dispatch({ type: 'LOGOUT' });
+      });
+      
+      fetchMe(token).then((data) => {
+        const role = data.role && isValidRole(data.role) ? data.role : 'player';
+        dispatch({ type: 'LOGIN_SUCCESS', token: token, playerId: data.playerId, username: data.username, role });
+      }).catch(() => {
+        // Ignore errors - username/role fetch is non-blocking
+      });
+    }
+  }, []); // Only on initial mount
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <>
       <RouterProvider router={router} />
       <Toaster />
-    </AppContext.Provider>
+    </>
   );
 }

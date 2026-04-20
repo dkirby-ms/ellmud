@@ -1,9 +1,14 @@
 /**
- * App state — minimal React context store.
+ * App state — Zustand store.
  * The server is the source of truth; we only track UI-relevant state.
+ *
+ * Migration from React Context + useReducer to Zustand.
+ * The store is backed by the existing appReducer for safe incremental migration.
  */
 
-import { createContext, useContext } from 'react';
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+import { createContext } from 'react';
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
@@ -293,17 +298,54 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-// ─── Context ─────────────────────────────────────────────────────────────────
+// ─── Zustand Store ───────────────────────────────────────────────────────────
+
+export const useAppStore = create<AppState & { dispatch: (action: AppAction) => void }>()(
+  devtools(
+    (set) => ({
+      ...initialState,
+      dispatch: (action: AppAction) => set(
+        (prev) => {
+          const { dispatch: _, ...state } = prev;
+          const next = appReducer(state as AppState, action);
+          return next;
+        },
+        undefined,
+        // Label the devtools action with the action type
+        action.type,
+      ),
+    }),
+    { name: 'ellmud-store' },
+  ),
+);
+
+// ─── Test Helpers ────────────────────────────────────────────────────────────
+
+/** Reset store to initial state. Call in beforeEach for test isolation. */
+export function resetAppStore(): void {
+  useAppStore.setState({ ...initialState });
+}
+
+/** Initialize store with partial state. Useful for test setup. */
+export function initializeAppStore(partial: Partial<AppState>): void {
+  useAppStore.setState({ ...initialState, ...partial });
+}
+
+// ─── Compatibility Shim ─────────────────────────────────────────────────────
+// Temporary bridge: useAppContext returns { state, dispatch } backed by Zustand.
+// Consumers can migrate incrementally to useAppStore(selector) pattern.
+// Remove once all consumers are migrated.
 
 export interface AppContextValue {
   state: AppState;
-  dispatch: React.Dispatch<AppAction>;
+  dispatch: (action: AppAction) => void;
 }
-
-export const AppContext = createContext<AppContextValue | null>(null);
 
 export function useAppContext(): AppContextValue {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useAppContext must be used within AppProvider');
-  return ctx;
+  const store = useAppStore();
+  const { dispatch, ...state } = store;
+  return { state: state as AppState, dispatch };
 }
+
+/** @deprecated Use initializeAppStore() in tests instead of AppContext.Provider */
+export const AppContext = createContext<AppContextValue | null>(null);
