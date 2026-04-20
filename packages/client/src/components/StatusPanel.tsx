@@ -16,7 +16,6 @@ import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
 import { RoomOccupants } from "./RoomOccupants.js";
 import { CombatHUD } from "./CombatHUD.js";
 import { useAppStore, type StatusEffect, type EnemyStatus, type CombatStats, type EffectiveStats } from "../store.js";
-import { useShallow } from "zustand/react/shallow";
 import type { BaseStatsMessage } from "@ellmud/shared";
 import { useVersion } from "../hooks/useVersion.js";
 
@@ -83,34 +82,32 @@ export function StatusPanel({
   mapState,
   onToggleFullMap,
 }: StatusPanelProps) {
-  const {
-    playerHp, playerMaxHp, playerStamina, playerMaxStamina,
-    pendingCombatAction, posture: rawPosture, enemyStatus,
-    statusEffects, inCombat, roomOccupants, combatCombatants,
-    combatHostileIds, loadout, inventory, soundCues,
-    combatStats, effectiveStats, baseStats, statPointsAvailable, roomHeader,
-  } = useAppStore(useShallow(s => ({
-    playerHp: s.playerHp,
-    playerMaxHp: s.playerMaxHp,
-    playerStamina: s.playerStamina,
-    playerMaxStamina: s.playerMaxStamina,
-    pendingCombatAction: s.pendingCombatAction,
-    posture: s.posture,
-    enemyStatus: s.enemyStatus,
-    statusEffects: s.statusEffects,
-    inCombat: s.inCombat,
-    roomOccupants: s.roomOccupants,
-    combatCombatants: s.combatCombatants,
-    combatHostileIds: s.combatHostileIds,
-    loadout: s.loadout,
-    inventory: s.inventory,
-    soundCues: s.soundCues,
-    combatStats: s.combatStats,
-    effectiveStats: s.effectiveStats,
-    baseStats: s.baseStats,
-    statPointsAvailable: s.statPointsAvailable,
-    roomHeader: s.roomHeader,
-  })));
+  // Combat state
+  const playerHp = useAppStore(s => s.playerHp);
+  const playerMaxHp = useAppStore(s => s.playerMaxHp);
+  const playerStamina = useAppStore(s => s.playerStamina);
+  const playerMaxStamina = useAppStore(s => s.playerMaxStamina);
+  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
+  const inCombat = useAppStore(s => s.inCombat);
+  const combatCombatants = useAppStore(s => s.combatCombatants);
+  const combatHostileIds = useAppStore(s => s.combatHostileIds);
+  const combatStats = useAppStore(s => s.combatStats);
+  const enemyStatus = useAppStore(s => s.enemyStatus);
+
+  // Character state
+  const rawPosture: string = useAppStore(s => s.posture);
+  const statusEffects = useAppStore(s => s.statusEffects);
+  const loadout = useAppStore(s => s.loadout);
+  const inventory = useAppStore(s => s.inventory);
+  const effectiveStats = useAppStore(s => s.effectiveStats);
+  const baseStats = useAppStore(s => s.baseStats);
+  const statPointsAvailable = useAppStore(s => s.statPointsAvailable);
+
+  // Room state
+  const roomOccupants = useAppStore(s => s.roomOccupants);
+  const soundCues = useAppStore(s => s.soundCues);
+  const roomHeader = useAppStore(s => s.roomHeader);
+
   const version = useVersion();
   const [activeTab, setActiveTab] = useState<StatusTab>("environment");
 

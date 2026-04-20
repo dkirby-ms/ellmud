@@ -6,7 +6,7 @@
  * focus should return to the compass — not jump to the command prompt.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useEffect, useCallback } from 'react';
@@ -91,6 +91,10 @@ describe('Compass focus persistence across zone transitions (#362)', () => {
   beforeEach(() => {
     resetAppStore();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('restores focus to the command input when prompt had focus', async () => {

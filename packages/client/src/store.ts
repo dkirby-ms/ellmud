@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
 
 import type { Room } from '@colyseus/sdk';
 import type {
@@ -301,21 +301,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 // ─── Zustand Store ───────────────────────────────────────────────────────────
 
 export const useAppStore = create<AppState & { dispatch: (action: AppAction) => void }>()(
-  devtools(
-    (set) => ({
-      ...initialState,
-      dispatch: (action: AppAction) => set(
-        (prev) => {
-          const { dispatch: _, ...state } = prev;
-          const next = appReducer(state as AppState, action);
-          return next;
-        },
-        undefined,
-        // Label the devtools action with the action type
-        action.type,
-      ),
-    }),
-    { name: 'ellmud-store' },
+  subscribeWithSelector(
+    devtools(
+      (set) => ({
+        ...initialState,
+        dispatch: (action: AppAction) => set(
+          (prev) => {
+            const { dispatch: _, ...state } = prev;
+            const next = appReducer(state as AppState, action);
+            return next;
+          },
+          undefined,
+          // Label the devtools action with the action type
+          action.type,
+        ),
+      }),
+      { name: 'ellmud-store' },
+    ),
   ),
 );
 

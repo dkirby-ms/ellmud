@@ -181,7 +181,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         }
         addMessage(msg.text, msg.type, combatSubtype);
         if (msg.type === 'sound') {
-          dispatch({
+          useAppStore.getState().dispatch({
             type: 'ADD_SOUND_CUE',
             cue: { id: `sc-${++soundCueCounterRef.current}`, text: msg.text, timestamp: msg.timestamp },
           });
@@ -189,7 +189,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ROOM_HEADER', header: msg });
+        useAppStore.getState().dispatch({ type: 'SET_ROOM_HEADER', header: msg });
         const slugSuffix = msg.roomSlug ? ` (${msg.roomSlug})` : '';
         const headerLabel = msg.zoneName
           ? `\n── [${msg.zoneName}] ${msg.roomName}${slugSuffix} ──`
@@ -198,7 +198,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onZoneState: (msg: ZoneStateMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ZONE_STATE', state: msg.state });
+        useAppStore.getState().dispatch({ type: 'SET_ZONE_STATE', state: msg.state });
         addMessage(`[Zone: ${msg.state}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
@@ -243,7 +243,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
 
         if (msg.combatEnded) {
           addMessage('— Combat ended —', 'system');
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
+          useAppStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         }
       },
       onRoomSwitch: (msg: RoomSwitchMessage) => {
@@ -279,7 +279,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
-              dispatch({ type: 'SET_ROOM', room: newRoom });
+              useAppStore.getState().dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
               addMessage(`Connected to ${switchingToHub ? 'your stronghold' : 'the instance'}.`, 'system');
               // Navigate after successful room switch to hub
@@ -292,7 +292,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           })
           .catch((err: Error) => {
             if (!disposed) {
-              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
               addMessage(`Failed to switch rooms: ${err.message}`, 'system');
             }
           })
@@ -303,22 +303,22 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onError: (code: number, message: string) => {
         if (!disposed) {
           addMessage(`[Error ${code}: ${message}]`, 'system');
-          dispatch({ type: 'SET_ERROR', error: message });
+          useAppStore.getState().dispatch({ type: 'SET_ERROR', error: message });
         }
       },
       onLoadoutUpdate: (msg: LoadoutUpdateMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
+          useAppStore.getState().dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
         }
       },
       onStashUpdate: (msg: StashUpdateMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+          useAppStore.getState().dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
         }
       },
       onInventoryUpdate: (msg: InventoryUpdateMessage) => {
         if (!disposed) {
-          dispatch({
+          useAppStore.getState().dispatch({
             type: 'SET_INVENTORY',
             items: msg.items.map(item => ({
               id: item.id,
@@ -331,7 +331,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onPlayerState: (msg: PlayerStateMessage) => {
         if (!disposed) {
-          dispatch({
+          useAppStore.getState().dispatch({
             type: 'SET_PLAYER_STATE',
             hp: msg.hp,
             maxHp: msg.maxHp,
@@ -348,9 +348,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onEffectiveStats: (msg: EffectiveStatsMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
+          useAppStore.getState().dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
           if (msg.baseStats) {
-            dispatch({
+            useAppStore.getState().dispatch({
               type: 'SET_BASE_STATS',
               baseStats: msg.baseStats,
               statPointsAvailable: msg.statPointsAvailable ?? 0,
@@ -360,13 +360,13 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onCombatState: (msg: CombatStateMessage) => {
         if (disposed) return;
-        dispatch({
+        useAppStore.getState().dispatch({
           type: 'SET_COMBAT_COMBATANTS',
           combatants: msg.combatants,
           hostileIds: msg.hostileIds,
           playerTargetId: msg.playerTargetId,
         });
-        dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
+        useAppStore.getState().dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
         // Derive enemy status from the player's current target
         if (msg.playerTargetId) {
           const target = msg.combatants.find(c => c.id === msg.playerTargetId);
@@ -376,7 +376,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
                   ? target.telegraphedAction
                   : target.telegraphedAction.abilityName)
               : null;
-            dispatch({
+            useAppStore.getState().dispatch({
               type: 'SET_ENEMY_STATUS',
               status: {
                 name: target.name,
@@ -390,9 +390,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         }
         // Ensure inCombat is set when we receive combatant data
         if (msg.combatants.length > 0) {
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+          useAppStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
         } else {
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
+          useAppStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {
@@ -407,7 +407,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         }
 
         addMessage(`Entering zone: ${msg.targetZoneSlug}...`, 'system');
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+        useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
         switchRoom(currentRoom, `zone:${msg.targetZoneSlug}`, currentToken, handlers, {
           targetRoomSlug: msg.targetRoomSlug,
@@ -415,7 +415,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
-              dispatch({ type: 'SET_ROOM', room: newRoom });
+              useAppStore.getState().dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
               addMessage(`Arrived in ${msg.targetZoneSlug}.`, 'system');
             } else {
@@ -424,7 +424,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           })
           .catch((err: Error) => {
             if (!disposed) {
-              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
               addMessage(`Zone transfer failed: ${err.message}`, 'system');
             }
           })
@@ -434,16 +434,16 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onRoomOccupants: (msg: import('@ellmud/shared').RoomOccupantsMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
+        useAppStore.getState().dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
       },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {
-          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
+          useAppStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;
           if (code === 4000) {
             // Rent: consented leave — return to character select
             addMessage('You retire to the inn. Rest well, adventurer...', 'system');
-            dispatch({ type: 'SET_ROOM', room: null });
+            useAppStore.getState().dispatch({ type: 'SET_ROOM', room: null });
             navigate('/characters');
           } else if (code >= 4000) {
             addMessage(`Disconnected (code ${code}). You may need to log in again.`, 'system');

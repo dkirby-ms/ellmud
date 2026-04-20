@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { useAppStore } from './store.js';
 import { onAuthError, validateToken, fetchMe } from './services/api.js';
 import { isValidRole } from '@ellmud/shared';
+import { shallow } from 'zustand/shallow';
 
 const TOKEN_KEY = 'ellmud_token';
 const PLAYER_KEY = 'ellmud_playerId';
@@ -24,12 +25,13 @@ loadPersistedAuth();
 
 // Sync auth slice to localStorage whenever it changes
 useAppStore.subscribe(
-  (state) => {
-    if (state.authenticated && state.token && state.playerId) {
-      localStorage.setItem(TOKEN_KEY, state.token);
-      localStorage.setItem(PLAYER_KEY, state.playerId);
-      if (state.username) {
-        localStorage.setItem(USERNAME_KEY, state.username);
+  (state) => ({ authenticated: state.authenticated, token: state.token, playerId: state.playerId, username: state.username }),
+  (authSlice) => {
+    if (authSlice.authenticated && authSlice.token && authSlice.playerId) {
+      localStorage.setItem(TOKEN_KEY, authSlice.token);
+      localStorage.setItem(PLAYER_KEY, authSlice.playerId);
+      if (authSlice.username) {
+        localStorage.setItem(USERNAME_KEY, authSlice.username);
       }
     } else {
       localStorage.removeItem(TOKEN_KEY);
@@ -37,6 +39,7 @@ useAppStore.subscribe(
       localStorage.removeItem(USERNAME_KEY);
     }
   },
+  { equalityFn: shallow },
 );
 
 export function App(): React.JSX.Element {

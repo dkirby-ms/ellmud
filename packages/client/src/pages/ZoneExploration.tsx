@@ -20,7 +20,6 @@ import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
 import WhoListModal from "../components/WhoListModal.js";
 import HelpModal from "../components/HelpModal.js";
-import { useShallow } from "zustand/shallow";
 import { useAppStore } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -35,20 +34,15 @@ export default function ZoneExploration() {
   const navigate = useNavigate();
   const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
-  const {
-    token, messages, connectionStatus, inCombat, roomHeader,
-    username, email, combatTick, pendingCombatAction,
-  } = useAppStore(useShallow(s => ({
-    token: s.token,
-    messages: s.messages,
-    connectionStatus: s.connectionStatus,
-    inCombat: s.inCombat,
-    roomHeader: s.roomHeader,
-    username: s.username,
-    email: s.email,
-    combatTick: s.combatTick,
-    pendingCombatAction: s.pendingCombatAction,
-  })));
+  const token = useAppStore(s => s.token);
+  const messages = useAppStore(s => s.messages);
+  const connectionStatus = useAppStore(s => s.connectionStatus);
+  const inCombat = useAppStore(s => s.inCombat);
+  const roomHeader = useAppStore(s => s.roomHeader);
+  const username = useAppStore(s => s.username);
+  const email = useAppStore(s => s.email);
+  const combatTick = useAppStore(s => s.combatTick);
+  const pendingCombatAction = useAppStore(s => s.pendingCombatAction);
   const dispatch = useAppStore(s => s.dispatch);
 
   // Derive zone mode: /zone (hub) vs /zone/:zoneId (specific zone)
