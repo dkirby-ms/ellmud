@@ -258,3 +258,6 @@ See `.squad/decisions/decisions.md` for full review details.
 
 **Next:** Await Phase 1 planning. Ready to begin migration when team prioritizes.
 
+- useAppContext compatibility shim fully removed: all 17 consumer files now use useAppStore(selector) directly for optimal re-render granularity
+- Sub-agents committed component/page/hook migrations in separate commits; shim removal was a final cleanup commit
+- StatusPanel (20+ fields) and ZoneExploration (9 fields) used useShallow for grouped selectors; all others use individual selectors
