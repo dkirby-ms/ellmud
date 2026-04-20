@@ -17,7 +17,7 @@ import {
   type GearTier,
   type ItemType,
 } from '@ellmud/shared';
-import { useAppContext, type InventoryItem } from '../store';
+import { useAppStore, type InventoryItem } from '../store';
 import { sendEquipItem, sendUnequipItem } from '../services/connection';
 import AnsiText from './AnsiText.js';
 
@@ -73,8 +73,11 @@ interface CombinedStashLoadoutProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function CombinedStashLoadout({ room, inZone = false }: CombinedStashLoadoutProps) {
-  const { state, dispatch } = useAppContext();
-  const { loadout, stashItems, pendingEquipAction, inventory } = state;
+  const loadout = useAppStore(s => s.loadout);
+  const stashItems = useAppStore(s => s.stashItems);
+  const pendingEquipAction = useAppStore(s => s.pendingEquipAction);
+  const inventory = useAppStore(s => s.inventory);
+  const dispatch = useAppStore(s => s.dispatch);
 
   const [selectedItem, setSelectedItem] = useState<DisplayItem | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
