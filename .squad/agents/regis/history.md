@@ -261,3 +261,36 @@ See `.squad/decisions/decisions.md` for full review details.
 - useAppContext compatibility shim fully removed: all 17 consumer files now use useAppStore(selector) directly for optimal re-render granularity
 - Sub-agents committed component/page/hook migrations in separate commits; shim removal was a final cleanup commit
 - StatusPanel (20+ fields) and ZoneExploration (9 fields) used useShallow for grouped selectors; all others use individual selectors
+
+### 2026-07-15: Domain Store Slices — Zustand Decomposition
+
+**Status:** ✅ Complete — Pushed to `squad/zustand-domain-slices`
+
+**Task:** Decompose monolithic Zustand store into 5 domain-specific stores per Elminster's architecture proposal.
+
+**Changes:**
+1. **Created `packages/client/src/store/` directory** with 7 files:
+   - `createStore.ts` — Generic factory with `subscribeWithSelector(devtools(...))` middleware
+   - `auth.ts` — AuthState (6 fields), authReducer, useAuthStore
+   - `terminal.ts` — TerminalState (4 fields), terminalReducer, useTerminalStore
+   - `combat.ts` — CombatState (13 fields), combatReducer, useCombatStore
+   - `connection.ts` — ConnectionState (3 fields), connectionReducer, useConnectionStore
+   - `inventory.ts` — InventoryState (10 fields), inventoryReducer, useInventoryStore
+   - `index.ts` — Barrel with logoutAll(), resetAllStores(), initializeAllStores()
+
+2. **Replaced monolithic `store.ts`** with backward-compatible barrel that still exports AppState, appReducer, useAppStore for test compatibility. `resetAppStore`/`initializeAppStore` now cascade to domain stores.
+
+3. **Migrated all 19 consumer files** to domain-specific store imports:
+   - Components: App, ProtectedRoute, CompassControl, MudPrompt, CombinedStashLoadout, SettingsModal, CombatHUD, StatusPanel
+   - Pages: ZoneExploration, CharacterSelect, Settings, HallOfFame, AuthCallback, Login, AdminLayout
+   - Hooks: useWhoList, useFlags, useSettings, useDevAutoLogin, useZoneConnection
+
+4. **All 391 tests pass, TypeScript clean, ESLint clean.**
+
+## Learnings
+- `createStore()` factory pattern: `subscribeWithSelector(devtools(...))` + `{ dispatch: _, ...state }` to strip dispatch before reducer
+- Cross-domain side effects (e.g., old `CLEAR_MESSAGES` also clearing `roomOccupants`) must be handled by callers dispatching to multiple stores
+- `LOGOUT` cascade replaced with `logoutAll()` resetting all 5 stores
+- Test backward compatibility achieved by having `initializeAppStore()` call `initializeAllStores()` to distribute flat fields to correct domain stores
+- `CombatStoreAction` (not `CombatAction`) avoids name collision with `@ellmud/shared`'s `CombatAction` type
+- `useZoneConnection.ts` (583 lines) is the hardest file to migrate — uses `.getState().dispatch()` pattern to avoid stale closures in effect handlers
