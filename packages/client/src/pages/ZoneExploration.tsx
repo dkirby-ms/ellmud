@@ -373,7 +373,7 @@ export default function ZoneExploration() {
             </h2>
           </div>
 
-          {/* Narrative text — render from real AppContext messages */}
+          {/* Narrative text — render from real store messages */}
           <div
             ref={narrativeRef}
             onClick={handleNarrativeClick}

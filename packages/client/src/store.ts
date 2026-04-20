@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { createContext } from 'react';
+
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
@@ -331,21 +331,4 @@ export function initializeAppStore(partial: Partial<AppState>): void {
   useAppStore.setState({ ...initialState, ...partial });
 }
 
-// ─── Compatibility Shim ─────────────────────────────────────────────────────
-// Temporary bridge: useAppContext returns { state, dispatch } backed by Zustand.
-// Consumers can migrate incrementally to useAppStore(selector) pattern.
-// Remove once all consumers are migrated.
 
-export interface AppContextValue {
-  state: AppState;
-  dispatch: (action: AppAction) => void;
-}
-
-export function useAppContext(): AppContextValue {
-  const store = useAppStore();
-  const { dispatch, ...state } = store;
-  return { state: state as AppState, dispatch };
-}
-
-/** @deprecated Use initializeAppStore() in tests instead of AppContext.Provider */
-export const AppContext = createContext<AppContextValue | null>(null);

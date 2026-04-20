@@ -2,7 +2,7 @@
  * MudPrompt — Classic MUD-style status line pinned to the bottom of the narrative scroll.
  *
  * Displays HP (color-coded), combat stance, active status effects, and a blinking cursor.
- * Pulls all data from AppContext so it updates reactively.
+ * Pulls all data from the Zustand store so it updates reactively.
  */
 
 import { useAppStore } from '../store.js';
