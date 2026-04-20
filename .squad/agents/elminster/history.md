@@ -70,6 +70,22 @@
 
 ## Learnings
 
+### 2025-07-27: PR #483 Review — Zustand Migration (APPROVED)
+
+**Task:** Architectural review of Context → Zustand migration PR.
+
+**Verdict:** ✅ APPROVE — No blocking issues. Migration is clean and well-executed.
+
+**Key Observations (non-blocking):**
+1. `enter_zone` handler uses closure-captured `dispatch` while `onRoomSwitch` uses `getState().dispatch` — inconsistent but not buggy (Zustand dispatch ref is stable)
+2. Auth persistence subscription fires on every state change; should use `subscribe(selector, listener)` for perf
+3. StatusPanel & ZoneExploration use `useShallow` with ~20 fields — coarser than ideal for combat tick perf
+4. Reducer's `{ dispatch: _, ...state }` exclusion pattern is fragile; resolves naturally when domain slices are adopted
+
+**Follow-ups recommended:** Selector subscription, split coarse selectors, normalize handler dispatch pattern, domain slices (next phase per Zustand evaluation decision).
+
+---
+
 ### 2025-07-25: Combat Encounter Model Redesign — Deep Architecture Research
 
 **Task:** Research classic MUD combat models and design new encounter architecture to replace room-scoped encounters with selective engagement.
