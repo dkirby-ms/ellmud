@@ -255,3 +255,28 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 - ZoneRoom.ts: Added "Combat begins!" intro message and round separators (──────────)
 - These additions increased per-tick processing time slightly, exposing the timeout issue
 
+
+---
+
+## Squad-Promote PR-Based Flow (2026-07)
+
+**Status:** ✅ Complete
+
+**Context:** `squad-promote.yml` used `git push --force` to prod, which violated branch protection rules (no force pushes, require PRs). Also had the same redundant CI/CD trigger bug we fixed in `scheduled-uat-promote.yml`.
+
+**Changes:**
+1. **Force-push → PR flow:** Creates temp branch `promote/uat-to-prod-{timestamp}` from uat, strips forbidden paths, opens PR to prod, enables auto-merge with `--delete-branch`.
+2. **Removed redundant CI/CD trigger:** Replaced explicit `gh workflow run ci-cd.yml --ref prod` with a comment explaining ci-cd.yml auto-triggers on push (same pattern as uat fix, lines 115-117 of scheduled-uat-promote.yml).
+3. **Added `pull-requests: write` permission** for `gh pr create` and `gh pr merge`.
+4. **Improved dry-run:** Now shows commit log and diffstat of what would be promoted.
+5. **Early exit refactored:** Moved "already matches" check into a separate step with output variable so subsequent steps can skip cleanly.
+
+**Key Learnings:**
+- Branch protection on prod prohibits force pushes — must use PRs for all code changes to protected branches.
+- `gh pr merge --auto --merge --delete-branch` handles both "merge immediately if no required checks" and "wait for checks then merge" cases.
+- PR body should include commit range summary for auditability.
+- The `--delete-branch` flag on merge handles cleanup of the temp promotion branch automatically.
+
+**Files Changed:**
+- `.github/workflows/squad-promote.yml`: Full rewrite of promotion logic
+
