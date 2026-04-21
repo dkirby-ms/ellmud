@@ -16,13 +16,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
 import {
-  AppContext,
-  appReducer,
-  initialState,
+  initializeAppStore,
+  resetAppStore,
   type AppState,
-  type AppContextValue,
   type TerminalMessage,
 } from '../store.js';
 import ZoneExploration from '../pages/ZoneExploration.js';
@@ -102,34 +99,24 @@ function makeMsg(
 }
 
 function renderZoneExploration(stateOverrides: Partial<AppState> = {}) {
-  const state: AppState = {
-    ...initialState,
+  initializeAppStore({
     authenticated: true,
     token: 'test-token',
     playerId: 'test-player',
     connectionStatus: 'connected',
     ...stateOverrides,
-  };
+  });
 
   const router = createMemoryRouter(
     [{ path: '/zone', Component: ZoneExploration }],
     { initialEntries: ['/zone'] },
   );
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 beforeEach(() => {
+  resetAppStore();
   idCounter = 0;
 });
 

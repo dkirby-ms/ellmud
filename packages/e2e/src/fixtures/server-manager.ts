@@ -29,6 +29,7 @@ export class ServerManager {
         ...process.env,
         ALLOW_LOCAL_AUTH: 'true',
         ADMIN_TOKEN: 'ellmud-admin-dev',
+        DEV_MODE_ENABLED: 'true',
         PORT: String(SERVER_PORT),
       },
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -15,7 +15,10 @@ import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
 import { RoomOccupants } from "./RoomOccupants.js";
 import { CombatHUD } from "./CombatHUD.js";
-import { useAppContext, type StatusEffect, type EnemyStatus, type CombatStats, type EffectiveStats } from "../store.js";
+import { useCombatStore, type StatusEffect, type EnemyStatus } from "../store/combat.js";
+import { useInventoryStore, type CombatStats, type EffectiveStats } from "../store/inventory.js";
+import { useTerminalStore } from "../store/terminal.js";
+import type { BaseStatsMessage } from "@ellmud/shared";
 import { useVersion } from "../hooks/useVersion.js";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -81,13 +84,38 @@ export function StatusPanel({
   mapState,
   onToggleFullMap,
 }: StatusPanelProps) {
-  const { state } = useAppContext();
+  // Combat state
+  const playerHp = useCombatStore(s => s.playerHp);
+  const playerMaxHp = useCombatStore(s => s.playerMaxHp);
+  const playerStamina = useCombatStore(s => s.playerStamina);
+  const playerMaxStamina = useCombatStore(s => s.playerMaxStamina);
+  const pendingCombatAction = useCombatStore(s => s.pendingCombatAction);
+  const inCombat = useCombatStore(s => s.inCombat);
+  const combatCombatants = useCombatStore(s => s.combatCombatants);
+  const combatHostileIds = useCombatStore(s => s.combatHostileIds);
+  const combatStats = useInventoryStore(s => s.combatStats);
+  const enemyStatus = useCombatStore(s => s.enemyStatus);
+
+  // Character state
+  const rawPosture: string = useCombatStore(s => s.posture);
+  const statusEffects = useCombatStore(s => s.statusEffects);
+  const loadout = useInventoryStore(s => s.loadout);
+  const inventory = useInventoryStore(s => s.inventory);
+  const effectiveStats = useInventoryStore(s => s.effectiveStats);
+  const baseStats = useInventoryStore(s => s.baseStats);
+  const statPointsAvailable = useInventoryStore(s => s.statPointsAvailable);
+
+  // Room state
+  const roomOccupants = useInventoryStore(s => s.roomOccupants);
+  const soundCues = useTerminalStore(s => s.soundCues);
+  const roomHeader = useTerminalStore(s => s.roomHeader);
+
   const version = useVersion();
   const [activeTab, setActiveTab] = useState<StatusTab>("environment");
 
   // ─── HP / Stamina / Posture ────────────────────────────────────────────────
-  const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
-  const staminaPercent = state.playerMaxStamina > 0 ? state.playerStamina / state.playerMaxStamina : 0;
+  const hpPercent = playerMaxHp > 0 ? playerHp / playerMaxHp : 0;
+  const staminaPercent = playerMaxStamina > 0 ? playerStamina / playerMaxStamina : 0;
   const healthState = hpPercent > 0.6
     ? { label: 'Healthy', color: 'text-success', barClass: 'status-bar-hp-healthy', numericClass: 'status-numeric-hp-healthy', pulse: false }
     : hpPercent >= 0.3
@@ -95,10 +123,8 @@ export function StatusPanel({
     : { label: 'Critical', color: 'text-danger', barClass: 'status-bar-hp-critical', numericClass: 'status-numeric-hp-critical', pulse: true };
 
   // Posture from AppState, with combat action override (#404)
-  const posture = state.pendingCombatAction
-    ?? state.posture.charAt(0).toUpperCase() + state.posture.slice(1);
-
-  const enemyStatus = state.enemyStatus;
+  const posture = pendingCombatAction
+    ?? rawPosture.charAt(0).toUpperCase() + rawPosture.slice(1);
 
   return (
     <div className="w-[30%] bg-bg-panel border-l border-border-muted flex flex-col" data-testid="status-panel">
@@ -115,17 +141,17 @@ export function StatusPanel({
                 {healthState.label}
               </span>
               <span className={`text-xs font-mono ${healthState.numericClass}`}>
-                {state.playerHp}/{state.playerMaxHp}
+                {playerHp}/{playerMaxHp}
               </span>
             </div>
           </div>
           <div
             className="status-bar"
             role="progressbar"
-            aria-label={`Health: ${state.playerHp} of ${state.playerMaxHp}`}
-            aria-valuenow={state.playerHp}
+            aria-label={`Health: ${playerHp} of ${playerMaxHp}`}
+            aria-valuenow={playerHp}
             aria-valuemin={0}
-            aria-valuemax={state.playerMaxHp}
+            aria-valuemax={playerMaxHp}
           >
             <div
               className={`status-bar-fill ${healthState.barClass}`}
@@ -139,16 +165,16 @@ export function StatusPanel({
           <div className="flex justify-between items-center mb-1">
             <span className="text-text-disabled text-xs font-sans">Stamina</span>
             <span className="text-xs font-mono status-numeric-stamina">
-              {state.playerStamina}/{state.playerMaxStamina}
+              {playerStamina}/{playerMaxStamina}
             </span>
           </div>
           <div
             className="status-bar"
             role="progressbar"
-            aria-label={`Stamina: ${state.playerStamina} of ${state.playerMaxStamina}`}
-            aria-valuenow={state.playerStamina}
+            aria-label={`Stamina: ${playerStamina} of ${playerMaxStamina}`}
+            aria-valuenow={playerStamina}
             aria-valuemin={0}
-            aria-valuemax={state.playerMaxStamina}
+            aria-valuemax={playerMaxStamina}
           >
             <div
               className="status-bar-fill status-bar-stamina"
@@ -165,11 +191,11 @@ export function StatusPanel({
       </div>
 
       {/* Status Effects */}
-      {state.statusEffects && state.statusEffects.length > 0 && (
+      {statusEffects && statusEffects.length > 0 && (
         <div className="px-4 py-2 border-b border-border-muted" data-testid="status-effects">
           <h3 className="text-text-secondary text-xs mb-1.5 font-sans">STATUS EFFECTS</h3>
           <div className="flex flex-wrap gap-1.5">
-            {state.statusEffects.map((effect) => {
+            {statusEffects.map((effect) => {
               const type = getEffectType(effect);
               return (
                 <span
@@ -212,25 +238,30 @@ export function StatusPanel({
             onNavigate={onNavigate}
             mapState={mapState}
             onToggleFullMap={onToggleFullMap}
-            inCombat={state.inCombat}
+            inCombat={inCombat}
             enemyStatus={enemyStatus}
-            roomOccupants={state.roomOccupants}
+            roomOccupants={roomOccupants}
+            combatCombatants={combatCombatants}
+            combatHostileIds={combatHostileIds}
           />
         )}
         {activeTab === "gear" && (
           <GearTab
-            loadout={state.loadout}
-            inventory={state.inventory}
+            loadout={loadout}
+            inventory={inventory}
             onOpenInventory={onOpenInventory}
           />
         )}
         {activeTab === "character" && (
           <CharacterTab
-            soundCues={state.soundCues}
+            soundCues={soundCues}
             onSendCommand={onSendCommand}
             onOpenInventory={onOpenInventory}
-            combatStats={state.combatStats}
-            effectiveStats={state.effectiveStats}
+            combatStats={combatStats}
+            effectiveStats={effectiveStats}
+            baseStats={baseStats}
+            statPointsAvailable={statPointsAvailable}
+            isTrainingRoom={roomHeader?.roomType === 'feature_training'}
           />
         )}
       </div>
@@ -275,6 +306,8 @@ interface EnvironmentTabProps {
     creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
     players: Array<{ id: string; name: string; disconnected?: boolean }>;
   };
+  combatCombatants: import('@ellmud/shared').CombatantSnapshot[];
+  combatHostileIds: string[];
 }
 
 function EnvironmentTab({
@@ -285,6 +318,8 @@ function EnvironmentTab({
   inCombat,
   enemyStatus,
   roomOccupants,
+  combatCombatants,
+  combatHostileIds,
 }: EnvironmentTabProps) {
   return (
     <>
@@ -307,14 +342,13 @@ function EnvironmentTab({
           <CombatHUD
             enemyStatus={enemyStatus}
             availableTargets={
-              roomOccupants.creatures
-                .filter((c) => c.aggressive)
-                .map((c) => ({
-                  id: c.id,
-                  name: c.name,
-                  hp: 100,
-                  maxHp: 100,
-                }))
+              combatCombatants.length > 0
+                ? combatCombatants
+                    .filter(c => combatHostileIds.includes(c.id) && c.status === 'fighting')
+                    .map(c => ({ id: c.id, name: c.name, hp: c.hp, maxHp: c.maxHp }))
+                : roomOccupants.creatures
+                    .filter((c) => c.aggressive)
+                    .map((c) => ({ id: c.id, name: c.name, hp: 100, maxHp: 100 }))
             }
           />
         </div>
@@ -391,9 +425,12 @@ interface CharacterTabProps {
   onOpenInventory: () => void;
   combatStats: CombatStats;
   effectiveStats: EffectiveStats | null;
+  baseStats: BaseStatsMessage | null;
+  statPointsAvailable: number;
+  isTrainingRoom: boolean;
 }
 
-function CharacterTab({ soundCues, onSendCommand, onOpenInventory, combatStats, effectiveStats }: CharacterTabProps) {
+function CharacterTab({ soundCues, onSendCommand, onOpenInventory, combatStats, effectiveStats, baseStats, statPointsAvailable, isTrainingRoom }: CharacterTabProps) {
   return (
     <>
       {/* Sound Cues */}
@@ -468,6 +505,32 @@ function CharacterTab({ soundCues, onSendCommand, onOpenInventory, combatStats, 
         )}
       </div>
 
+      {/* Training Panel — shown in feature_training rooms */}
+      {isTrainingRoom && baseStats && (
+        <TrainingPanel
+          baseStats={baseStats}
+          statPointsAvailable={statPointsAvailable}
+          onTrain={(stat) => onSendCommand(`train ${stat}`)}
+        />
+      )}
+
+      {/* Base Stats Overview — shown when base stats are available */}
+      {baseStats && !isTrainingRoom && (
+        <div className="p-4 border-t border-border-muted" data-testid="base-stats">
+          <h3 className="text-text-secondary text-xs mb-3 font-sans">BASE STATS</h3>
+          {statPointsAvailable > 0 && (
+            <p className="text-interactive text-xs mb-2 font-mono">
+              {statPointsAvailable} stat point{statPointsAvailable === 1 ? '' : 's'} available — visit a training grounds to spend.
+            </p>
+          )}
+          <div className="space-y-1 pl-2">
+            {BASE_STAT_ENTRIES.map(([key, label]) => (
+              <StatRow key={key} label={label} value={baseStats[key as keyof BaseStatsMessage]} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="p-4 border-t border-border-muted">
         <h3 className="text-text-secondary text-xs mb-3 font-sans">QUICK ACTIONS</h3>
@@ -518,6 +581,102 @@ function EffectiveStatRow({ label, effective, base }: { label: string; effective
           <span className="text-text-disabled ml-1">(base: {base})</span>
         )}
       </span>
+    </div>
+  );
+}
+
+// ─── Training Panel ──────────────────────────────────────────────────────────
+
+/** Stat keys displayed in the training panel, with display names. */
+const BASE_STAT_ENTRIES: Array<[keyof BaseStatsMessage, string]> = [
+  ['maxHp', 'Max HP'],
+  ['unarmed', 'Unarmed'],
+  ['oneHanded', 'One-Handed'],
+  ['twoHanded', 'Two-Handed'],
+  ['ranged', 'Ranged'],
+  ['shieldBlock', 'Shield Block'],
+  ['dodge', 'Dodge'],
+  ['armour', 'Armour'],
+];
+
+/** Phase-1 flat soft caps (mirrors server DEFAULT_SOFT_CAPS). */
+const SOFT_CAPS: Record<keyof BaseStatsMessage, number> = {
+  maxHp: 200,
+  unarmed: 25,
+  oneHanded: 25,
+  twoHanded: 25,
+  ranged: 25,
+  shieldBlock: 25,
+  dodge: 25,
+  armour: 15,
+};
+
+/** Text-based progress bar for stat vs soft cap. */
+function StatCapBar({ current, cap }: { current: number; cap: number }) {
+  const barWidth = 12;
+  const filled = Math.min(Math.round((current / cap) * barWidth), barWidth);
+  const empty = barWidth - filled;
+  const atCap = current >= cap;
+  return (
+    <span className={`font-mono text-xs ${atCap ? 'text-warning' : 'text-text-secondary'}`}>
+      [{'\u2588'.repeat(filled)}{'\u2591'.repeat(empty)}] {current}/{cap}
+      {atCap && <span className="text-warning ml-1">(capped)</span>}
+    </span>
+  );
+}
+
+interface TrainingPanelProps {
+  baseStats: BaseStatsMessage;
+  statPointsAvailable: number;
+  onTrain: (statName: string) => void;
+}
+
+function TrainingPanel({ baseStats, statPointsAvailable, onTrain }: TrainingPanelProps) {
+  const hasPoints = statPointsAvailable > 0;
+  return (
+    <div className="p-4 border-t border-border-muted" data-testid="training-panel">
+      <h3 className="text-text-secondary text-xs mb-1 font-sans">═══ TRAINING GROUNDS ═══</h3>
+      <p className={`text-xs mb-3 font-mono ${hasPoints ? 'text-interactive' : 'text-text-disabled'}`}>
+        Stat points available: {statPointsAvailable}
+      </p>
+
+      <div className="space-y-2">
+        {BASE_STAT_ENTRIES.map(([key, label]) => {
+          const current = baseStats[key];
+          const cap = SOFT_CAPS[key];
+          const atCap = current >= cap;
+          const canTrain = hasPoints && !atCap;
+          return (
+            <div key={key} className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-0.5">
+                  <span className="text-text-primary text-xs font-sans">{label}</span>
+                  <StatCapBar current={current} cap={cap} />
+                </div>
+              </div>
+              <button
+                onClick={() => onTrain(key === 'maxHp' ? 'maxhp' : key === 'oneHanded' ? 'one-handed' : key === 'twoHanded' ? 'two-handed' : key === 'shieldBlock' ? 'shield-block' : key)}
+                disabled={!canTrain}
+                className={`px-2 py-0.5 rounded text-xs font-sans transition-colors shrink-0 ${
+                  canTrain
+                    ? 'text-text-primary bg-bg-elevated hover:bg-interactive hover:text-bg-primary'
+                    : 'text-text-disabled bg-bg-surface cursor-not-allowed'
+                }`}
+                title={atCap ? `${label} is at soft cap` : !hasPoints ? 'No stat points available' : `Train ${label}`}
+                aria-label={`Train ${label}${atCap ? ' (at soft cap)' : ''}${!hasPoints ? ' (no points)' : ''}`}
+              >
+                Train
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {!hasPoints && (
+        <p className="text-text-disabled text-xs mt-3 font-serif italic">
+          You have no stat points to spend. Earn more through leveling.
+        </p>
+      )}
     </div>
   );
 }

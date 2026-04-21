@@ -112,12 +112,6 @@ jobs:
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Trigger CI/CD on uat
-        if: steps.merge.outputs.pushed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Give GitHub a moment to process the push
-          sleep 5
-          gh workflow run ci-cd.yml --ref uat
-          echo "✅ Triggered CI/CD pipeline on uat"
+      # CI/CD is triggered automatically by the push to uat (ci-cd.yml on: push).
+      # No manual dispatch needed — that caused duplicate CI/CD runs and repeated
+      # Discord notifications.

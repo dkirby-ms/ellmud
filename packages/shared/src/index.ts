@@ -240,13 +240,29 @@ export interface PlayerStateMessage {
   posture: Posture;
 }
 
-/** Server → Client: Effective combat stats after equipment bonuses (#455). */
+/** Base combat stats before equipment bonuses (#457). */
+export interface BaseStatsMessage {
+  maxHp: number;
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
+  shieldBlock: number;
+  dodge: number;
+  armour: number;
+}
+
+/** Server → Client: Effective combat stats after equipment bonuses (#455, extended #457). */
 export interface EffectiveStatsMessage {
   maxHp: number;
   attack: number;
   armour: number;
   shieldBlock: number;
   dodge: number;
+  /** Base stats before equipment bonuses (#457). */
+  baseStats?: BaseStatsMessage;
+  /** Banked stat points available for training (#457). */
+  statPointsAvailable?: number;
 }
 
 /** Server → Client: Enemy telegraph broadcast (GDD §6.5). */
@@ -257,6 +273,42 @@ export interface TelegraphMessage {
   remainingTicks: number;
   targetId: string;
   telegraphText: string;
+}
+
+// ─── Combat State Snapshot (Issue #467) ──────────────────────────────────────
+
+/** Status of a combatant in an active encounter. */
+export type CombatantStatus = 'fighting' | 'downed' | 'dead';
+
+/** Per-combatant snapshot sent to the client each combat tick. */
+export interface CombatantSnapshot {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  isPlayer: boolean;
+  isNPC: boolean;
+  status: CombatantStatus;
+  currentTarget?: string;
+  /** Active telegraph wind-up (GDD §6.5). */
+  telegraphedAction?: {
+    abilityName: string;
+    remainingTicks: number;
+    targetId: string;
+  };
+}
+
+/** Server → Client: Full combatant snapshot broadcast each combat tick (#467). */
+export interface CombatStateMessage {
+  encounterId: string;
+  tick: number;
+  combatants: CombatantSnapshot[];
+  /** IDs of combatants hostile to the receiving player. */
+  hostileIds: string[];
+  /** The receiving player's current auto-attack target. */
+  playerTargetId?: string;
+  /** true = player is in this encounter, false/undefined = observer */
+  isParticipant?: boolean;
 }
 
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
@@ -274,6 +326,21 @@ export interface CharacterSummary {
   lastPlayedAt: string | null;
   topSkills: Array<{ name: string; level: number }>;
   totalRuns: number;
+  /** Base combat stats for display on character select. */
+  baseStats?: {
+    maxHp: number;
+    unarmed: number;
+    oneHanded: number;
+    twoHanded: number;
+    ranged: number;
+    shieldBlock: number;
+    dodge: number;
+    armour: number;
+  };
+  /** Currently equipped items (slot → item name). */
+  equipment?: Record<string, { itemId: string; name: string } | null>;
+  /** Available stat points for training. */
+  statPointsAvailable?: number;
 }
 
 /** Client → Server: Create a new character. */
@@ -372,6 +439,7 @@ export const MessageTypes = {
   ROOM_OCCUPANTS: 'room_occupants',
   FLAG_STATE: 'flag_state',
   EFFECTIVE_STATS: 'effective_stats',
+  COMBAT_STATE: 'combat_state',
 
   // Client → Server: who list
   REQUEST_PLAYER_LIST: 'request_player_list',
@@ -895,32 +963,7 @@ export interface InventoryUpdateMessage {
 }
 
 // ─── Character System (Character Selection & Management) ─────────────────────
-
-/** Summary of a character for the selection screen. */
-export interface CharacterSummary {
-  id: string;
-  name: string;
-  startingZoneSlug: string;
-  startingZoneName: string;
-  factionSlug: string | null;
-  factionName: string | null;
-  isActive: boolean;
-  createdAt: string;
-  lastPlayedAt: string | null;
-  topSkills: Array<{ name: string; level: number }>;
-  totalRuns: number;
-}
-
-/** Client → Server: Create a new character. */
-export interface CreateCharacterRequest {
-  name: string;
-  startingZoneSlug: string;
-}
-
-/** Client → Server: Select a character. */
-export interface SelectCharacterRequest {
-  characterId: string;
-}
+// CharacterSummary is defined above in "Character Types (GDD §7.1)".
 
 // ─── Slot Validation ─────────────────────────────────────────────────────────
 

@@ -1,86 +1,126 @@
-# [0.2.0](https://github.com/dkirby-ms/ellmud/compare/v0.1.0...v0.2.0) (2026-04-17)
+# [0.2.0-dev.63](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.62...v0.2.0-dev.63) (2026-04-19)
 
 
 ### Bug Fixes
 
-* add Laeral, Bruenor, Danilo to Issue Routing table in routing.md ([64d1352](https://github.com/dkirby-ms/ellmud/commit/64d13521b8307eda75dd5c65e7c48fadbc732800))
-* add timeout to API calls and Vite proxy to prevent browser hang on server restart ([a6c804b](https://github.com/dkirby-ms/ellmud/commit/a6c804bc71bf5eaa125290d14b1609162759960f))
-* **admin:** guard null behavior in creature editor select ([606d0f9](https://github.com/dkirby-ms/ellmud/commit/606d0f9aa453376acf4a84c6a0c2d380616c1f61))
-* **admin:** remove Rooms from admin left-nav menu ([10c8651](https://github.com/dkirby-ms/ellmud/commit/10c8651f8c814eb085e38d1072f6f497d10680da))
-* align creature reroll endpoint with flat entity shape from store ([be5d8aa](https://github.com/dkirby-ms/ellmud/commit/be5d8aa421bc13c0c01cca7f177b1b8633aebf79))
-* allow deploy on workflow_dispatch events ([e6064e7](https://github.com/dkirby-ms/ellmud/commit/e6064e780c3b3807550e31f7dc33865f2e643498))
-* bleed-out dies at -10 HP and slow down combat pacing ([b884eeb](https://github.com/dkirby-ms/ellmud/commit/b884eebd4a40c65b058b4919285d6946c9b4f80b))
-* build errors in combat tests + connection timeout for browser hang ([9fef3f5](https://github.com/dkirby-ms/ellmud/commit/9fef3f503ad99d210afccf5c9f2b1751e1276ad5))
-* **ci:** standardize action refs and replace merge error swallowing ([921359c](https://github.com/dkirby-ms/ellmud/commit/921359cbea65769ba21d90db3c92c17496f43ef0))
-* clean up stale combatant entries to prevent cross-room combat failures ([7fa5498](https://github.com/dkirby-ms/ellmud/commit/7fa54980049d29ca195ffbc3d8916638124a49ba))
-* **client:** exclude all __tests__ dirs from tsc type-checking ([c588eab](https://github.com/dkirby-ms/ellmud/commit/c588eab6608771b26041770ee070c19783f21747))
-* **client:** resolve dual-React version mismatch in tests ([1476b8c](https://github.com/dkirby-ms/ellmud/commit/1476b8cfea8933442fc5ef9cc98a95333a43b64a))
-* **combat:** make flee instant — skip defeated, move creatures ([73418a8](https://github.com/dkirby-ms/ellmud/commit/73418a8c63dd7d0b99e3e6adbe4b9589fabc57c3))
-* **combat:** prevent post-death combat bleed with pendingDeathTeleport guard ([357f68f](https://github.com/dkirby-ms/ellmud/commit/357f68ff73ff45607e311c707c4db353e3abd9f0))
-* **combat:** send 0 HP state when player enters downed state ([81989ad](https://github.com/dkirby-ms/ellmud/commit/81989ade92b15478f7d5a239e933aac8cbf0a9ef))
-* complete test fixes for static registry removal ([8fc0ba2](https://github.com/dkirby-ms/ellmud/commit/8fc0ba263f6745bb81f8d4a002b0394d80eaaa79))
-* creature detail static panels — preview, re-roll, version history ([#446](https://github.com/dkirby-ms/ellmud/issues/446)) ([9a2994b](https://github.com/dkirby-ms/ellmud/commit/9a2994b276255bc931368716db0789da00527200))
-* Docker husky failure + issue-creation on workflow_dispatch ([71e00a0](https://github.com/dkirby-ms/ellmud/commit/71e00a09dde2ba2bff741ebfadb8130a3324aada))
-* Docker husky failure + issue-creation on workflow_dispatch ([824cd3c](https://github.com/dkirby-ms/ellmud/commit/824cd3cadee463fea83f7ac7850f257998414ffd))
-* dodge rolls, respawn location, and post-death combat cleanup (fixes [#460](https://github.com/dkirby-ms/ellmud/issues/460), fixes [#461](https://github.com/dkirby-ms/ellmud/issues/461), fixes [#462](https://github.com/dkirby-ms/ellmud/issues/462)) ([4d1899b](https://github.com/dkirby-ms/ellmud/commit/4d1899be2b33e24dfeeb9d38f99548b0eb1a7264))
-* **e2e:** fresh server per test + fix admin API room name ([243d6f4](https://github.com/dkirby-ms/ellmud/commit/243d6f4c13ef6c9e47b5c1d5ddf2e9f716433f61))
-* **e2e:** use admin spawn API for container tests ([e9304e2](https://github.com/dkirby-ms/ellmud/commit/e9304e2859588b5665bd8d1327f287391d7cf277))
-* exclude E2E tests from CI test step ([9b3a741](https://github.com/dkirby-ms/ellmud/commit/9b3a741b16f465ac3536dc34d89e87663fa03e47))
-* filter npm-internal vulnerabilities from CI audit step ([7783b30](https://github.com/dkirby-ms/ellmud/commit/7783b30548eebfc59908de74783f6a526eb9ba52))
-* gate UAT CI/CD trigger on actual deployable changes ([b36adae](https://github.com/dkirby-ms/ellmud/commit/b36adaeeb81fc4c376ef8793dec36f79dc716c11))
-* handle [reset] ANSI tag and simplify squad-promote workflow ([7fa7802](https://github.com/dkirby-ms/ellmud/commit/7fa780271353d07773a110a6f83a1b78cbbd1e60))
-* handle forbidden-path conflicts in uat→prod merge ([a52b2dd](https://github.com/dkirby-ms/ellmud/commit/a52b2dddf40c826d2bd89485bf08a4fb9680f775))
-* improve dodge and block narration to include attacker name ([694a844](https://github.com/dkirby-ms/ellmud/commit/694a844e639052b808cf21fae935b72d0233b1e7))
-* inventory panel shows carried items when in zone ([1099162](https://github.com/dkirby-ms/ellmud/commit/1099162539ec6f2b32b6dc43376edaf5277f6bb7))
-* limit GitHub Releases to production branch only ([2089600](https://github.com/dkirby-ms/ellmud/commit/20896006a174bf0e81df37e1318302b48b02b091))
-* make player-death integration test deterministic ([d5b93ad](https://github.com/dkirby-ms/ellmud/commit/d5b93ad7258cc135c0e0c7cbc06b4109fa22fede))
-* migrate admin creature CRUD to Phase 1 stats, wire calculateCreatureEffectiveStats ([#452](https://github.com/dkirby-ms/ellmud/issues/452), [#456](https://github.com/dkirby-ms/ellmud/issues/456)) ([2a97cf1](https://github.com/dkirby-ms/ellmud/commit/2a97cf174f332fe945a1433714007e59ea0341ff))
-* minimap rendering with progressive exploration ([#443](https://github.com/dkirby-ms/ellmud/issues/443)) ([cd787d1](https://github.com/dkirby-ms/ellmud/commit/cd787d164c25d906a0280358160cbd07ead6690f))
-* move Discord UAT announcement to fire after successful deploy (fixes [#451](https://github.com/dkirby-ms/ellmud/issues/451)) ([e39b67f](https://github.com/dkirby-ms/ellmud/commit/e39b67f48cc0413f31efe8c1d0b67a16849d85d0))
-* only send bleed-out HP messages when HP actually changes ([26bc471](https://github.com/dkirby-ms/ellmud/commit/26bc471366d975c961223cceec3271d01777e0c8))
-* remove false confidence from test suite ([#450](https://github.com/dkirby-ms/ellmud/issues/450)) ([2d5e47c](https://github.com/dkirby-ms/ellmud/commit/2d5e47c8bcf18b8875ac735a81e7819a97eed7e3))
-* remove unused imports in corpse test files ([3acc43a](https://github.com/dkirby-ms/ellmud/commit/3acc43a230f202c45eecfc75c200ce218fa7bdca))
-* replace hardcoded triage routing with routing.md-driven keyword scoring ([1b2cbe9](https://github.com/dkirby-ms/ellmud/commit/1b2cbe9391ae49b7e07107f063b711bee9446b08))
-* replace Math.random() with crypto in E2E test fixtures ([83cdfdc](https://github.com/dkirby-ms/ellmud/commit/83cdfdca65b750d4b172adc92ae2824391903869)), closes [#19](https://github.com/dkirby-ms/ellmud/issues/19) [#19](https://github.com/dkirby-ms/ellmud/issues/19)
-* resolve 6 combat bugs from live playtesting ([e05231d](https://github.com/dkirby-ms/ellmud/commit/e05231d97c5c2e5810c7907f1f0df6c1a6c6fa22))
-* resolve all ESLint errors (0 errors remaining) ([a6fd0e1](https://github.com/dkirby-ms/ellmud/commit/a6fd0e1f28536a5f15c853f2a2399f1bc0b45268))
-* resolve CodeQL security alerts — sanitization, ReDoS, rate limiting ([#433](https://github.com/dkirby-ms/ellmud/issues/433)) ([aa9ead5](https://github.com/dkirby-ms/ellmud/commit/aa9ead57e0852e6d210e6b0531b5a78d521fe3f2)), closes [#419](https://github.com/dkirby-ms/ellmud/issues/419) [#419](https://github.com/dkirby-ms/ellmud/issues/419)
-* resolve test failures from registry removal + help modal refactor ([3c96b57](https://github.com/dkirby-ms/ellmud/commit/3c96b578921582498f96d5fa77aaaeff8af77c7b))
-* send bleed-out HP drain to downed players with scroll log prompt ([269153a](https://github.com/dkirby-ms/ellmud/commit/269153ab61f0f3f2ac5cf20a37f1e7d19feade9d))
-* **toggle:** report actual new state when toggling settings ([#432](https://github.com/dkirby-ms/ellmud/issues/432)) ([03a237f](https://github.com/dkirby-ms/ellmud/commit/03a237f96d264a78a79eebf2f0712559249daad4))
-* TS errors in death tests + CI failure-issue job condition ([8aaea81](https://github.com/dkirby-ms/ellmud/commit/8aaea81e2492db8408e65fea2f324a968f319248))
-* update 15 test files for new combat stat model ([159f1bb](https://github.com/dkirby-ms/ellmud/commit/159f1bb52bb406391d1e00d337b5b2fffee9d50c))
-* update message type count for EFFECTIVE_STATS addition ([3401c1e](https://github.com/dkirby-ms/ellmud/commit/3401c1e11e44017078010c393d3b632740d23bf7))
-* update test expectations for passive dodge refactor ([41531c5](https://github.com/dkirby-ms/ellmud/commit/41531c584a59fbf937d987f5832c04c8844b4584))
-* use -X theirs for uat→prod merge in squad-promote ([17d6312](https://github.com/dkirby-ms/ellmud/commit/17d6312848ae81f1015cdee3eb7f10f92ac16da5))
-* use correct inventory/stash headers based on zone context ([#431](https://github.com/dkirby-ms/ellmud/issues/431)) ([d00eb6a](https://github.com/dkirby-ms/ellmud/commit/d00eb6a1d58b5f1ec814e59557df399d461008fa))
-* use currentRoomId instead of roomId on Creature type ([4a37cde](https://github.com/dkirby-ms/ellmud/commit/4a37cdeabf50c941e1c8e702e2ef9611bcfbd591))
-* wire player combat stats from CharacterRepository into combatant creation ([c2c134d](https://github.com/dkirby-ms/ellmud/commit/c2c134dcedd98e4788fdb8bf10fc9dae89c6f320))
-* zone designer exit icons + publish refactor ([#445](https://github.com/dkirby-ms/ellmud/issues/445)) ([c6914bd](https://github.com/dkirby-ms/ellmud/commit/c6914bdb4721373e0468347519db05b7466f780b))
+* **test:** update getById assertion to match new multi-lookup query ([#482](https://github.com/dkirby-ms/ellmud/issues/482)) ([37d1e31](https://github.com/dkirby-ms/ellmud/commit/37d1e31843df97f39615eed70430df0bf4f1fb70)), closes [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#481](https://github.com/dkirby-ms/ellmud/issues/481) [#479](https://github.com/dkirby-ms/ellmud/issues/479) [#481](https://github.com/dkirby-ms/ellmud/issues/481)
+
+# [0.2.0-dev.62](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.61...v0.2.0-dev.62) (2026-04-19)
 
 
 ### Features
 
-* add 6 new container items across all tiers ([1e3367c](https://github.com/dkirby-ms/ellmud/commit/1e3367c6f6555fda4a64275d860b73b042839e85))
-* add ANSI tag support for item and creature displays ([936b0bc](https://github.com/dkirby-ms/ellmud/commit/936b0bc108ff48c4d56b561afd9dc1b31602491b)), closes [#418](https://github.com/dkirby-ms/ellmud/issues/418)
-* add ItemStats to Item interface for equipment bonuses ([#453](https://github.com/dkirby-ms/ellmud/issues/453)) ([3436dc3](https://github.com/dkirby-ms/ellmud/commit/3436dc3b33f1d5cb929f4c66b7ec40910ab2095c))
-* add noTake flag to Item interface for non-carryable items ([1677ac8](https://github.com/dkirby-ms/ellmud/commit/1677ac8af0aa61bf5d12dca976be9156b5467384))
-* add permadeath system with character reset and Hall of Fame ([68c34c8](https://github.com/dkirby-ms/ellmud/commit/68c34c8ed1045983c9aedc70ac5c457d0206315d))
-* **admin:** add undo/redo support for AnsiToolbar color toggles ([7c5c583](https://github.com/dkirby-ms/ellmud/commit/7c5c583ddc1176ba5315b9c7da2efd456fa9c7fa))
-* ANSI formatting toolbar for admin content editors ([#449](https://github.com/dkirby-ms/ellmud/issues/449)) ([c59fc81](https://github.com/dkirby-ms/ellmud/commit/c59fc810c8e743c1d31de06738776def83a1938e)), closes [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#447](https://github.com/dkirby-ms/ellmud/issues/447) [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#445](https://github.com/dkirby-ms/ellmud/issues/445)
-* **ci:** improve UAT Discord notification with embed, changelog, and test site link ([d420cd1](https://github.com/dkirby-ms/ellmud/commit/d420cd1f7e2ba2dd8961e50ba0a27cf59f97b0d5))
-* **downing:** extend bleed-out to 60 ticks (~1 minute) ([b1f4574](https://github.com/dkirby-ms/ellmud/commit/b1f4574bb5f20e6b66ae3986df51a46590383896))
-* help modal overlay with structured data from server ([6eb21b0](https://github.com/dkirby-ms/ellmud/commit/6eb21b0ecd4d5a3f064bd00f59acab0fc362599a))
-* rename loot_containers → starting_items, remove collapse lifecycle, drop room_definitions ([#438](https://github.com/dkirby-ms/ellmud/issues/438)) ([#439](https://github.com/dkirby-ms/ellmud/issues/439)) ([b6e2782](https://github.com/dkirby-ms/ellmud/commit/b6e278286ae021e091803d6601a3df31440a2af5))
-* replace color name buttons with compact swatch grid in ANSI toolbar (fixes [#458](https://github.com/dkirby-ms/ellmud/issues/458)) ([f97312f](https://github.com/dkirby-ms/ellmud/commit/f97312f9d0bdd9fa1642b7e108f8c0abb0c72b82))
-* rework downed state with grace period, HP drain, and stabilize-revive ([feb8326](https://github.com/dkirby-ms/ellmud/commit/feb83264bb05461abb1a69ef0d3c8e51d36dc43c))
-* send effective stats to client and display in StatusPanel ([#455](https://github.com/dkirby-ms/ellmud/issues/455)) ([d3fbb2d](https://github.com/dkirby-ms/ellmud/commit/d3fbb2dc5dd8d6b2fc0d1cae9dc2e21c3f9e42ec))
-* unified corpse container system ([#442](https://github.com/dkirby-ms/ellmud/issues/442)) ([c6169ac](https://github.com/dkirby-ms/ellmud/commit/c6169ac35e5dfba15c18af2fd7b97241d59585e0))
+* add e2e combat tests ([#479](https://github.com/dkirby-ms/ellmud/issues/479)) ([30e96d3](https://github.com/dkirby-ms/ellmud/commit/30e96d3acb9d77ef3207ff5b5874819b544d88c8)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.61](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.60...v0.2.0-dev.61) (2026-04-18)
 
 
-### Reverts
+### Features
 
-* remove browser timeout/proxy changes that caused Firefox blank screen ([1a2782d](https://github.com/dkirby-ms/ellmud/commit/1a2782df85ed116c9d70f562fee0fba92f889879))
+* complete all 60 multi-encounter tests (Sections E-H) ([#478](https://github.com/dkirby-ms/ellmud/issues/478)) ([83dd282](https://github.com/dkirby-ms/ellmud/commit/83dd28210add7afd94c4e667eb1e7edd29f57e00)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.60](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.59...v0.2.0-dev.60) (2026-04-18)
+
+
+### Features
+
+* **combat:** AoE encounter merge — Phase 3 multi-encounter ([#477](https://github.com/dkirby-ms/ellmud/issues/477)) ([bb42728](https://github.com/dkirby-ms/ellmud/commit/bb42728f2d4af9536db35992c62df59017efb17e)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.59](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.58...v0.2.0-dev.59) (2026-04-18)
+
+
+### Features
+
+* **combat:** creature assist system — Phase 2 multi-encounter ([#476](https://github.com/dkirby-ms/ellmud/issues/476)) ([f7a7dd8](https://github.com/dkirby-ms/ellmud/commit/f7a7dd832d98333ece4d342045673a9fb0e77679)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.58](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.57...v0.2.0-dev.58) (2026-04-18)
+
+
+### Features
+
+* **combat:** multi-encounter support — Phase 1 core refactor ([#475](https://github.com/dkirby-ms/ellmud/issues/475)) ([249f596](https://github.com/dkirby-ms/ellmud/commit/249f59649e76290b56a31ebb165bd6f45c6baa15)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.57](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.56...v0.2.0-dev.57) (2026-04-18)
+
+
+### Bug Fixes
+
+* handle disconnect-while-downed — eliminate ghost entities and preserve bleed-out ([7f26048](https://github.com/dkirby-ms/ellmud/commit/7f2604864ec269afdfe0dd10c27dbd3ce432e388))
+* restore downed state on reconnect + broadcast on leave cleanup ([f2cc440](https://github.com/dkirby-ms/ellmud/commit/f2cc4406b10d95461246e79dae42998753bc7ed1))
+
+# [0.2.0-dev.56](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.55...v0.2.0-dev.56) (2026-04-18)
+
+
+### Bug Fixes
+
+* address PR [#473](https://github.com/dkirby-ms/ellmud/issues/473) review — remove cast, hoist query, dedupe type ([fae4519](https://github.com/dkirby-ms/ellmud/commit/fae45195253bed269d5d0bfb50e786f01f0cd387))
+* clear HP cache on player defeat + fix test expectations ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([4ff3772](https://github.com/dkirby-ms/ellmud/commit/4ff3772478080435b64c7f8cdc4b9004b21aaa16))
+* **client:** resolve combat state consistency bugs ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([8d6c2c0](https://github.com/dkirby-ms/ellmud/commit/8d6c2c0cce118b67a8c1d26428dd413044f1602e))
+* **combat:** persist player HP between encounters and send terminal COMBAT_STATE ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([bb75839](https://github.com/dkirby-ms/ellmud/commit/bb7583953beef2d17ccce8c47b0ccbe040401966))
+* update PgCharacterRepository test mock for loadout query ([9a6a10e](https://github.com/dkirby-ms/ellmud/commit/9a6a10e9ca49670ca3edd21c1fcf0f1c6c85d1de))
+
+
+### Features
+
+* **client:** redesign character select with detail panel in right pane ([7fc6e87](https://github.com/dkirby-ms/ellmud/commit/7fc6e8786a5e7c624cb48a85a4b5b89bfbfcab4a))
+* extend CharacterSummary with baseStats, equipment, and statPointsAvailable ([4f23401](https://github.com/dkirby-ms/ellmud/commit/4f23401f8952f8078bf72b7227a2b755e5a1e4c6))
+
+# [0.2.0-dev.55](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.54...v0.2.0-dev.55) (2026-04-17)
+
+
+### Features
+
+* COMBAT_STATE message + CombatHUD wiring ([#467](https://github.com/dkirby-ms/ellmud/issues/467)) ([9b7a2a6](https://github.com/dkirby-ms/ellmud/commit/9b7a2a6b68ccaa7b5e78af29860a9cc7568666f1))
+
+# [0.2.0-dev.54](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.53...v0.2.0-dev.54) (2026-04-17)
+
+
+### Features
+
+* add combat intro message and round separators ([4b1c31a](https://github.com/dkirby-ms/ellmud/commit/4b1c31a974362a2ef6c0dac3e5ec90aeacb33e55))
+
+# [0.2.0-dev.53](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.52...v0.2.0-dev.53) (2026-04-16)
+
+
+### Bug Fixes
+
+* suppress phantom ↑/↓ badges on inter-floor ghost rooms and zero-length edges ([0c13307](https://github.com/dkirby-ms/ellmud/commit/0c133077a664c998fa230aba7424d34213cabfc5))
+
+# [0.2.0-dev.52](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.51...v0.2.0-dev.52) (2026-04-16)
+
+
+### Bug Fixes
+
+* remove duplicate down arrow from minimap inter-floor edges ([#463](https://github.com/dkirby-ms/ellmud/issues/463)) ([#466](https://github.com/dkirby-ms/ellmud/issues/466)) ([810bc61](https://github.com/dkirby-ms/ellmud/commit/810bc617e40307694387aa3fc28546faf982b9ae))
+
+# [0.2.0-dev.51](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.50...v0.2.0-dev.51) (2026-04-16)
+
+
+### Bug Fixes
+
+* harden death-spawn-routing tests against silent passes ([3afe7c9](https://github.com/dkirby-ms/ellmud/commit/3afe7c9253865be7e66906c3e5f390e32fe9dfff))
+
+# [0.2.0-dev.50](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.49...v0.2.0-dev.50) (2026-04-16)
+
+
+### Bug Fixes
+
+* resolve CI flake in death-penalty test (async timing) ([131f6a5](https://github.com/dkirby-ms/ellmud/commit/131f6a5316cc21e94c96c0f5034bfbece0ed7c42))
+
+# [0.2.0-dev.49](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.48...v0.2.0-dev.49) (2026-04-16)
+
+
+### Bug Fixes
+
+* reorder semantic-release plugins so version:sync runs after npm bumps root ([83cde67](https://github.com/dkirby-ms/ellmud/commit/83cde678de8c90cbcc86b5a63d72dc5c2b735886))
+
+# [0.2.0-dev.48](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.47...v0.2.0-dev.48) (2026-04-16)
+
+
+### Features
+
+* **ci:** improve UAT Discord notification with embed, changelog, and test site link ([f3bb156](https://github.com/dkirby-ms/ellmud/commit/f3bb15618269eb71aa6f32d5e5828c8b622f5aa1))
+* stat training & progression system ([#457](https://github.com/dkirby-ms/ellmud/issues/457)) ([#464](https://github.com/dkirby-ms/ellmud/issues/464)) ([07a8ee7](https://github.com/dkirby-ms/ellmud/commit/07a8ee7eb010ee83d3c433fbad9639ef9ae7f4d6))
 
 # [0.2.0-dev.47](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.46...v0.2.0-dev.47) (2026-04-15)
 

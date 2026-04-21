@@ -6,7 +6,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Skull, TrendingUp, Map, Swords } from "lucide-react";
-import { useAppContext } from "../store.js";
+import { useAuthStore } from "../store/auth.js";
 import { fetchHallOfFame, fetchHallOfFameStats } from "../services/api.js";
 import type { HallOfFameEntry, HallOfFameStats } from "../services/api.js";
 
@@ -34,7 +34,9 @@ function formatDate(isoDate: string): string {
 
 export default function HallOfFame() {
   const navigate = useNavigate();
-  const { state } = useAppContext();
+  const token = useAuthStore(s => s.token);
+  const username = useAuthStore(s => s.username);
+  const email = useAuthStore(s => s.email);
   const [entries, setEntries] = useState<HallOfFameEntry[]>([]);
   const [stats, setStats] = useState<HallOfFameStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,11 +47,11 @@ export default function HallOfFame() {
   const perPage = 50;
 
   useEffect(() => {
-    if (!state.token) return;
+    if (!token) return;
 
     Promise.all([
-      fetchHallOfFame(state.token, page, perPage),
-      page === 1 ? fetchHallOfFameStats(state.token) : Promise.resolve(null),
+      fetchHallOfFame(token, page, perPage),
+      page === 1 ? fetchHallOfFameStats(token) : Promise.resolve(null),
     ])
       .then(([entriesData, statsData]) => {
         setEntries(entriesData.entries);
@@ -61,7 +63,7 @@ export default function HallOfFame() {
         setError(err.message ?? 'Failed to load Hall of Fame');
         setLoading(false);
       });
-  }, [state.token, page]);
+  }, [token, page]);
 
   const handlePrevPage = () => {
     if (page > 1) {
@@ -94,7 +96,7 @@ export default function HallOfFame() {
           </div>
         </div>
         <span className="text-text-secondary text-sm">
-          {state.username ?? state.email ?? "Unknown"}
+          {username ?? email ?? "Unknown"}
         </span>
       </div>
 

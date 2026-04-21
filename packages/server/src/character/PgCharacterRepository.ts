@@ -25,6 +25,13 @@ interface DbCharacterRow {
   shield_block: number;
   dodge: number;
   armour: number;
+  stat_points_available: number;
+}
+
+interface LoadoutSlotRow {
+  slot: string;
+  item_id: string;
+  item_name: string;
 }
 
 interface FactionNameRow {
@@ -68,7 +75,8 @@ function mapRow(row: DbCharacterRow): CharacterRow {
 /** Shared column list for character SELECT queries. */
 const CHARACTER_COLUMNS = `id, player_id, name, starting_zone_slug, faction_slug, is_active,
        created_at, last_played_at, deleted_at,
-       max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour`;
+       max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour,
+       stat_points_available`;
 
 export class PgCharacterRepository implements CharacterRepository {
   async list(playerId: string): Promise<CharacterSummary[]> {
@@ -94,6 +102,20 @@ export class PgCharacterRepository implements CharacterRepository {
       'the-bloom-observatory': 'The Bloom Observatory',
       'the-carrion-court': 'The Carrion Court',
     };
+
+    // Equipment: join player_loadout → item_definitions for display names.
+    // All characters share the same player, so query once before the loop.
+    const loadoutResult = await query<LoadoutSlotRow>(
+      `SELECT pl.slot, pl.item_id, id.name AS item_name
+       FROM player_loadout pl
+       JOIN item_definitions id ON id.id = pl.item_id
+       WHERE pl.player_id = $1`,
+      [playerId],
+    );
+    const equipment: Record<string, { itemId: string; name: string } | null> = {};
+    for (const lr of loadoutResult.rows) {
+      equipment[lr.slot] = { itemId: lr.item_id, name: lr.item_name };
+    }
 
     const summaries: CharacterSummary[] = [];
     for (const row of result.rows) {
@@ -124,6 +146,18 @@ export class PgCharacterRepository implements CharacterRepository {
         lastPlayedAt: row.last_played_at?.toISOString() ?? null,
         topSkills: skillResult.rows.map((s) => ({ name: s.skill_name, level: s.level })),
         totalRuns: runResult.rows[0]?.total_runs ?? 0,
+        baseStats: {
+          maxHp: row.max_hp ?? DEFAULT_PLAYER_COMBAT_STATS.maxHp,
+          unarmed: row.unarmed ?? DEFAULT_PLAYER_COMBAT_STATS.unarmed,
+          oneHanded: row.one_handed ?? DEFAULT_PLAYER_COMBAT_STATS.oneHanded,
+          twoHanded: row.two_handed ?? DEFAULT_PLAYER_COMBAT_STATS.twoHanded,
+          ranged: row.ranged ?? DEFAULT_PLAYER_COMBAT_STATS.ranged,
+          shieldBlock: row.shield_block ?? DEFAULT_PLAYER_COMBAT_STATS.shieldBlock,
+          dodge: row.dodge ?? DEFAULT_PLAYER_COMBAT_STATS.dodge,
+          armour: row.armour ?? DEFAULT_PLAYER_COMBAT_STATS.armour,
+        },
+        equipment,
+        statPointsAvailable: row.stat_points_available ?? 0,
       });
     }
 
@@ -298,6 +332,60 @@ export class PgCharacterRepository implements CharacterRepository {
        WHERE id = $9 AND deleted_at IS NULL`,
       [stats.maxHp, stats.unarmed, stats.oneHanded, stats.twoHanded,
        stats.ranged, stats.shieldBlock, stats.dodge, stats.armour, characterId],
+    );
+  }
+
+  async getStatPointsAvailable(characterId: string): Promise<number> {
+    const result = await query<{ stat_points_available: number }>(
+      `SELECT stat_points_available FROM characters WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    return result.rows[0]?.stat_points_available ?? 0;
+  }
+
+  async saveStatPointsAvailable(characterId: string, points: number): Promise<void> {
+    await query(
+      `UPDATE characters SET stat_points_available = $1 WHERE id = $2 AND deleted_at IS NULL`,
+      [points, characterId],
+    );
+  }
+
+  /** Map PlayerCombatStats keys → DB column names. */
+  private static readonly STAT_COLUMN_MAP: Record<keyof PlayerCombatStats, string> = {
+    maxHp: 'max_hp',
+    unarmed: 'unarmed',
+    oneHanded: 'one_handed',
+    twoHanded: 'two_handed',
+    ranged: 'ranged',
+    shieldBlock: 'shield_block',
+    dodge: 'dodge',
+    armour: 'armour',
+  };
+
+  async trainStat(
+    characterId: string,
+    statKey: keyof PlayerCombatStats,
+    increment: number,
+  ): Promise<{ newStatValue: number; newPointsAvailable: number } | null> {
+    const col = PgCharacterRepository.STAT_COLUMN_MAP[statKey];
+    const result = await query<{ new_stat: number; stat_points_available: number }>(
+      `UPDATE characters
+       SET ${col} = ${col} + $1, stat_points_available = stat_points_available - 1
+       WHERE id = $2 AND deleted_at IS NULL AND stat_points_available > 0
+       RETURNING ${col} AS new_stat, stat_points_available`,
+      [increment, characterId],
+    );
+    if (result.rows.length === 0) return null;
+    return {
+      newStatValue: result.rows[0].new_stat,
+      newPointsAvailable: result.rows[0].stat_points_available,
+    };
+  }
+
+  async addStatPoints(characterId: string, points: number): Promise<void> {
+    await query(
+      `UPDATE characters SET stat_points_available = stat_points_available + $1 WHERE id = $2 AND deleted_at IS NULL`,
+      [points, characterId],
     );
   }
 }

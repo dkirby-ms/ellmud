@@ -8,11 +8,10 @@
  * - Login page redirects authenticated users to /characters
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
-import { AppContext, appReducer, initialState, type AppState, type AppContextValue } from '../store.js';
+import { initializeAppStore, resetAppStore, type AppState } from '../store.js';
 import { routes } from '../routes.js';
 
 // Mock the api service to prevent real network calls
@@ -39,32 +38,25 @@ vi.mock('../services/connection.js', () => ({
 }));
 
 /**
- * Renders routes with AppContext wrapping a memory router.
+ * Renders routes with a memory router, using the Zustand store for state.
  */
 function renderWithRouter(
   initialPath: string,
   stateOverrides: Partial<AppState> = {},
 ) {
-  const state = { ...initialState, ...stateOverrides };
+  initializeAppStore(stateOverrides);
 
   const router = createMemoryRouter(routes, {
     initialEntries: [initialPath],
   });
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 describe('Routing', () => {
+  beforeEach(() => {
+    resetAppStore();
+  });
   describe('unauthenticated users', () => {
     it('renders Login page at /', async () => {
       renderWithRouter('/');

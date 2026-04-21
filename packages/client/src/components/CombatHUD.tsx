@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Sword, Shield, Heart, Target } from 'lucide-react';
-import type { EnemyStatus } from '../store.js';
+import type { EnemyStatus } from '../store/combat.js';
 import AnsiText from './AnsiText.js';
 
 interface CombatHUDProps {

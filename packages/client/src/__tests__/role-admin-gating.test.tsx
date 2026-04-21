@@ -15,11 +15,10 @@
  * TDD: Will fail until role-based gating is implemented in routes.tsx.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
-import { AppContext, appReducer, initialState, type AppState, type AppContextValue } from '../store.js';
+import { initializeAppStore, resetAppStore, type AppState } from '../store.js';
 import { routes } from '../routes.js';
 
 // ─── Mocks (same pattern as auth-guards.test.tsx) ────────────────────────────
@@ -80,28 +79,22 @@ function renderWithRouter(
   initialPath: string,
   stateOverrides: Partial<AppState> = {},
 ) {
-  const state = { ...initialState, ...stateOverrides };
+  initializeAppStore(stateOverrides);
 
   const router = createMemoryRouter(routes, {
     initialEntries: [initialPath],
   });
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 // ─── Role-Based Admin Page Gating Tests ──────────────────────────────────────
 
 describe('Admin Page Gating by Role (Issue #373)', () => {
+  beforeEach(() => {
+    resetAppStore();
+  });
+
   afterEach(() => {
     localStorage.clear();
   });
