@@ -12,7 +12,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { logout as apiLogout } from "../services/api";
-import { useAppContext } from "../store";
+import { useAuthStore } from "../store/auth.js";
+import { logoutAll } from "../store/index.js";
 import { useSettings } from "../hooks/useSettings";
 import { useFlags } from "../hooks/useFlags";
 
@@ -56,7 +57,9 @@ const categories: {
 ];
 
 export default function Settings() {
-  const { state, dispatch } = useAppContext();
+  const token = useAuthStore(s => s.token);
+  const settingsUsername = useAuthStore(s => s.username);
+  const playerId = useAuthStore(s => s.playerId);
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =
@@ -72,16 +75,16 @@ export default function Settings() {
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);
     try {
-      if (state.token) {
-        await apiLogout(state.token);
+      if (token) {
+        await apiLogout(token);
       }
     } catch {
       // Server may be unreachable — still clear local state
     } finally {
-      dispatch({ type: "LOGOUT" });
+      logoutAll();
       navigate("/");
     }
-  }, [state.token, dispatch, navigate]);
+  }, [token, navigate]);
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -154,7 +157,7 @@ export default function Settings() {
                   </label>
                   <input
                     type="text"
-                    value={state.username ?? "Unknown"}
+                    value={settingsUsername ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary font-sans"
                   />
@@ -167,7 +170,7 @@ export default function Settings() {
                   </label>
                   <input
                     type="text"
-                    value={state.playerId ?? "Unknown"}
+                    value={playerId ?? "Unknown"}
                     readOnly
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-disabled font-mono text-xs"
                   />

@@ -10,11 +10,10 @@
  * routes inside ProtectedRoute (or equivalent auth guard).
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
-import { AppContext, appReducer, initialState, type AppState, type AppContextValue } from '../store.js';
+import { initializeAppStore, resetAppStore, type AppState } from '../store.js';
 import { routes } from '../routes.js';
 
 // Mock the api service to prevent real network calls
@@ -66,33 +65,26 @@ vi.mock('../lib/admin-api.js', () => ({
 }));
 
 /**
- * Renders routes with AppContext wrapping a memory router.
+ * Renders routes with a memory router, using the Zustand store for state.
  * Mirrors the helper in routing.test.tsx.
  */
 function renderWithRouter(
   initialPath: string,
   stateOverrides: Partial<AppState> = {},
 ) {
-  const state = { ...initialState, ...stateOverrides };
+  initializeAppStore(stateOverrides);
 
   const router = createMemoryRouter(routes, {
     initialEntries: [initialPath],
   });
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 describe('Admin Route Auth Guards', () => {
+  beforeEach(() => {
+    resetAppStore();
+  });
   describe('unauthenticated users are redirected to login', () => {
     it('redirects /admin to / when not authenticated', async () => {
       renderWithRouter('/admin');

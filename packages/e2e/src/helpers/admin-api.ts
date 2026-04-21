@@ -71,3 +71,36 @@ export async function adminSpawnItem(
     throw new Error(`Admin spawn failed for "${itemId}" in ${targetRoom}: ${res.status} ${text}`);
   }
 }
+
+/**
+ * Spawn a creature in a specific room within a zone using the admin API.
+ *
+ * @param creatureId - The creature type ID (e.g. "sludge_crawler", "flood_scuttler")
+ * @param targetRoom - The room graph ID within the zone (e.g. "reliquary-inn")
+ * @param zoneSlug   - The zone slug (default: "the-reliquary")
+ */
+export async function adminSpawnCreature(
+  creatureId: string,
+  targetRoom: string,
+  zoneSlug = 'the-reliquary',
+): Promise<void> {
+  const colyseusRoomId = await getColyseusRoomId(zoneSlug);
+
+  const res = await fetch(`${BASE_URL}/admin/api/rooms/${colyseusRoomId}/spawn`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${ADMIN_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'creature',
+      id: creatureId,
+      targetRoomId: targetRoom,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Admin spawn creature failed for "${creatureId}" in ${targetRoom}: ${res.status} ${text}`);
+  }
+}

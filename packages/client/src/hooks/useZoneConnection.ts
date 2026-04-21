@@ -11,7 +11,11 @@
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useAppContext, getHpTier, type TerminalMessage } from '../store.js';
+import { useAuthStore } from '../store/auth.js';
+import { useTerminalStore, type TerminalMessage } from '../store/terminal.js';
+import { useCombatStore, getHpTier } from '../store/combat.js';
+import { useConnectionStore } from '../store/connection.js';
+import { useInventoryStore } from '../store/inventory.js';
 import { connect, switchRoom, sendRawCommand, sendCommand } from '../services/connection.js';
 import { useReconnection } from './useReconnection.js';
 import type {
@@ -29,6 +33,7 @@ import type {
   InventoryUpdateMessage,
   HelpDataMessage,
   EffectiveStatsMessage,
+  CombatStateMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -81,7 +86,13 @@ export interface UseZoneConnectionResult {
 const INITIAL_OVERLAY: OverlayState = { status: null, progress: 0, narration: null, permadeathData: null };
 
 export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionResult {
-  const { state, dispatch } = useAppContext();
+  // Reactive selectors — trigger re-render / effect re-run when these change
+  const token = useAuthStore((s) => s.token);
+  const activeCharacter = useInventoryStore((s) => s.activeCharacter);
+  const terminalDispatch = useTerminalStore((s) => s.dispatch);
+  const combatDispatch = useCombatStore((s) => s.dispatch);
+  const connectionDispatch = useConnectionStore((s) => s.dispatch);
+  const inventoryDispatch = useInventoryStore((s) => s.dispatch);
   const navigate = useNavigate();
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
@@ -109,11 +120,11 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
   }, [updateOverlay]);
 
   const addMessage = useCallback((text: string, type: TerminalMessage['type'], combatSubtype?: TerminalMessage['combatSubtype']) => {
-    dispatch({
+    terminalDispatch({
       type: 'ADD_MESSAGE',
       message: { id: nextMsgId(), text, type, timestamp: Date.now(), combatSubtype },
     });
-  }, [dispatch]);
+  }, [terminalDispatch]);
 
   const handlersRef = useRef<MessageHandlers | null>(null);
   const overlayHandlerRef = useRef<((msg: OverlayMessage) => void) | null>(null);
@@ -122,15 +133,17 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     maxAttempts: 5,
     baseDelayMs: 2000,
     onReconnect: async () => {
-      if (!state.token || !handlersRef.current) return false;
+      const currentToken = useAuthStore.getState().token;
+      const currentChar = useInventoryStore.getState().activeCharacter;
+      if (!currentToken || !handlersRef.current) return false;
       try {
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
-        const room = await connect(state.token, roomName, handlersRef.current, state.activeCharacter?.id);
+        useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+        const room = await connect(currentToken, roomName, handlersRef.current, currentChar?.id);
         roomRef.current = room;
         if (overlayHandlerRef.current) {
           room.onMessage('overlay_state', overlayHandlerRef.current);
         }
-        dispatch({ type: 'SET_ROOM', room });
+        useConnectionStore.getState().dispatch({ type: 'SET_ROOM', room });
         addMessage(roomName.startsWith('zone:') ? 'Reconnected to your stronghold.' : 'Reconnected to the instance.', 'system');
         return true;
       } catch {
@@ -140,7 +153,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     onReturnToHub: () => {
       roomRef.current?.leave();
       roomRef.current = null;
-      dispatch({ type: 'CLEAR_MESSAGES' });
+      terminalDispatch({ type: 'CLEAR_MESSAGES' });
+      inventoryDispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: { creatures: [], players: [] } });
       navigate('/zone');
     },
   });
@@ -149,19 +163,20 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
   reconnectionRef.current = reconnection;
 
   useEffect(() => {
-    if (!state.token || !roomName) return;
+    if (!token || !roomName) return;
 
     let disposed = false;
 
     const handlers: MessageHandlers = {
       onNarrate: (msg: NarrateMessage) => {
         if (disposed) return;
+        const { playerId } = useAuthStore.getState();
         let combatSubtype: TerminalMessage['combatSubtype'];
         if (msg.type === 'combat' && msg.combatEvent) {
           const { eventType, actorId, targetId } = msg.combatEvent;
           if (eventType === 'strike') {
-            combatSubtype = actorId === state.playerId ? 'hit_dealt'
-              : targetId === state.playerId ? 'hit_taken'
+            combatSubtype = actorId === playerId ? 'hit_dealt'
+              : targetId === playerId ? 'hit_taken'
               : undefined;
           } else if (eventType === 'dodge') {
             combatSubtype = 'dodge';
@@ -175,7 +190,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         }
         addMessage(msg.text, msg.type, combatSubtype);
         if (msg.type === 'sound') {
-          dispatch({
+          useTerminalStore.getState().dispatch({
             type: 'ADD_SOUND_CUE',
             cue: { id: `sc-${++soundCueCounterRef.current}`, text: msg.text, timestamp: msg.timestamp },
           });
@@ -183,7 +198,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ROOM_HEADER', header: msg });
+        useTerminalStore.getState().dispatch({ type: 'SET_ROOM_HEADER', header: msg });
         const slugSuffix = msg.roomSlug ? ` (${msg.roomSlug})` : '';
         const headerLabel = msg.zoneName
           ? `\n── [${msg.zoneName}] ${msg.roomName}${slugSuffix} ──`
@@ -192,14 +207,15 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onZoneState: (msg: ZoneStateMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ZONE_STATE', state: msg.state });
+        useTerminalStore.getState().dispatch({ type: 'SET_ZONE_STATE', state: msg.state });
         addMessage(`[Zone: ${msg.state}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
-        dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
-        dispatch({ type: 'SET_PENDING_COMBAT_ACTION', action: null });
+        const { playerId } = useAuthStore.getState();
+        useCombatStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+        useCombatStore.getState().dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
+        useCombatStore.getState().dispatch({ type: 'SET_PENDING_COMBAT_ACTION', action: null });
 
         for (const r of msg.results) {
           const dmg = r.damage != null ? ` (${r.damage} dmg)` : '';
@@ -208,8 +224,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
             'combat',
           );
 
-          if (r.targetId && r.targetId !== state.playerId && r.newHp != null && r.maxHp != null) {
-            dispatch({
+          if (r.targetId && r.targetId !== playerId && r.newHp != null && r.maxHp != null) {
+            useCombatStore.getState().dispatch({
               type: 'SET_ENEMY_STATUS',
               status: {
                 name: r.targetName ?? 'Unknown',
@@ -220,8 +236,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               },
             });
           }
-          if (r.actorId !== state.playerId && r.newHp != null && r.maxHp != null) {
-            dispatch({
+          if (r.actorId !== playerId && r.newHp != null && r.maxHp != null) {
+            useCombatStore.getState().dispatch({
               type: 'SET_ENEMY_STATUS',
               status: {
                 name: r.actorName,
@@ -236,7 +252,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
 
         if (msg.combatEnded) {
           addMessage('— Combat ended —', 'system');
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
+          useCombatStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         }
       },
       onRoomSwitch: (msg: RoomSwitchMessage) => {
@@ -244,35 +260,37 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         switchingRef.current = true;
 
         const currentRoom = roomRef.current;
-        if (!currentRoom || !state.token) {
+        const currentToken = useAuthStore.getState().token;
+        const currentChar = useInventoryStore.getState().activeCharacter;
+        if (!currentRoom || !currentToken) {
           switchingRef.current = false;
           return;
         }
 
         addMessage('The world shifts around you...', 'system');
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+        useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
         const switchingToHub = msg.target === 'zone:the-refuge'
           || msg.target === 'zone:the-reliquary'
           || msg.target === 'zone:the-bloom-observatory'
           || msg.target === 'zone:the-carrion-court';
+        useCombatStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         if (switchingToHub) {
           if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
-            dispatch({ type: 'CLEAR_MESSAGES' });
+            useTerminalStore.getState().dispatch({ type: 'CLEAR_MESSAGES' });
+            useInventoryStore.getState().dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: { creatures: [], players: [] } });
           }
-          dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
-          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
-          // Don't overwrite death or permadeath state — overlays must stay visible
+          useTerminalStore.getState().dispatch({ type: 'SET_ZONE_STATE', state: null });
           if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             updateOverlay(INITIAL_OVERLAY);
           }
         }
 
-        switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
+        switchRoom(currentRoom, msg.target, currentToken, handlers, msg.options, currentChar?.id)
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
-              dispatch({ type: 'SET_ROOM', room: newRoom });
+              useConnectionStore.getState().dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
               addMessage(`Connected to ${switchingToHub ? 'your stronghold' : 'the instance'}.`, 'system');
               // Navigate after successful room switch to hub
@@ -285,7 +303,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           })
           .catch((err: Error) => {
             if (!disposed) {
-              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
               addMessage(`Failed to switch rooms: ${err.message}`, 'system');
             }
           })
@@ -296,22 +314,22 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onError: (code: number, message: string) => {
         if (!disposed) {
           addMessage(`[Error ${code}: ${message}]`, 'system');
-          dispatch({ type: 'SET_ERROR', error: message });
+          useConnectionStore.getState().dispatch({ type: 'SET_ERROR', error: message });
         }
       },
       onLoadoutUpdate: (msg: LoadoutUpdateMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
+          useInventoryStore.getState().dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
         }
       },
       onStashUpdate: (msg: StashUpdateMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+          useInventoryStore.getState().dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
         }
       },
       onInventoryUpdate: (msg: InventoryUpdateMessage) => {
         if (!disposed) {
-          dispatch({
+          useInventoryStore.getState().dispatch({
             type: 'SET_INVENTORY',
             items: msg.items.map(item => ({
               id: item.id,
@@ -324,7 +342,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onPlayerState: (msg: PlayerStateMessage) => {
         if (!disposed) {
-          dispatch({
+          useCombatStore.getState().dispatch({
             type: 'SET_PLAYER_STATE',
             hp: msg.hp,
             maxHp: msg.maxHp,
@@ -341,9 +359,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onEffectiveStats: (msg: EffectiveStatsMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
+          useInventoryStore.getState().dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
           if (msg.baseStats) {
-            dispatch({
+            useInventoryStore.getState().dispatch({
               type: 'SET_BASE_STATS',
               baseStats: msg.baseStats,
               statPointsAvailable: msg.statPointsAvailable ?? 0,
@@ -351,28 +369,65 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           }
         }
       },
+      onCombatState: (msg: CombatStateMessage) => {
+        if (disposed) return;
+        useCombatStore.getState().dispatch({
+          type: 'SET_COMBAT_COMBATANTS',
+          combatants: msg.combatants,
+          hostileIds: msg.hostileIds,
+          playerTargetId: msg.playerTargetId,
+        });
+        useCombatStore.getState().dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
+        // Derive enemy status from the player's current target
+        if (msg.playerTargetId) {
+          const target = msg.combatants.find(c => c.id === msg.playerTargetId);
+          if (target) {
+            const telegraphText = target.telegraphedAction
+              ? (typeof target.telegraphedAction === 'string'
+                  ? target.telegraphedAction
+                  : target.telegraphedAction.abilityName)
+              : null;
+            useCombatStore.getState().dispatch({
+              type: 'SET_ENEMY_STATUS',
+              status: {
+                name: target.name,
+                hp: target.hp,
+                maxHp: target.maxHp,
+                hpTier: getHpTier(target.hp, target.maxHp),
+                telegraphedAction: telegraphText,
+              },
+            });
+          }
+        }
+        // Ensure inCombat is set when we receive combatant data
+        if (msg.combatants.length > 0) {
+          useCombatStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+        } else {
+          useCombatStore.getState().dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
+        }
+      },
       onZoneTransfer: (msg: ZoneTransferMessage) => {
         if (disposed || switchingRef.current) return;
         switchingRef.current = true;
 
         const currentRoom = roomRef.current;
-        if (!currentRoom || !state.token) {
+        const currentToken = useAuthStore.getState().token;
+        const currentChar = useInventoryStore.getState().activeCharacter;
+        if (!currentRoom || !currentToken) {
           switchingRef.current = false;
           return;
         }
 
         addMessage(`Entering zone: ${msg.targetZoneSlug}...`, 'system');
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+        useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        // Switch to a zone room with the target zone slug as join options.
-        // The server matchmaker routes zoneSlug to the correct zone instance.
-        switchRoom(currentRoom, `zone:${msg.targetZoneSlug}`, state.token, handlers, {
+        switchRoom(currentRoom, `zone:${msg.targetZoneSlug}`, currentToken, handlers, {
           targetRoomSlug: msg.targetRoomSlug,
-        } as import('@ellmud/shared').RoomSwitchOptions, state.activeCharacter?.id)
+        } as import('@ellmud/shared').RoomSwitchOptions, currentChar?.id)
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
-              dispatch({ type: 'SET_ROOM', room: newRoom });
+              useConnectionStore.getState().dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
               addMessage(`Arrived in ${msg.targetZoneSlug}.`, 'system');
             } else {
@@ -381,7 +436,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           })
           .catch((err: Error) => {
             if (!disposed) {
-              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
               addMessage(`Zone transfer failed: ${err.message}`, 'system');
             }
           })
@@ -391,16 +446,16 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onRoomOccupants: (msg: import('@ellmud/shared').RoomOccupantsMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
+        useInventoryStore.getState().dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
       },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {
-          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
+          useConnectionStore.getState().dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;
           if (code === 4000) {
             // Rent: consented leave — return to character select
             addMessage('You retire to the inn. Rest well, adventurer...', 'system');
-            dispatch({ type: 'SET_ROOM', room: null });
+            useConnectionStore.getState().dispatch({ type: 'SET_ROOM', room: null });
             navigate('/characters');
           } else if (code >= 4000) {
             addMessage(`Disconnected (code ${code}). You may need to log in again.`, 'system');
@@ -455,21 +510,21 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     };
     overlayHandlerRef.current = handleOverlay;
 
-    dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+    connectionDispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
     // Prevent double-connect if already connected to the correct room
     const currentRoom = roomRef.current;
     if (currentRoom && currentRoom.name === roomName) {
-      dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      connectionDispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
       return () => {
         disposed = true;
       };
     }
 
-    connect(state.token, roomName, handlers, state.activeCharacter?.id).then((room) => {
+    connect(token, roomName, handlers, activeCharacter?.id).then((room) => {
       if (!disposed) {
         roomRef.current = room;
-        dispatch({ type: 'SET_ROOM', room });
+        connectionDispatch({ type: 'SET_ROOM', room });
         addMessage(roomName.startsWith('zone:') ? 'Connected to your stronghold.' : 'Connected to the instance.', 'system');
         reconnectionRef.current.reportConnected();
         room.onMessage('overlay_state', handleOverlay);
@@ -478,7 +533,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       }
     }).catch((err: Error) => {
       if (!disposed) {
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+        connectionDispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
         addMessage(`Failed to connect: ${err.message}`, 'system');
       }
     });
@@ -489,7 +544,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       roomRef.current?.leave();
       roomRef.current = null;
     };
-  }, [state.token, roomName, dispatch, addMessage]);
+  }, [token, roomName, activeCharacter?.id, connectionDispatch, terminalDispatch, combatDispatch, inventoryDispatch, addMessage]);
 
   const handleCommand = useCallback((input: string) => {
     const room = roomRef.current;
@@ -513,8 +568,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     if (!room) return;
     addMessage(`> ${action}`, 'system');
     sendCommand(room, action);
-    dispatch({ type: 'SET_PENDING_COMBAT_ACTION', action });
-  }, [addMessage, dispatch]);
+    combatDispatch({ type: 'SET_PENDING_COMBAT_ACTION', action });
+  }, [addMessage, combatDispatch]);
 
   const sendChatMessage = useCallback((text: string) => {
     const room = roomRef.current;

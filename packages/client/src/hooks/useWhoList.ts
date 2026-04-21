@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAppContext } from '../store.js';
+import { useConnectionStore } from '../store/connection.js';
 import { sendRequestPlayerList } from '../services/connection.js';
 import { MessageTypes, type PlayerListEntry } from '@ellmud/shared';
 
@@ -17,31 +17,30 @@ export interface UseWhoListReturn {
 }
 
 export function useWhoList(active: boolean): UseWhoListReturn {
-  const { state } = useAppContext();
+  const room = useConnectionStore(s => s.room);
   const [players, setPlayers] = useState<PlayerListEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const requestedRef = useRef(false);
 
   const refresh = useCallback(() => {
-    if (!state.room) return;
+    if (!room) return;
     setLoading(true);
-    sendRequestPlayerList(state.room);
-  }, [state.room]);
+    sendRequestPlayerList(room);
+  }, [room]);
 
   // Auto-request when the modal opens
   useEffect(() => {
-    if (active && state.room && !requestedRef.current) {
+    if (active && room && !requestedRef.current) {
       requestedRef.current = true;
       refresh();
     }
     if (!active) {
       requestedRef.current = false;
     }
-  }, [active, state.room, refresh]);
+  }, [active, room, refresh]);
 
   // Listen for PLAYER_LIST response
   useEffect(() => {
-    const room = state.room;
     if (!room) return;
 
     const handler = (msg: { players: PlayerListEntry[] }) => {
@@ -52,7 +51,7 @@ export function useWhoList(active: boolean): UseWhoListReturn {
     room.onMessage(MessageTypes.PLAYER_LIST, handler);
 
     // Colyseus SDK doesn't expose an offMessage — cleanup handled by room leave
-  }, [state.room]);
+  }, [room]);
 
   return { players, loading, refresh };
 }

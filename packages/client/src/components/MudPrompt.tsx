@@ -2,10 +2,11 @@
  * MudPrompt — Classic MUD-style status line pinned to the bottom of the narrative scroll.
  *
  * Displays HP (color-coded), combat stance, active status effects, and a blinking cursor.
- * Pulls all data from AppContext so it updates reactively.
+ * Pulls all data from the Zustand store so it updates reactively.
  */
 
-import { useAppContext } from '../store.js';
+import { useCombatStore } from '../store/combat.js';
+import { useTerminalStore } from '../store/terminal.js';
 
 function hpColor(hp: number, maxHp: number): string {
   if (maxHp <= 0) return 'mud-prompt-hp-critical';
@@ -25,13 +26,16 @@ function stanceLabel(inCombat: boolean, pendingAction: string | null): string {
 }
 
 export default function MudPrompt() {
-  const { state } = useAppContext();
+  const hp = useCombatStore(s => s.playerHp);
+  const maxHp = useCombatStore(s => s.playerMaxHp);
+  const inCombat = useCombatStore(s => s.inCombat);
+  const pendingCombatAction = useCombatStore(s => s.pendingCombatAction);
+  const statusEffects = useCombatStore(s => s.statusEffects);
+  const roomHeader = useTerminalStore(s => s.roomHeader);
 
-  const hp = state.playerHp;
-  const maxHp = state.playerMaxHp;
-  const stance = stanceLabel(state.inCombat, state.pendingCombatAction);
-  const effects = state.statusEffects ?? [];
-  const roomName = state.roomHeader?.roomName;
+  const stance = stanceLabel(inCombat, pendingCombatAction);
+  const effects = statusEffects ?? [];
+  const roomName = roomHeader?.roomName;
 
   return (
     <div className="mud-prompt" role="status" aria-label="Player status">
@@ -47,7 +51,7 @@ export default function MudPrompt() {
 
       {/* Stance */}
       <span className="mud-prompt-label">ST:</span>
-      <span className={state.inCombat ? 'mud-prompt-combat' : 'mud-prompt-ready'}>
+      <span className={inCombat ? 'mud-prompt-combat' : 'mud-prompt-ready'}>
         {stance}
       </span>
 

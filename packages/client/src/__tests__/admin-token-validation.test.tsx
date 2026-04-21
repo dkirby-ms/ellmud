@@ -18,8 +18,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { useReducer } from 'react';
-import { AppContext, appReducer, initialState, type AppState, type AppContextValue } from '../store.js';
+import { initializeAppStore, resetAppStore, type AppState } from '../store.js';
+import { routes } from '../routes.js';
 import { routes } from '../routes.js';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -102,28 +102,19 @@ function renderAdmin(
   initialPath = '/admin',
   stateOverrides: Partial<AppState> = AUTHED_STATE,
 ) {
-  const state = { ...initialState, ...stateOverrides };
+  initializeAppStore(stateOverrides);
 
   const router = createMemoryRouter(routes, {
     initialEntries: [initialPath],
   });
 
-  function Wrapper() {
-    const [currentState, dispatch] = useReducer(appReducer, state);
-    const ctxValue: AppContextValue = { state: currentState, dispatch };
-    return (
-      <AppContext.Provider value={ctxValue}>
-        <RouterProvider router={router} />
-      </AppContext.Provider>
-    );
-  }
-
-  return render(<Wrapper />);
+  return render(<RouterProvider router={router} />);
 }
 
 // ─── Setup / Teardown ────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  resetAppStore();
   localStorage.clear();
   vi.clearAllMocks();
   mockValidateAdminToken.mockResolvedValue(undefined);

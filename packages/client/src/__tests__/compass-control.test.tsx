@@ -9,38 +9,28 @@
  * - Empty exits state renders all directions disabled
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useReducer } from 'react';
 import {
-  AppContext,
-  appReducer,
-  initialState,
-  type AppState,
+  initializeAppStore,
+  resetAppStore,
 } from '../store.js';
 import CompassControl from '../components/CompassControl.js';
 
-/** Wrap CompassControl in the AppContext provider with custom state overrides. */
+/** Render CompassControl using the Zustand store with custom state overrides. */
 function renderCompass(
-  overrides: Partial<AppState> = {},
+  overrides: Partial<import('../store.js').AppState> = {},
   onNavigate = vi.fn(),
 ) {
-  const merged = { ...initialState, ...overrides };
-
-  function Wrapper() {
-    const [state, dispatch] = useReducer(appReducer, merged);
-    return (
-      <AppContext.Provider value={{ state, dispatch }}>
-        <CompassControl onNavigate={onNavigate} />
-      </AppContext.Provider>
-    );
-  }
-
-  return { ...render(<Wrapper />), onNavigate };
+  initializeAppStore(overrides);
+  return { ...render(<CompassControl onNavigate={onNavigate} />), onNavigate };
 }
 
 describe('CompassControl', () => {
+  beforeEach(() => {
+    resetAppStore();
+  });
   it('renders the compass container', () => {
     renderCompass();
     expect(screen.getByTestId('compass-control')).toBeDefined();

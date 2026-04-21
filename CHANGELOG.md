@@ -1,3 +1,77 @@
+# [0.2.0-dev.63](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.62...v0.2.0-dev.63) (2026-04-19)
+
+
+### Bug Fixes
+
+* **test:** update getById assertion to match new multi-lookup query ([#482](https://github.com/dkirby-ms/ellmud/issues/482)) ([37d1e31](https://github.com/dkirby-ms/ellmud/commit/37d1e31843df97f39615eed70430df0bf4f1fb70)), closes [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#480](https://github.com/dkirby-ms/ellmud/issues/480) [#481](https://github.com/dkirby-ms/ellmud/issues/481) [#479](https://github.com/dkirby-ms/ellmud/issues/479) [#481](https://github.com/dkirby-ms/ellmud/issues/481)
+
+# [0.2.0-dev.62](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.61...v0.2.0-dev.62) (2026-04-19)
+
+
+### Features
+
+* add e2e combat tests ([#479](https://github.com/dkirby-ms/ellmud/issues/479)) ([30e96d3](https://github.com/dkirby-ms/ellmud/commit/30e96d3acb9d77ef3207ff5b5874819b544d88c8)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.61](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.60...v0.2.0-dev.61) (2026-04-18)
+
+
+### Features
+
+* complete all 60 multi-encounter tests (Sections E-H) ([#478](https://github.com/dkirby-ms/ellmud/issues/478)) ([83dd282](https://github.com/dkirby-ms/ellmud/commit/83dd28210add7afd94c4e667eb1e7edd29f57e00)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.60](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.59...v0.2.0-dev.60) (2026-04-18)
+
+
+### Features
+
+* **combat:** AoE encounter merge — Phase 3 multi-encounter ([#477](https://github.com/dkirby-ms/ellmud/issues/477)) ([bb42728](https://github.com/dkirby-ms/ellmud/commit/bb42728f2d4af9536db35992c62df59017efb17e)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.59](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.58...v0.2.0-dev.59) (2026-04-18)
+
+
+### Features
+
+* **combat:** creature assist system — Phase 2 multi-encounter ([#476](https://github.com/dkirby-ms/ellmud/issues/476)) ([f7a7dd8](https://github.com/dkirby-ms/ellmud/commit/f7a7dd832d98333ece4d342045673a9fb0e77679)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.58](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.57...v0.2.0-dev.58) (2026-04-18)
+
+
+### Features
+
+* **combat:** multi-encounter support — Phase 1 core refactor ([#475](https://github.com/dkirby-ms/ellmud/issues/475)) ([249f596](https://github.com/dkirby-ms/ellmud/commit/249f59649e76290b56a31ebb165bd6f45c6baa15)), closes [#474](https://github.com/dkirby-ms/ellmud/issues/474)
+
+# [0.2.0-dev.57](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.56...v0.2.0-dev.57) (2026-04-18)
+
+
+### Bug Fixes
+
+* handle disconnect-while-downed — eliminate ghost entities and preserve bleed-out ([7f26048](https://github.com/dkirby-ms/ellmud/commit/7f2604864ec269afdfe0dd10c27dbd3ce432e388))
+* restore downed state on reconnect + broadcast on leave cleanup ([f2cc440](https://github.com/dkirby-ms/ellmud/commit/f2cc4406b10d95461246e79dae42998753bc7ed1))
+
+# [0.2.0-dev.56](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.55...v0.2.0-dev.56) (2026-04-18)
+
+
+### Bug Fixes
+
+* address PR [#473](https://github.com/dkirby-ms/ellmud/issues/473) review — remove cast, hoist query, dedupe type ([fae4519](https://github.com/dkirby-ms/ellmud/commit/fae45195253bed269d5d0bfb50e786f01f0cd387))
+* clear HP cache on player defeat + fix test expectations ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([4ff3772](https://github.com/dkirby-ms/ellmud/commit/4ff3772478080435b64c7f8cdc4b9004b21aaa16))
+* **client:** resolve combat state consistency bugs ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([8d6c2c0](https://github.com/dkirby-ms/ellmud/commit/8d6c2c0cce118b67a8c1d26428dd413044f1602e))
+* **combat:** persist player HP between encounters and send terminal COMBAT_STATE ([#471](https://github.com/dkirby-ms/ellmud/issues/471)) ([bb75839](https://github.com/dkirby-ms/ellmud/commit/bb7583953beef2d17ccce8c47b0ccbe040401966))
+* update PgCharacterRepository test mock for loadout query ([9a6a10e](https://github.com/dkirby-ms/ellmud/commit/9a6a10e9ca49670ca3edd21c1fcf0f1c6c85d1de))
+
+
+### Features
+
+* **client:** redesign character select with detail panel in right pane ([7fc6e87](https://github.com/dkirby-ms/ellmud/commit/7fc6e8786a5e7c624cb48a85a4b5b89bfbfcab4a))
+* extend CharacterSummary with baseStats, equipment, and statPointsAvailable ([4f23401](https://github.com/dkirby-ms/ellmud/commit/4f23401f8952f8078bf72b7227a2b755e5a1e4c6))
+
+# [0.2.0-dev.55](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.54...v0.2.0-dev.55) (2026-04-17)
+
+
+### Features
+
+* COMBAT_STATE message + CombatHUD wiring ([#467](https://github.com/dkirby-ms/ellmud/issues/467)) ([9b7a2a6](https://github.com/dkirby-ms/ellmud/commit/9b7a2a6b68ccaa7b5e78af29860a9cc7568666f1))
+
 # [0.2.0-dev.54](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.53...v0.2.0-dev.54) (2026-04-17)
 
 
