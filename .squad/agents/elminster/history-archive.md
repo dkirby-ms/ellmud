@@ -5115,3 +5115,489 @@ Researched 3 open issues. Posted design briefs. Updated labels. Routed to implem
 **The Blocker:** creature-corpse.test.ts has 29 "passing" tests with no real assertions. Not one test verifies corpse creation, loot contents, open/take commands, or decay. This is the same issue from the original rejection — tests were never actually rewritten.
 
 **Assignment:** Minsc (QA) to rewrite tests with real assertions. Decision logged to .squad/decisions/inbox/elminster-corpse-re-review-442.md.
+## 2026-04-20: Zustand Evaluation Complete
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Assignment:** Architectural evaluation of Zustand as replacement for Context + useReducer client state monolith.
+
+**Deliverable:** `.squad/decisions/inbox/elminster-zustand-evaluation.md`
+
+**Key Findings:**
+- Zustand is architecturally appropriate for ellmud's needs
+- 4-phase incremental migration recommended (auth → terminal → combat → connection)
+- Selector pattern solves primary re-render granularity issue
+- Store-outside-React eliminates stale closure problems in message handlers
+- Partnered with Regis (state audit) for complete evaluation
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-20T01:30:00Z-elminster.md`
+
+---
+
+
+## Learnings
+
+### 2026-04-28: Domain Slices Architecture — Phase 4 Design
+
+**Task:** Design domain slice architecture for splitting monolithic Zustand store. Current: 34 fields, 1 reducer, 24 actions. Goal: 5 independent slices with clear boundaries, isolated reducers, minimal consumer migration churn.
+
+**Deliverable:** `.squad/decisions/inbox/elminster-domain-slices-architecture.md`
+
+**Architecture Decision:** Separate Zustand stores per domain (not StateCreator slices within single store).
+
+**Rationale:**
+- Clear field ownership & action namespacing (vs namespace collision in single store)
+- 5 small reducers (20–30 LOC each) vs 1 monolith (100+ LOC)
+- Independent DevTools entries per domain
+- No forced cross-slice subscriptions
+- Easier to test in isolation
+
+**Five Proposed Slices:**
+1. **Auth** (5 flds, 3 acts): authenticated, token, playerId, email, username, userRole
+2. **Terminal** (4 flds, 5 acts): messages[], soundCues[], roomHeader, zoneState
+3. **Combat** (13 flds, 6 acts): inCombat, combatTick, enemyStatus, hp/stamina, statusEffects, combatants, posture
+4. **Connection** (3 flds, 4 acts): room, connectionStatus, error
+5. **Inventory** (10 flds, 9 acts): inventory, loadout, stashItems, combatStats, effectiveStats, activeCharacter, roomOccupants
+
+**Migration Strategy:** 5 phases (A–E), each additive:
+- Phase A: Create 5 new stores (old store unchanged; 391 tests still pass)
+- Phase B: Compatibility layer (parallel stores coexist)
+- Phase C: Migrate consumers one by one (7 PRs, low risk)
+- Phase D: Remove monolithic store
+- Phase E: Optimize selectors (optional post-stabilization)
+
+**Key Design Decision:** Separate stores chosen over StateCreator slices because:
+- Avoids namespace collision; each slice has dedicated dispatch/selector namespace
+- Better aligned with "domain slice" mental model
+- Easier to test each slice independently
+- Phase A→D allows rollback at any point if issues arise
+
+**Risk Mitigation:**
+- Low risk: Auth, Terminal, Inventory (isolated, clear boundaries)
+- Medium risk: useZoneConnection (dispatches to all 5; mitigation: centralize dispatch refs)
+- High risk (mitigated): Logout cascade (provide `logoutAll()` helper)
+
+**Backward Compatibility:** Phase B allows old `useAppStore()` and new domain stores to coexist. No consumers are forced to migrate until Phase D.
+
+**Pattern Example:**
+```typescript
+const useAuthStore = createStore('auth', initialAuthState, authReducer);
+// useAuthStore(state => state.authenticated), useAuthStore(s => s.dispatch)
+// Works like useAppStore but only owns auth domain
+```
+
+**Testing:** All 391 tests pass throughout migration. No new test framework needed; re-run existing suite after each PR.
+
+**Next Steps:** Stakeholder review, Phase A implementation (create 5 new store files), assign Phases 1–7 to team.
+
+---
+
+### 2025-07-27: PR #483 Review — Zustand Migration (APPROVED)
+
+**Task:** Architectural review of Context → Zustand migration PR.
+
+**Verdict:** ✅ APPROVE — No blocking issues. Migration is clean and well-executed.
+
+**Key Observations (non-blocking):**
+1. `enter_zone` handler uses closure-captured `dispatch` while `onRoomSwitch` uses `getState().dispatch` — inconsistent but not buggy (Zustand dispatch ref is stable)
+2. Auth persistence subscription fires on every state change; should use `subscribe(selector, listener)` for perf
+3. StatusPanel & ZoneExploration use `useShallow` with ~20 fields — coarser than ideal for combat tick perf
+4. Reducer's `{ dispatch: _, ...state }` exclusion pattern is fragile; resolves naturally when domain slices are adopted
+
+**Follow-ups recommended:** Selector subscription, split coarse selectors, normalize handler dispatch pattern, domain slices (next phase per Zustand evaluation decision).
+
+---
+
+### 2025-07-25: Combat Encounter Model Redesign — Deep Architecture Research
+
+**Task:** Research classic MUD combat models and design new encounter architecture to replace room-scoped encounters with selective engagement.
+
+**Key Architecture Decision:** Replace `findEncounterInRoom()` (returns first encounter in room → forces all combatants into one encounter) with target-based joining: you join an encounter by attacking someone already in it, not by being in the same room. Multiple encounters can coexist per room.
+
+**Classic MUD Pattern (DikuMUD/CircleMUD/ROM):** No encounter object at all — per-entity `fighting` pointer + global `perform_violence()` loop. Ellmud keeps encounter objects (needed for threat tables, tick counting, COMBAT_STATE broadcast) but makes them target-scoped instead of room-scoped.
+
+**Creature Assist:** Modeled after CircleMUD's ASSIST_VNUM/ASSIST_ALL flags. Per-template config: `assist.sameType`, `assist.all`, `assist.groupTag`. Only fires at initiation, not ongoing.
+
+**AoE:** Room-scoped (not encounter-scoped). Cross-encounter hits trigger encounter merging via `mergeEncounters()`. Matches classic MUD behavior.
+
+**Key Files (Combat System):**
+- `packages/server/src/combat/CombatSystem.ts` — core orchestrator (1322 lines). `initiateCombat()` at line 124, `findEncounterInRoom()` at line 1227 (the root problem), `resolveTick()` at line 581.
+- `packages/server/src/combat/CombatState.ts` — types. `CombatEncounter` interface at line 165.
+- `packages/server/src/combat/ThreatTable.ts` — 41 lines, clean.
+- `packages/server/src/commands/handlers/attack.ts` — player attack command (132 lines).
+- `packages/server/src/creatures/behavior.ts` — AI behavior tree, `updateCreature()` at line 106.
+- `packages/server/src/creatures/types.ts` — creature types, `CreatureTemplate` at line 62.
+- `packages/server/src/rooms/ZoneRoom.ts` — Colyseus room (~3400 lines). Auto-engage on room entry at lines 3330-3339. COMBAT_STATE broadcast at line 1695-1779.
+- `packages/shared/src/index.ts` — `CombatStateMessage` at line 302.
+- `packages/client/src/store.ts` — client combat state, `combatCombatants` at line 126.
+
+**Decision logged to:** `.squad/decisions/inbox/elminster-combat-encounter-redesign.md`
+
+**4-phase migration plan:** (1) Core refactor — target-based joining, (2) Creature assist, (3) AoE encounter merging, (4) Client observer UX.
+
+---
+
+### 2025-07-25: Review PR #473 — Character Select Redesign (REJECT)
+
+**Task:** Review UI redesign extending CharacterSummary with baseStats + equipment, new loadout query, component refactor.
+
+**Verdict: REJECT — Critical type safety violation and N+1 query bug**
+
+**Blockers:**
+1. **Type Safety Violation (CharacterDetailPanel, line 76):** `char as unknown as { baseStats?: ... }` is an anti-pattern. The fields are already on CharacterSummary (shared/index.ts:328-341). This double-cast bypasses TypeScript's type checking entirely and will fail silently if the type contract changes. The component should access `char.baseStats` directly — no cast needed.
+
+2. **N+1 Query Bug (PgCharacterRepository.list, line 124-130):** The loadout query executes once per character inside the loop. For a player with 10 characters, this makes 1 main query + 10×(skills + runs + loadout) = **31 queries**. The old code was already N+1 for skills/runs (pre-existing issue), but this PR adds a third N+1 vector. Loadout data is keyed by player_id (not character_id) and identical across all characters — it should be fetched **once** before the loop and reused.
+
+3. **Type Duplication (shared/index.ts):** CharacterSummary is defined twice (line 315 and line 966) with identical extensions. This is a merge artifact. One definition should be removed.
+
+**Secondary Issues (not merge blockers, but should be addressed):**
+- Accessibility: Character cards (line 389-400) lack keyboard navigation — no onKeyDown handler, no tabIndex, no role="button"
+- Accessibility: "Enter World" and "Delete" buttons lack aria-label for screen readers (what character are you entering/deleting?)
+- Test Coverage: Test update (pg-character-repository.test.ts) mocks the new query but doesn't verify loadout JOIN logic or item_name resolution
+
+**Recommendation:** Assign to Drizzt for revision:
+- Fix type cast (use char.baseStats directly)
+- Hoist loadout query outside the loop (single query per player)
+- Remove duplicate CharacterSummary definition
+- Add keyboard navigation to cards (Enter key → highlight, Space → select)
+- Add aria-labels to action buttons
+
+**Rationale:** The N+1 bug is a performance regression (3× more queries) and the type cast creates a maintenance hazard. Both must be fixed before merge.
+
+---
+
+### 2025-07-24: Re-Review Death-Spawn-Routing Tests (Minsc revision f48c993) — APPROVED
+
+**Task:** Verify Minsc addressed both required changes from rejection of Drizzt's commit 131f6a5.
+
+**Verdict: APPROVE — Both issues cleanly resolved, no new problems.**
+
+**Required Change 1 — `fastForwardDeath` must assert downed state:**
+- ✅ `fastForwardDeath` now tracks `foundDowned` boolean and asserts `expect(foundDowned).toBe(true)` after the polling loop (line 68). Every caller benefits.
+
+**Required Change 2 — Silent skip bug in death penalty test:**
+- ✅ The `if (postDeathPlayer)` conditional guard is gone. Replaced with `expect(postDeathPlayer).toBeDefined()` (line 416) followed by unconditional assertions on penalty fields.
+- ✅ Minsc also inlined the downed-state polling in this test (rather than calling `fastForwardDeath`) so the test can capture `deathPenalty` before room switch cleanup removes the player. This is a correct structural choice — the death penalty test has unique timing requirements.
+- ✅ Polling window increased from 20→40 iterations (10s total) to handle slow CI — reasonable.
+
+**No new issues found. No stale assumptions detected.**
+
+### 2025-07-23: Phase 1 Combat Stat System Review — APPROVE WITH NOTES
+
+**Task:** Full architecture review of 44-file Phase 1 combat stat overhaul (8-stat weapon-skill model replacing old 5-stat model).
+
+**Verdict: APPROVE WITH NOTES — Foundation is solid, integration gaps tracked.**
+
+**What's correct:**
+- CombatStats interface: 8 stats (maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour), zero old-model remnants
+- Damage formula: dodge→shield block (binary=0 dmg)→armour reduction. Correct resolution order.
+- DB layer complete: migrations 018/019, PgCharacterRepository, InMemoryCharacterRepository, ContentRegistry all handle 8 stats
+- `calculateEquipmentBonuses()` and `calculatePlayerEffectiveStats()` implemented correctly
+- Creature path works end-to-end: DB→ContentRegistry→CreatureManager.toCombatant(bestSkill)→combat
+- 66 new tests with thorough coverage of dodge, block, weapon types, equipment stacking
+
+**Critical integration gaps (not merge blockers, but tracked):**
+1. Player combat always uses DEFAULT_PLAYER_STATS — base stats from DB and equipment bonuses never loaded at registration (attack.ts:57, ZoneRoom.ts:1911, 1952)
+2. `calculateEquipmentBonuses`/`calculatePlayerEffectiveStats` are orphaned — tested but never called in production
+3. Frontend shows placeholder defaults — SET_COMBAT_STATS reducer exists but server never dispatches it
+
+**Important issues:**
+- Admin CRUD (PgCreatureDefinitionsStore, admin/routes.ts, simulate-routes.ts) still uses old attack/defence/agility columns
+- Death penalty references obsolete `defencePenalty` field
+- `applyDeathPenalty()` exported but never called in production
+
+**Key architectural pattern:**
+- Three-layer model (Template→Base→Effective) is correctly designed but only creature path is fully wired
+- Player path stops at DB storage — nothing reads base stats into combat registration
+- `Combatant` interface intentionally stores only effective `attack` (single value), not full CombatStats
+
+**Decision logged to:** `.squad/decisions/inbox/elminster-phase1-review.md`
+
+---
+
+### 2025-01-28: Combat Stat Architecture v2 — Weapon-Type Skills & Shield Block
+
+**Task:** Revise three-layer combat stat architecture to incorporate weapon-type skills, shield blocking, and unified dodge mechanic.
+
+**Context:** User provided authoritative design direction that fundamentally changes the combat model from v1 proposal:
+1. Replace single `attack` with weapon-type-specific stats (unarmed, oneHanded, twoHanded, ranged)
+2. Replace `defence` with `shieldBlock` (only effective when shield equipped)
+3. Merge dodge and evasion into ONE `dodge` stat (combat avoidance + flee success)
+4. Defer leveling (no XP, no stat-point allocation in Phase 1)
+5. Redesign equipment stats model (weapon type, shield block, stat bonuses)
+
+**Analysis:** Read v1 architecture document, current combat files (CombatState.ts, damage.ts, creatures/types.ts), DB schema, and directives.
+
+**Key Design Decisions:**
+
+**Players:**
+- 9 combat stats: maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour, agility
+- Weapon skills grow through usage (train by doing) — deferred to Phase 2
+- Equipment bonuses are additive (weapon skill + weapon damage = effective attack)
+- Shield block only applies when shield equipped
+- Dodge replaces both dodgeSkillRank and evasionSkillRank (combat avoidance + flee success)
+
+**Creatures:**
+- Keep single `attack` stat (no weapon types) — creatures don't equip gear
+- 5 combat stats: maxHp, attack, armour, agility, dodge
+- Add `dodge_skill_rank` column to `creature_definitions` with varied non-zero values
+- Simpler model for AI decision-making
+
+**Equipment Model:**
+- Items declare weapon type (unarmed/one_handed/two_handed/ranged) in `base_stats` JSONB
+- Weapons provide: weaponType + damage
+- Armour provides: armour value
+- Shields provide: shieldBlock value + optional armour bonus
+- Universal bonuses: agility (any item type)
+
+**Damage Formula (Revised):**
+```
+raw_dmg = attacker_attack  // Player: weaponSkill + weaponDamage, Creature: attack
+modified_dmg = raw_dmg × stance × ability - armour - shieldBlock
+final_damage = max(1, modified_dmg) × flanking
+```
+
+**Shield block:** Flat damage reduction (same as armour), only applied if defender has shield equipped (shieldBlock > 0).
+
+**Dodge:** Passive roll on every incoming attack using unified `dodge` stat. Formula unchanged: `min(75%, 20% + 2%×AGI + 3%×dodge)`.
+
+**Flee:** Uses unified `dodge` stat instead of separate evasionSkillRank. Formula: `BASE_FLEE_CHANCE + 5%×dodge - 5%×level_diff`.
+
+**Three-Layer Model (Unchanged):**
+- Layer 1: Initial/Template (immutable starting values)
+- Layer 2: Base (persistent character stats, grows through skill usage)
+- Layer 3: Effective (runtime: Base + Equipment bonuses)
+
+**DB Migrations:**
+1. `024_add_weapon_skills_to_characters.sql` — Add unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour, agility, max_hp columns to `characters` (all default to starting values)
+2. `025_add_dodge_to_creatures.sql` — Add dodge_skill_rank to `creature_definitions`, populate with varied values (3 for agile, 2 for fast, 1 for heavy, 0 for slow)
+
+**Equipment Integration:**
+- `calculateEquipmentBonuses()` — Extract weapon type, weapon damage, armour, shield block, agility from equipped items
+- `calculatePlayerEffectiveStats()` — Select weapon skill based on equipped weapon type, sum bonuses
+
+**Open Questions for Dale:**
+1. Shield block stance interaction? (Flat reduction vs. stance multiplier)
+2. Weapon skill growth mechanics? (Usage-based vs. XP-based vs. hybrid)
+3. Shield equipment slot? (Separate shield slot vs. offhand with two-handed restrictions)
+4. Unarmed combat behavior? (Pure skill vs. skill + base damage)
+5. ShieldBlock skill growth? (Usage-based or fixed)
+
+**Phase 1 Scope:**
+- DB schema + TypeScript types + equipment integration + revised damage formula + creature dodge variety
+- NO leveling, NO buffs/debuffs, NO death penalty, NO skill growth, NO zone effects
+
+**Out of Scope (Deferred):**
+- Level-up system (no level column, no XP)
+- Skill growth through usage
+- Buff/debuff system
+- Death penalty application
+- Critical hit system
+- Weapon durability
+
+**Deliverable:** Comprehensive proposal written to `.squad/decisions/inbox/elminster-combat-stat-architecture-v2.md`.
+
+**Recommendations:**
+- Creatures keep single `attack` stat (no weapon types) — simpler AI, no gear equipping
+- Shield block as flat reduction (no stance interaction) — consistent with armour
+- Equipment slots: separate shield slot (allows 1h weapon + shield, blocks 2h weapons)
+- Usage-based skill growth deferred to Phase 2 (focus on three-layer model first)
+
+**Process Notes:**
+- Read 10+ files across combat, creatures, state, DB, shared types
+- Grounded all type changes in existing interfaces (Combatant, CombatStats, CreatureTemplate)
+- Preserved backward compatibility where possible (unified Combatant.attack abstracts player vs. creature differences)
+- Identified 6 open questions requiring Dale's input before implementation
+
+---
+
+### 2025-01-28: Combat Stat Architecture Analysis — Three-Layer Model Proposed
+
+**Task:** Comprehensive audit of combat stat system and three-layer architecture proposal (Initial/Base/Effective).
+
+**Verdict: System is template-only with no progression, no equipment bonuses, no modifier system.**
+
+**Analysis Scope:** 20+ files analyzed across combat, creatures, state, DB, loadout, and command systems.
+
+**Key Findings:**
+
+**Players:**
+- **No stat persistence:** `characters` table has no columns for attack/defence/armour/agility/maxHp/level.
+- **Hardcoded defaults:** `DEFAULT_PLAYER_STATS` (100 HP, 10 attack, 5 defence, 2 armour, 5 agility) used forever.
+- **Equipment bonuses ignored:** Items have `base_stats` JSONB (`{"damage": 12, "armour": 6}`), but equipping items doesn't apply bonuses.
+- **Death penalty never applied:** `applyDeathPenalty()` exists but is never called during combatant registration.
+- **Dodge skill always 0:** No source for `dodgeSkillRank` for players.
+- **Result:** Players cannot progress. Gear is cosmetic. Combat stats never change.
+
+**Creatures:**
+- **Template stats work:** `creature_definitions` columns (max_hp, attack, defence, armour, agility) correctly loaded and used.
+- **Missing dodge skill column:** No `dodge_skill_rank` in DB, defaults to 0 for all creatures.
+- **No level column:** Creatures use hardcoded `level = 1` in combat registration.
+- **Result:** Creatures work better than players, but lack stat variety (all have 0 dodge).
+
+**Critical Gaps:**
+1. No character stat persistence (migration needed: add combat stat columns to `characters`).
+2. Equipment stat extraction missing (need to parse equipped item `base_stats` and sum bonuses).
+3. Modifier system nonexistent (no buffs, debuffs, zone effects, death penalty application).
+4. Defence stat unused in damage formula (only armour reduces damage).
+5. Creatures missing dodge/evasion/level columns for variety.
+
+**Three-Layer Architecture Proposed:**
+
+**Layer 1: Initial/Template (Immutable)**  
+- Players: `DEFAULT_PLAYER_STATS` at character creation (never changes).
+- Creatures: `creature_definitions` blueprint values (never changes).
+- Storage: Template data, not tied to instances.
+
+**Layer 2: Base (Persistent)**  
+- Players: Character's current "real" stats that grow through leveling, training, quest rewards.
+- Creatures: Same as template (creatures don't level) unless modified by zone effects.
+- Storage: DB (`characters` table needs new columns: level, experience_points, max_hp, attack, defence, armour, agility, dodge_skill_rank, evasion_skill_rank).
+
+**Layer 3: Effective (Runtime)**  
+- Formula: `Effective = Base + EquipmentBonuses + BuffEffects - DebuffEffects`
+- Players: Base stats + weapon.damage → attack, armour.armour → armour, death penalty multiplier.
+- Creatures: Base stats + zone modifiers (if any).
+- Storage: Computed at registration, not persisted.
+
+**DB Migrations Required:**
+1. Add combat stat columns to `characters` (level, xp, maxHp, attack, defence, armour, agility, dodgeSkillRank, evasionSkillRank).
+2. Add skill rank columns to `creature_definitions` (dodge_skill_rank, evasion_skill_rank, level).
+3. Create `active_stat_modifiers` table for buff/debuff tracking (future).
+
+**Implementation Phases:**
+1. Schema & Persistence (add DB columns, update repos).
+2. Equipment Stat Extraction (parse `base_stats`, sum bonuses).
+3. Effective Stats Layer (create `calculateEffectiveStats()`, wire into registration).
+4. Progression System (leveling, XP, skill training).
+5. Buff/Debuff System (ability modifiers, zone effects, expiry sweep).
+
+**Files Analyzed:**
+- Core: `CombatState.ts`, `damage.ts`, `CombatSystem.ts`
+- Creatures: `types.ts`, `CreatureManager.ts`, `templates/`
+- State: `PlayerState.ts`, `ZoneRoom.ts`
+- Commands: `attack.ts`, `equip.ts`
+- Persistence: `001_schema.sql`, `002_seed_content.sql`, `CharacterRepository.ts`, `LoadoutService.ts`
+- Systems: `DeathPenalty.ts`
+
+**Deliverable:** Comprehensive proposal written to `.squad/decisions/inbox/elminster-combat-stat-architecture.md`.
+
+**Open Questions for Dale:**
+1. Defence stat purpose: damage reduction, dodge chance, or remove?
+2. Level-up: automatic stat scaling or manual point allocation?
+3. Skill rank sources: usage training, XP purchase, or quest rewards?
+4. Equipment stat keys: standardize `base_stats` format (`attack` vs `damage`)?
+5. Creature variety: add dodge skill ranks to creatures?
+
+**Recommendation:** Prioritize Phase 1 (DB schema) and Phase 2 (equipment bonuses) to unblock progression and itemization systems.
+
+---
+
+### 2025-01-23: Permadeath System Design — Three Options Proposed
+
+**Task:** Analyze current death/combat/corpse systems and design permadeath feature for Ellmud.
+
+**Context:** User requested permadeath as a new feature. Performed comprehensive analysis of:
+- GDD §6.5-6.8 (death, downing, corpse systems)
+- Current death flow: downing → bleed-out → corpse drop → respawn with death penalty
+- Data model: `player_identities` → `players` → `characters` (character soft-deletion supported)
+- Death tracking: `player_death_penalty` table (death_count, last_death_at)
+- Soulbound items: preserved on death, never dropped in corpse
+- Zone lifecycle: persistent (always up, respawn on schedule) vs. instanced (collapse timer, corpse lost on collapse)
+- Extraction loop: walk out alive to keep gear, die to lose it
+
+**Key Files Analyzed:**
+- GDD.md (extraction, death, permadeath mentions)
+- packages/server/src/combat/CombatSystem.ts (defeat detection)
+- packages/server/src/rooms/ZoneRoom.ts:handlePlayerDeath() (death flow orchestration)
+- packages/server/src/systems/CorpseSystem.ts (lootable corpse creation/TTL)
+- packages/server/src/systems/DeathPenalty.ts (death count tracking, debuff stacking)
+- packages/server/src/state/PlayerState.ts (in-memory player state, inventory, equipment)
+- packages/server/src/db/migrations/001_schema.sql (players, characters, player_death_penalty tables)
+
+**Design Proposal:** Three options presented in `.squad/decisions/inbox/elminster-permadeath-design.md`:
+1. **Run-Based Permadeath (Roguelike):** Lose all inventory/equipment on death, keep stash. Already implemented — no code change.
+2. **Character Permadeath with Account Persistence (RECOMMENDED):** Opt-in per character, character deleted after N deaths (configurable threshold). Account/reputation persists. Minimal schema change (`permadeath_enabled`, `permadeath_threshold` columns on `characters`). Medium implementation cost (server + client UI).
+3. **Instanced-Zone Permadeath (Gauntlet):** Permadeath only in hardcore zones. High implementation cost, bifurcates zone design.
+
+**Recommendation:** Option 2 — strikes balance between meaningful stakes and respecting player time. Opt-in design doesn't disrupt casual players. Opens design space for high-risk/high-reward modes (titles, leaderboards, cosmetics).
+
+**Blocked on:** Dale's decision on threshold values (1/3/5 deaths?) and opt-in timing (creation only, or mid-game ritual?).
+
+**Architecture Notes:**
+- Permadeath must respect extraction loop (death = corpse drop for others to loot)
+- Death penalty system already tracks `death_count` per character (foundation in place)
+- Character soft-deletion (`deleted_at`, `is_active=false`) already supported
+- Soulbound items should remain soulbound in permadeath (preserve quest rewards across character deaths)
+- Instance collapse death should count toward permadeath threshold (no free passes)
+
+**Process Notes:**
+- Analyzed 9 key files across GDD, combat, death, corpse, player state, DB schema
+- Cross-referenced directives (inventory/stash separation, container-based corpses)
+- Identified security edge cases (disconnect death, instance collapse, griefing)
+- Proposed 3-phase rollout: beta → tuning → public announcement
+
+### 2026-07-23: Code Review — PR #449 ANSI Formatting Toolbar (APPROVED)
+
+**Task:** Review PR #449 (`squad/admin-ansi-toolbar` → `dev`) — ANSI formatting toolbar for admin content editors.
+
+**Verdict: APPROVE — Clean extraction, consistent migration, zero type errors.**
+
+**New components:** `AnsiToolbar` wraps selected text in ANSI tags via textarea ref; `AnsiTextarea` composes toolbar + textarea + collapsible preview. Both are well-structured with clear props interfaces. Toolbar cursor restoration uses `requestAnimationFrame` correctly.
+
+**Migration:** All 7 admin detail pages (Creatures, Factions, Items, Modifiers, Narrative, Rooms, Skills) consistently replaced `textarea` + `AnsiPreview` with single `AnsiTextarea`. onChange signatures updated from `(e) => e.target.value` to `(v) => v`. No missed imports, no leftover Color Reference code. CreatureDetail's duplicate Live Preview panel correctly removed.
+
+**AnsiPreview:** Slimmed to read-only. Palette/clipboard code removed. Currently has zero imports — effectively dead code but harmless to keep for future read-only contexts.
+
+**Observations:** NarrativeDetail dialogue lines pass custom `className` with `rounded-none`, matching AnsiTextarea's default — consistent. Template textarea passes custom `style` for `lineHeight`. Both work correctly with the passthrough props.
+
+**Type check:** `tsc --noEmit` passes clean on the branch.
+
+---
+
+### 2026-04-13: Code Review — PR #449 AnsiToolbar + AnsiTextarea (APPROVED)
+
+**Task:** Review PR #449 (`squad/admin-ansi-toolbar` → `dev`) — ANSI toolbar component build + admin page consolidation.
+
+**Verdict: APPROVE — Clean extraction, consistent migration, no regressions.**
+
+**New components:** `AnsiToolbar` component inserts/wraps ANSI tags at textarea cursor via ref. `AnsiTextarea` composite (toolbar + textarea + preview) as canonical pattern for ANSI-editable fields. Both well-structured, clear props, proper React patterns.
+
+**Migration:** All 7 admin detail pages consistently migrated to use `AnsiTextarea`. Old `<textarea> + <AnsiPreview>` pairs removed. CreatureDetail duplicate Live Preview panel correctly removed. `AnsiPreview` slimmed to read-only (Color Reference code removed). Zero missed imports, no orphaned code.
+
+**Type check:** `tsc --noEmit` clean. Backward-compatible with read-only AnsiPreview contexts (not currently used, but available for future).
+
+**Decision logged to:** `.squad/decisions.md` (merged from inbox 2026-04-13T00:28:21Z)
+
+### 2026-04-13: Code Review — Publish Refactor + #445 Exit Icons (APPROVED)
+
+**Task:** Review branch `squad/445-zone-designer-exit-icons` and `squad/publish-refactor` containing two pieces of work: (1) publish refactor removing "review" status from all admin pages, (2) #445 clickable up/down exit icons with connected exit highlighting.
+
+**Verdict: APPROVE — Clean, consistent, no issues found.**
+
+**Publish refactor:** All 9 affected files updated uniformly. Status type narrowed from `draft|review|published|deprecated` to `draft|published|deprecated` across CreaturesList, ItemsList, and all detail pages. AuditLog filter updated. Grep confirms zero remaining "review" status references in client or server code. Implementation of user directive: simplify content workflow from draft → review → published to draft → published.
+
+**#445 Exit icons:** ZoneRoomNode up/down spans now clickable with `e.stopPropagation()`, hover effects, and exit-count tooltips. ZoneExitEdge supports new `highlighted` data prop with cyan glow. ZoneDesigner wires `highlightedExitIds` state correctly — populated on room selection, cleared on all deselection paths (ESC, canvas click, exit click). Proper `useCallback` and `useMemo` dependency arrays. Edge cases handled: single/multiple up-down exits, all deselection paths working.
+
+**Decision logged to:** `.squad/decisions.md` (inbox entries merged 2026-04-13T00:05Z)
+
+**Merged:** Both commits squash-merged to dev via PR #447 (#446) and PR #448 (#445 + publish refactor).
+
+### 2026-04-13: Permadeath System Design Analysis (DELIVERED)
+
+**Task:** Architect permadeath system with three design options and recommendation.
+
+**Outcome:** ✅ DELIVERED — Comprehensive design proposal; user direction received for system-wide reset model (design pivoted from recommendation).
+
+**Deliverable:** Permadeath Design Proposal analyzed three approaches:
+- **Option 1:** Run-based permadeath (stash-safe extraction, no character deletion)
+- **Option 2:** Character permadeath with account persistence (opt-in per character, threshold-based) ⭐ RECOMMENDED
+- **Option 3:** Softer permadeath with inventory reset only
+
+**User Pivot:** User request changed design from per-character opt-in to server-wide reset model: simple boolean toggle, no threshold, every death resets character (not deletes), stash preserved, death count persists.
+
+**Impact:** Triggered implementation iterations across Drizzt (DB schema), Jarlaxle (death handler x2), Regis (UI messaging x2), Minsc (tests x2). Design document archived to decisions.md.
+
+---
+
+

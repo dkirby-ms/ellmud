@@ -4173,3 +4173,86 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 4. **RoomNode.test.tsx** — 5 new tests: badge presence for up/down exits, down badge y-positioning, and absence of badges when no vertical exits.
 
 
+## Learnings
+- Minimap ExitEdge and RoomNode are separate SVG components in `packages/client/src/components/map/`
+- RoomNode badges (↑/↓) are the canonical indicators for vertical exits; ExitEdge should only render the line
+- `ExploredRoomData.exits` is `Record<string, string>` — truthy check on key works for presence detection
+
+### 2025-07-25: Fix Phantom Minimap Arrows (follow-up to #466)
+**Status:** ✅ Complete
+
+**Problem:** After PR #466 removed duplicate arrows from ExitEdge, phantom ↑/↓ arrows still appeared on the minimap. Root cause: inter-floor ghost rooms (Layer 2 in MapRenderer) rendered as full `<RoomNode>` instances with roomData, so they also displayed ↑/↓ badges — producing duplicate arrows from adjacent floors.
+
+**Changes:**
+1. **RoomNode.tsx** — Added `hideVerticalBadges` prop. When true, suppresses ↑/↓ badge rendering.
+2. **MapRenderer.tsx** — Pass `hideVerticalBadges` to Layer 2 inter-floor ghost RoomNodes.
+3. **ExitEdge.tsx** — Skip rendering zero-length edges (inter-floor exits where rooms share x,y coords produce invisible dot artifacts).
+4. **RoomNode.test.tsx** — Added test for `hideVerticalBadges` prop.
+5. **ExitEdge.test.tsx** — Added test for zero-length edge skipping; updated inter-floor stroke test to use non-zero-length edge.
+
+
+## Learnings
+- Inter-floor ghost rooms (Layer 2) in MapRenderer are dimmed `<RoomNode>` instances — they inherit all badge rendering unless explicitly suppressed
+- `computeLayout.ts` uses separate occupied sets per z-level, so up/down-connected rooms share (x,y) → edges between them are zero-length
+- Three rendering layers can produce vertical exit indicators: ExitEdge text (removed in #466), RoomNode badges (canonical), and ghost RoomNode badges (now suppressed)
+
+
+### 2026-04-16: Phantom Arrows Minimap Fix
+
+**Status:** Complete — 484 client tests pass ✓
+
+**Problem:** Minimap had duplicate vertical exit indicators (↑/↓ arrows) rendering from two independent sources:
+1. RoomNode badges (text next to room circle)
+2. ExitEdge text labels (at edge midpoints)
+
+Additionally, ghost rooms (rooms not on current floor) showed spurious badges, and zero-length inter-floor edges showed phantom arrows.
+
+**Root Cause:** 
+- No canonical source of truth for vertical indicators
+- Layer 2 ghost rooms rendered with full props (including vertical exits)
+- Zero-length edges still triggered arrow rendering
+
+**Solution:**
+1. Added `hideVerticalBadges` prop to RoomNode component
+2. MapRenderer passes `hideVerticalBadges={true}` for Layer 2 ghost rooms
+3. ExitEdge filters out zero-length inter-floor edges before rendering
+4. RoomNode badges established as canonical vertical exit indicator
+
+**Changes:**
+- `RoomNode.tsx` — Added `hideVerticalBadges` prop
+- `MapRenderer.tsx` — Conditional badge suppression for ghost rooms
+- `ExitEdge.tsx` — Zero-length edge filtering
+- `RoomNode.test.tsx` — New tests for badge suppression
+
+**Test Results:** 484/484 pass, 0 regressions
+
+**Commit:** 0c13307 (dev branch)
+
+**Design Decision:** See .squad/decisions/decisions.md — RoomNode badges are now the canonical vertical exit indicator (ExitEdge handles only dashed lines).
+
+# Regis — Client Developer History
+
+### 2026-04-20: Client State Management Audit — Zustand Evaluation
+
+**Status:** ✅ Complete — Merged to `.squad/decisions/decisions.md`
+
+**Assignment:** Detailed audit of current Context + useReducer implementation and Zustand fit assessment.
+
+**Deliverable:** `.squad/decisions/inbox/regis-client-state-audit.md`
+
+**Audit Results:**
+- Current: Context + useReducer with 30 flat fields, 25 action types, monolithic reducer
+- **Primary Issue:** No selector granularity — all consumers re-render on any state change
+- `useZoneConnection.ts`: 577 lines, 15 inline handlers, grows linearly with new messages
+- Message handler duplication in `connect()` and `switchRoom()` (maintenance trap)
+- 19 consumer files + 15 test files = 34 files affected by migration
+- **Zustand Opportunities (ranked):** Selectors (HIGH) → Slices (HIGH) → Store-outside-React (MEDIUM) → DevTools (LOW)
+- **Migration Risk:** Medium (34 files, ~3-4 weeks estimated)
+
+**Partnered with Elminster for architectural perspective and migration strategy.** Combined findings inform 4-phase rollout plan.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-20T01:30:00Z-regis.md`
+
+---
+
+

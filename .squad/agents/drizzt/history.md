@@ -56,29 +56,6 @@
 - Rewrote all repop tests to verify items do NOT respawn
 - 33 files changed, 165 insertions, 519 deletions
 
-## Post-Implementation Documentation — Issue #438 (2026-04-12T17:30Z)
-
-**Scribe:** Documented orchestration for squad. Merged inbox decisions into `.squad/decisions/decisions.md`:
-- Starting Items Rename & Collapse Lifecycle Removal (comprehensive spec + implementation notes)
-- Remove room_definitions Table and PgRoomDefinitionsStore
-- Zone Lifecycle Context (user directive for team memory)
-
-Inbox files deleted post-merge. Agent history and decisions updated.
-
-Key learnings documented:
-- Starting items rename mechanics across 33 files
-- Zone state simplification pattern (removing legacy lifecycle states)
-- Test restructuring when behavior changes (items no longer respawn)
-
-
----
-
-## Detailed History
-
-Full session logs and dated entries have been moved to `history-archive.md` to keep this file compact.
-
----
-
 ## Permadeath Foundations — Migration 017, Config, and Hall of Fame API (2026-04-13)
 
 **Implemented:**
