@@ -2,7 +2,7 @@
 
 ## WebSocket Message Protocol
 
-All gameplay communication uses Colyseus WebSocket messaging. The client is a prose-only terminal — **no Colyseus Schema state is synced to clients**.
+All gameplay communication uses Colyseus WebSocket messaging. Both web and Unity clients use the same message protocol. Clients are thin presentation layers — **no Colyseus Schema state is synced to clients**. All state is server-authoritative.
 
 ### Connection
 
@@ -11,21 +11,37 @@ ws://localhost:2567
 ```
 
 **Room types:**
-- `shard` — Exploration/combat instance (20-40 min lifetime)
-- `refuge` — Persistent safe hub
+- `zone` — Adventure zone instance (persistent or temporary)
+- `stronghold` — Persistent faction hub (safe spawn, stash, expedition board)
 
-**Joining a room:**
+**Joining a room (Web Client):**
 ```typescript
 import { Client } from 'colyseus.js';
 
 const client = new Client('ws://localhost:2567');
 
-// Join with optional auth token
-const room = await client.joinOrCreate('shard', { token: 'your-auth-token' });
+// Join with auth token
+const room = await client.joinOrCreate('zone', { 
+  zoneId: 'flooded-crypt',
+  token: 'your-auth-token' 
+});
 
 // Listen for messages
 room.onMessage('narrate', (message) => { /* handle narration */ });
 room.onMessage('room_header', (message) => { /* handle room info */ });
+```
+
+**Joining a room (Unity Client):**
+```csharp
+using Colyseus;
+
+var client = new Client("ws://localhost:2567");
+var room = await client.JoinOrCreate<GameRoomState>("zone", new Dictionary<string, object> {
+  { "zoneId", "flooded-crypt" },
+  { "token", authToken }
+});
+
+room.OnMessage += (message) => { /* handle updates */ };
 ```
 
 ### Message Types
@@ -37,10 +53,10 @@ const MessageTypes = {
   COMMAND: 'cmd',
   NARRATE: 'narrate',
   ROOM_HEADER: 'room_header',
-  SHARD_STATE: 'shard_state',
+  ZONE_STATE: 'zone_state',
   COMBAT_RESULT: 'combat_result',
-  EXTRACTION_STATE: 'extraction_state',
   STASH_UPDATE: 'stash_update',
+  GROUP_UPDATE: 'group_update',
 };
 ```
 
@@ -91,26 +107,8 @@ Structured room metadata sent alongside narration on room entry.
 interface RoomHeaderMessage {
   roomName: string;    // Display name of the room
   exits: string[];     // Available directions (e.g., ['north', 'east'])
-  stability: number;   // Shard stability 0.0–1.0
+  zone: string;        // Zone identifier
 }
-```
-
-### `shard_state` — Shard Lifecycle
-
-Broadcast to all players when shard state changes.
-
-```typescript
-interface ShardStateMessage {
-  state: ShardState;        // Current lifecycle phase
-  collapseTimer?: number;   // Seconds remaining (if applicable)
-}
-
-type ShardState =
-  | 'seeding'
-  | 'open'
-  | 'active'
-  | 'destabilising'
-  | 'collapse';
 ```
 
 ### `combat_result` — Combat Tick
@@ -145,17 +143,22 @@ type CombatAction =
   | 'observe';
 ```
 
-### `extraction_state` — Extraction Progress
+### `group_update` — Group Status
 
-Sent to the extracting player during channeled extraction.
+Sent when group composition, leadership, or member status changes.
 
 ```typescript
-interface ExtractionMessage {
-  playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted';
-  ticksRemaining?: number;
-  totalTicks?: number;
-  narration: string;
+interface GroupUpdateMessage {
+  groupId: string;
+  leader: string;
+  members: Array<{
+    playerId: string;
+    name: string;
+    hp: number;
+    maxHp: number;
+    status: 'alive' | 'downed' | 'dead';
+  }>;
+  lootMode: 'round_robin' | 'free_for_all' | 'need_greed';
   timestamp: number;
 }
 ```
@@ -201,30 +204,47 @@ Directions: `north`, `south`, `east`, `west`, `up`, `down`
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `attack <target>` | `k` | Initiate combat with a target |
-| `strike` | — | Attack action during combat tick |
-| `dodge` | — | Evasion action during combat tick (default if no input) |
-| `flee [direction]` | — | Attempt to escape combat |
+| `target <entity>` | — | Switch combat target |
+| `target next` | `Tab` | Cycle to next hostile entity |
+| `ability 1` | `1` | Use ability 1 (queued for next tick) |
+| `ability 2` | `2` | Use ability 2 (queued for next tick) |
+| `ability 3` | `3` | Use ability 3 (queued for next tick) |
+| `ability 4` | `4` | Use ability 4 (queued for next tick) |
+| `ability 5` | `5` | Use ability 5 (queued for next tick) |
+| `reposition front` | — | Move to Front position (melee range) |
+| `reposition flank` | — | Move to Flank position (hybrid) |
+| `reposition rear` | — | Move to Rear position (ranged) |
+| `flee [direction]` | — | Attempt to escape combat and move to an adjacent room |
 
 ### Social
 
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `say <message>` | — | Speak to players in the same room |
+| `emote <action>` | — | Perform an action (roleplay) |
+| `group invite <player>` | — | Invite player to form a group |
+| `group leave` | — | Leave the current group |
 
-### Extraction
+### Zone Exits
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `extract` | — | Begin extraction ritual (extraction rooms only) |
+To leave a zone and return to your stronghold, navigate to an **exit room** and type:
 
-### Refuge-Only
+| Command | Description |
+|---------|-------------|
+| `look` | Check if an exit is available in this room |
+| `go <direction>` | Move toward the exit |
+
+Once you exit a zone, all carried items automatically move to your stash.
+
+### Stronghold-Only
 
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `stash` | — | View stash contents and weight |
 | `store <item>` | — | Place item into stash |
-| `shardboard` | — | View available shard entries |
-| `enter <shard-id>` | — | Enter an open shard listed on the shardboard |
+| `take <item>` | — | Equip item from stash into active slots |
+| `board` | — | Access the Expedition Board |
+| `enter <zone-name>` | — | Enter a zone listed on the Expedition Board |
 
 ### Command Errors
 
