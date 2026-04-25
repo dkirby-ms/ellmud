@@ -1,3 +1,11 @@
+# [0.2.0-dev.64](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.63...v0.2.0-dev.64) (2026-04-25)
+
+
+### Bug Fixes
+
+* **ci:** rewrite squad-promote to use PR instead of force-push ([0fc55c1](https://github.com/dkirby-ms/ellmud/commit/0fc55c188c7108d7d2906180b3f43c595db9fd94))
+* **ci:** stop duplicate UAT deploys and stale Discord changelog ([a12048a](https://github.com/dkirby-ms/ellmud/commit/a12048a59848db4b87421687f72af0d15c1797c6))
+
 # [0.2.0-dev.63](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.62...v0.2.0-dev.63) (2026-04-19)
 
 

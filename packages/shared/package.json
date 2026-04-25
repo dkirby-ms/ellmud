@@ -1,6 +1,6 @@
 {
   "name": "@ellmud/shared",
-  "version": "0.2.0-dev.63",
+  "version": "0.2.0-dev.64",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
