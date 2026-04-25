@@ -15,48 +15,6 @@
 - **Infra:** infra/ directory for infrastructure config
 - **Port:** Game server runs on port 2567
 
-## Automated Version Bumping (2025-01)
-
-**Status:** ✅ Complete (PR #425)
-
-**Context:** Consolidated two release workflows and implemented automated version bumping to eliminate manual version management and reduce human error.
-
-**Implementation:**
-
-1. **New Versioning Model:**
-   - **Patch (0.1.x):** Auto-bumped on dev → uat promotion (both manual and scheduled)
-   - **Minor (0.x.0):** Auto-bumped on uat → prod promotion (resets patch to 0)
-   - **Major (x.0.0):** Manual only — reserved for intentional breaking changes
-
-2. **Modified Workflows:**
-   - `scheduled-uat-promote.yml`: Added patch bump after merge
-   - `squad-promote.yml`: Added patch bump (dev→uat) and minor bump (uat→prod)
-   - `squad-release.yml`: Removed CHANGELOG version validation (versions now auto-bumped)
-   - `release.yml`: Deprecated (renamed to DEPRECATED-release.yml with error stub)
-
-3. **Version Bump Flow:**
-   - Merge branches → npm version {patch|minor} --no-git-tag-version → npm run version:sync → commit with [skip ci] → push
-   - Version bump happens BEFORE push so code has correct version
-   - squad-release.yml reads the bumped version and creates tag + GitHub Release
-
-4. **Safety Features:**
-   - [skip ci] in commit messages prevents infinite CI loops
-   - Idempotent: Multiple runs don't double-bump
-   - Dry run mode shows what version WOULD be bumped to
-   - Node.js setup + npm ci ensures clean dependency state
-
-**Key Learnings:**
-
-- **Version bump timing critical:** Must happen BEFORE push so pushed code has correct version, allowing squad-release.yml to read it
-- **[skip ci] prevents loops:** Version bump commits trigger workflows, [skip ci] breaks the loop
-- **CHANGELOG decoupling:** Removed version-specific CHANGELOG validation; CHANGELOG should document changes regardless of version numbers
-- **Workspace version sync:** scripts/sync-versions.mjs critical for monorepo consistency
-- **Dry run version preview:** Bash arithmetic for version calculation improves UX
-
-**Impact:** Eliminates manual version management, ensures every UAT build has unique version, simplifies release process, reduces risk of version conflicts.
-
----
-
 ## Workflow Audit Fixes — Low Priority Items (2025-01, PR #428)
 
 **Status:** ✅ PR Created

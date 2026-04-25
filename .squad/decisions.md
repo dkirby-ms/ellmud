@@ -5187,3 +5187,828 @@ Classic MUDs lacked these because they had simpler combat. Ellmud's simultaneous
 
 ---
 
+
+# Domain Slices Architecture for Ellmud Client Store
+
+**Date:** 2026-04-28  
+**Status:** Architectural Proposal  
+**Related:** PR #483 (Zustand migration), PR #482 (selector pattern phase 3)  
+**Scope:** Phase 4 of incremental Zustand migration  
+
+---
+
+## Executive Summary
+
+The current monolithic Zustand store (34 fields, 1 reducer, 24 action types) is functionally complete but architecturally inflexible. This proposal decomposes it into **five independent domain slices** while maintaining backward compatibility with all 391 existing tests.
+
+**Key architectural decision:** Use **separate Zustand stores per domain**, not `StateCreator` slices within a single store. This provides:
+- Clear field ownership and action namespacing
+- Decoupled reducer logic (20 small reducers vs 1 giant switch)
+- Isolated test fixtures and selectors
+- No forced cross-slice subscriptions
+- Simpler performance optimization (each slice has its own devtools entry)
+
+**Proposed domains:** Auth, Terminal, Combat, Connection, UI
+
+**Migration approach:** Replace monolithic `useAppStore` with domain-specific hooks (`useAuthStore`, `useCombatStore`, etc.) incrementally. Existing consumers need minimal changes; dispatch logic remains unchanged.
+
+---
+
+## Current State Analysis
+
+### Monolithic Architecture (Status Quo)
+
+```
+useAppStore(state => state.field)
+  ↓
+AppState (34 fields)
+  ├─ Auth (5): authenticated, token, playerId, email, username, userRole
+  ├─ Terminal (2): messages[], soundCues[]
+  ├─ Room (5): room, roomHeader, zoneState, roomOccupants, messages (also terminal)
+  ├─ Combat (12): inCombat, combatTick, enemyStatus, pendingCombatAction,
+  │              statusEffects, playerHp, playerMaxHp, playerStamina,
+  │              playerMaxStamina, combatCombatants, combatHostileIds, combatPlayerTargetId
+  ├─ Inventory (6): inventory, loadout, stashItems, pendingEquipAction, posture, combatStats
+  ├─ Connection (1): connectionStatus
+  ├─ Error (1): error
+  └─ Stats (2): effectiveStats, baseStats, statPointsAvailable
+
+dispatch(action) → appReducer (switch/24 cases) → 1 state update
+```
+
+### Pain Points
+
+1. **Field scatter:** Related state spans multiple slices (e.g., `combatTick`, `inCombat`, `enemyStatus` mixed with inventory)
+2. **Coarse selectors:** StatusPanel uses `useAppStore()` on 22 fields; any field change rerenders the entire panel
+3. **Mixed concerns:** Room state bundled with terminal messages; combat stats separate from combat state
+4. **Reducer complexity:** Single 100-line switch handles unrelated concerns (auth logout touches 30 fields)
+5. **DevTools overload:** Monolithic action history makes debugging multi-step flows harder
+6. **Test isolation:** Resetting store requires clearing all 34 fields; test fixtures are broad
+
+### Current Selectors in Production
+
+```
+// StatusPanel (22 fields)
+useAppStore(s => s.playerHp)
+useAppStore(s => s.inCombat)
+useAppStore(s => s.combatCombatants)
+... (19 more individual selectors)
+
+// ZoneExploration (7 fields)
+useAppStore(s => s.messages)
+useAppStore(s => s.connectionStatus)
+useAppStore(s => s.inCombat)
+... (4 more individual selectors)
+
+// App.tsx (auth persistence)
+subscribe(
+  (state) => ({ authenticated: state.authenticated, token: state.token, ... }),
+  (authSlice) => { localStorage.setItem(...) }
+)
+```
+
+---
+
+## Proposed Architecture: Five Domain Slices
+
+### Slice 1: Auth Store
+**Fields:** authenticated, token, playerId, email, username, userRole  
+**Consumers:** App.tsx (persistence), ProtectedRoute  
+**Characteristics:** Persistent, low-frequency updates, single source of truth for identity
+
+```typescript
+export interface AuthState {
+  authenticated: boolean;
+  token: string | null;
+  playerId: string | null;
+  email: string | null;
+  username: string | null;
+  userRole: UserRole;
+}
+
+export type AuthAction =
+  | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string; username?: string; role?: UserRole }
+  | { type: 'LOGOUT' }
+  | { type: 'SET_USER_ROLE'; role: UserRole };
+
+export const useAuthStore = create<AuthState & { dispatch: (action: AuthAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      authenticated: false,
+      token: null,
+      playerId: null,
+      email: null,
+      username: null,
+      userRole: 'player',
+      dispatch: (action: AuthAction) => set(
+        (prev) => authReducer(prev as AuthState, action),
+        undefined,
+        action.type
+      ),
+    }), { name: 'ellmud-auth' })
+  )
+);
+```
+
+**Actions:** LOGIN_SUCCESS (3), LOGOUT (1), SET_USER_ROLE (1)  
+**Test fixture:** `resetAuthStore()`, `initializeAuthStore(partial)`
+
+---
+
+### Slice 2: Terminal Store
+**Fields:** messages[], soundCues[], roomHeader, zoneState  
+**Consumers:** ZoneExploration (messages), StatusPanel (soundCues, roomHeader)  
+**Characteristics:** High-frequency writes, large append-only arrays with size caps, UI-only state
+
+```typescript
+export interface TerminalState {
+  messages: TerminalMessage[];
+  soundCues: SoundCue[];
+  roomHeader: RoomHeaderMessage | null;
+  zoneState: ZoneState | null;
+}
+
+export type TerminalAction =
+  | { type: 'ADD_MESSAGE'; message: TerminalMessage }
+  | { type: 'CLEAR_MESSAGES' }
+  | { type: 'ADD_SOUND_CUE'; cue: SoundCue }
+  | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
+  | { type: 'SET_ZONE_STATE'; state: ZoneState };
+
+export const useTerminalStore = create<TerminalState & { dispatch: (action: TerminalAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      messages: [],
+      soundCues: [],
+      roomHeader: null,
+      zoneState: null,
+      dispatch: (action: TerminalAction) => set(
+        (prev) => terminalReducer(prev as TerminalState, action),
+        undefined,
+        action.type
+      ),
+    }), { name: 'ellmud-terminal' })
+  )
+);
+```
+
+**Actions:** ADD_MESSAGE (1), CLEAR_MESSAGES (1), ADD_SOUND_CUE (1), SET_ROOM_HEADER (1), SET_ZONE_STATE (1)  
+**Rationale:** Messages and sound cues are UI-only, append-only, and capped. Room header is map/zone metadata, not combat or inventory.
+
+---
+
+### Slice 3: Combat Store
+**Fields:** inCombat, combatTick, enemyStatus, pendingCombatAction, statusEffects, playerHp, playerMaxHp, playerStamina, playerMaxStamina, combatCombatants, combatHostileIds, combatPlayerTargetId, posture  
+**Consumers:** StatusPanel (most fields), MudPrompt, CombatHUD, ZoneExploration (tick, inCombat check)  
+**Characteristics:** High-frequency updates (tick rate), tightly coupled subscriptions, performance-critical
+
+```typescript
+export interface CombatState {
+  inCombat: boolean;
+  combatTick: number;
+  enemyStatus: EnemyStatus | null;
+  pendingCombatAction: CombatAction | null;
+  statusEffects: StatusEffect[];
+  playerHp: number;
+  playerMaxHp: number;
+  playerStamina: number;
+  playerMaxStamina: number;
+  combatCombatants: CombatantSnapshot[];
+  combatHostileIds: string[];
+  combatPlayerTargetId: string | null;
+  posture: Posture;
+}
+
+export type CombatAction =
+  | { type: 'SET_COMBAT_STATE'; inCombat: boolean }
+  | { type: 'SET_COMBAT_TICK'; tick: number }
+  | { type: 'SET_ENEMY_STATUS'; status: EnemyStatus | null }
+  | { type: 'SET_PENDING_COMBAT_ACTION'; action: CombatAction | null }
+  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[]; posture: Posture }
+  | { type: 'SET_COMBAT_COMBATANTS'; combatants: CombatantSnapshot[]; hostileIds: string[]; playerTargetId?: string };
+
+export const useCombatStore = create<CombatState & { dispatch: (action: CombatAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      inCombat: false,
+      combatTick: 0,
+      // ... rest of initial state
+      dispatch: (action: CombatAction) => set(
+        (prev) => combatReducer(prev as CombatState, action),
+        undefined,
+        action.type
+      ),
+    }), { name: 'ellmud-combat' })
+  )
+);
+```
+
+**Actions:** SET_COMBAT_STATE (1), SET_COMBAT_TICK (1), SET_ENEMY_STATUS (1), SET_PENDING_COMBAT_ACTION (1), SET_PLAYER_STATE (1), SET_COMBAT_COMBATANTS (1)  
+**Rationale:** These fields update together at tick boundaries; subscribers want all or nothing.
+
+---
+
+### Slice 4: Connection Store
+**Fields:** room, connectionStatus, error  
+**Consumers:** useZoneConnection (all fields), ProtectedRoute, error displays  
+**Characteristics:** Managed by useZoneConnection; reflects server connectivity state
+
+```typescript
+export interface ConnectionState {
+  room: Room | null;
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
+  error: string | null;
+}
+
+export type ConnectionAction =
+  | { type: 'SET_ROOM'; room: Room | null }
+  | { type: 'SET_CONNECTION_STATUS'; status: ConnectionState['connectionStatus'] }
+  | { type: 'SET_ERROR'; error: string }
+  | { type: 'CLEAR_ERROR' };
+
+export const useConnectionStore = create<ConnectionState & { dispatch: (action: ConnectionAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      room: null,
+      connectionStatus: 'disconnected',
+      error: null,
+      dispatch: (action: ConnectionAction) => set(
+        (prev) => connectionReducer(prev as ConnectionState, action),
+        undefined,
+        action.type
+      ),
+    }), { name: 'ellmud-connection' })
+  )
+);
+```
+
+**Actions:** SET_ROOM (1), SET_CONNECTION_STATUS (1), SET_ERROR (1), CLEAR_ERROR (1)  
+**Rationale:** These three are tightly coupled by useZoneConnection lifecycle; separate from gameplay state.
+
+---
+
+### Slice 5: Inventory Store
+**Fields:** inventory, loadout, stashItems, pendingEquipAction, combatStats, effectiveStats, baseStats, statPointsAvailable, activeCharacter, roomOccupants  
+**Consumers:** CombinedStashLoadout (equipment), StatusPanel (gear tab), character select  
+**Characteristics:** Low-frequency updates, character-bound, persistent across sessions
+
+```typescript
+export interface InventoryState {
+  inventory: InventoryItem[];
+  loadout: EquipmentSlots;
+  stashItems: DisplayItem[];
+  pendingEquipAction: boolean;
+  combatStats: CombatStats;
+  effectiveStats: EffectiveStats | null;
+  baseStats: BaseStatsMessage | null;
+  statPointsAvailable: number;
+  activeCharacter: CharacterSummary | null;
+  roomOccupants: {
+    creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
+    players: Array<{ id: string; name: string; disconnected?: boolean }>;
+  };
+}
+
+export type InventoryAction =
+  | { type: 'SET_INVENTORY'; items: InventoryItem[] }
+  | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
+  | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
+  | { type: 'SET_PENDING_EQUIP'; pending: boolean }
+  | { type: 'SET_COMBAT_STATS'; stats: CombatStats }
+  | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats }
+  | { type: 'SET_BASE_STATS'; baseStats: BaseStatsMessage; statPointsAvailable: number }
+  | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
+  | { type: 'SET_ROOM_OCCUPANTS'; occupants: InventoryState['roomOccupants'] };
+
+export const useInventoryStore = create<InventoryState & { dispatch: (action: InventoryAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      inventory: [],
+      loadout: createEmptyEquipmentSlots(),
+      // ... rest of initial state
+      dispatch: (action: InventoryAction) => set(
+        (prev) => inventoryReducer(prev as InventoryState, action),
+        undefined,
+        action.type
+      ),
+    }), { name: 'ellmud-inventory' })
+  )
+);
+```
+
+**Actions:** SET_INVENTORY (1), SET_LOADOUT (1), SET_STASH_ITEMS (1), SET_PENDING_EQUIP (1), SET_COMBAT_STATS (1), SET_EFFECTIVE_STATS (1), SET_BASE_STATS (1), SET_ACTIVE_CHARACTER (1), SET_ROOM_OCCUPANTS (1)  
+**Rationale:** Character progression state; equipment updates are rare and independent of combat tick.
+
+---
+
+## Code Pattern: Generic Slice Factory
+
+To reduce boilerplate and ensure consistency, provide a factory function:
+
+```typescript
+import { create } from 'zustand';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
+
+export function createStore<S extends object, A extends { type: string }>(
+  name: string,
+  initialState: S,
+  reducer: (state: S, action: A) => S
+) {
+  return create<S & { dispatch: (action: A) => void }>()(
+    subscribeWithSelector(
+      devtools((set) => ({
+        ...initialState,
+        dispatch: (action: A) => set(
+          (prev) => {
+            const { dispatch: _, ...state } = prev as any;
+            return reducer(state as S, action);
+          },
+          undefined,
+          action.type
+        ),
+      }), { name: `ellmud-${name}` })
+    )
+  );
+}
+
+// Usage:
+export const useAuthStore = createStore('auth', initialAuthState, authReducer);
+export const useCombatStore = createStore('combat', initialCombatState, combatReducer);
+// ... etc
+```
+
+---
+
+## Migration Strategy: Five Phases
+
+### Phase A: Create Slice Definitions (No Breaking Changes)
+
+**PR 1: New store files**
+- Create `/packages/client/src/store/auth.ts`, `combat.ts`, `terminal.ts`, `connection.ts`, `inventory.ts`
+- Each exports: `useXxxStore`, `XxxState`, `XxxAction`, `initialXxxState`, `xxxReducer`, `resetXxxStore()`, `initializeXxxStore()`
+- All 391 existing tests continue to pass; `useAppStore` still works
+
+**No changes to:** Components, hooks, tests, message handlers
+
+**Testing:** All existing tests pass unchanged
+
+---
+
+### Phase B: Parallel Store Compatibility Layer
+
+**PR 2: Mirror dispatch in old store**
+- Monolithic `useAppStore` remains fully functional
+- `useAppStore((s) => s.inCombat)` still works
+- Internally, sliced stores are created but not used yet
+- Add compatibility selectors: `useAppStore.auth()`, `useAppStore.combat()` that return sliced state snapshots
+
+**Components:** No changes required
+
+**Testing:** All existing tests pass; new integration tests verify parallel stores are in sync
+
+---
+
+### Phase C: Gradual Consumer Migration
+
+**PR 3–7: Migrate consumers one by one**
+
+| PR | Component | Slice | Old | New | Risk |
+|-----|-----------|-------|-----|-----|------|
+| 3 | App.tsx (auth persistence) | auth | `useAppStore(s => ({ authenticated, token, ... }))` | `useAuthStore()` | Low |
+| 4 | MudPrompt | combat | `useAppStore(s => s.playerHp)` × 5 | `useCombatStore()` | Low |
+| 5 | CombinedStashLoadout | inventory | `useAppStore(s => s.loadout)` × 3 | `useInventoryStore()` | Low |
+| 6 | ZoneExploration | multiple | `useAppStore(s => s.messages)` + dispatch | `useTerminalStore()` + dispatch | Medium |
+| 7 | useZoneConnection | multiple | All 24 dispatches → all 5 slices | Multiple stores | Medium |
+
+**Testing:** Per-PR, re-run all tests. Verify no selector contention during incremental migration.
+
+---
+
+### Phase D: Remove Monolithic Store
+
+**PR 8: Delete useAppStore, clean up**
+- Remove `/packages/client/src/store.ts`
+- Update imports across all remaining files to use domain stores
+- Verify all 391 tests pass
+- Remove compatibility layer
+
+**Testing:** Full test suite
+
+---
+
+### Phase E: Optimize Selectors
+
+**PR 9: Fine-grained selectors** (Optional, post-stabilization)
+- For high-frequency slices (Combat, Terminal), provide pre-composed selectors:
+  ```typescript
+  export const selectPlayerHpRatio = (state: CombatState) => 
+    state.playerHp / state.playerMaxHp;
+  export const selectInCombat = (state: CombatState) => state.inCombat;
+  
+  // Component:
+  const hpRatio = useCombatStore(selectPlayerHpRatio);
+  ```
+- Avoid selector creation in render (use `useShallow` for coarse selectors that don't change often)
+
+---
+
+## Dispatch Pattern: No Breaking Changes
+
+**Current code (works throughout migration):**
+```typescript
+const dispatch = useAppStore(s => s.dispatch);
+dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+```
+
+**Post-migration:**
+```typescript
+const dispatch = useCombatStore(s => s.dispatch);
+dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+```
+
+**Handler refactor (useZoneConnection):**
+```typescript
+// Before:
+const dispatch = useAppStore((s) => s.dispatch);
+
+// After:
+const combatDispatch = useCombatStore((s) => s.dispatch);
+const terminalDispatch = useTerminalStore((s) => s.dispatch);
+const connectionDispatch = useConnectionStore((s) => s.dispatch);
+
+// In message handlers:
+onNarrate: (msg) => terminalDispatch({ type: 'ADD_MESSAGE', message }),
+onCombatState: (msg) => combatDispatch({ type: 'SET_COMBAT_STATE', inCombat: msg.inCombat }),
+```
+
+---
+
+## Risk Assessment
+
+### Low Risk
+- **Auth store:** Only 5 fields, 3 actions, single subscriber (App.tsx). Isolated.
+- **Terminal store:** Append-only, no cross-slice logic. Can be tested independently.
+- **Inventory store:** Low-frequency updates, no side effects with other slices.
+
+### Medium Risk
+- **useZoneConnection:** Dispatches to all 5 slices. Multiple closures capturing dispatch refs. Mitigation: centralize dispatch refs in a single object or use dedicated effect to subscribe to all stores once.
+- **Combat tick performance:** If tick happens every 100ms, each field update triggers re-render. Mitigation: use `useCombatStore(s => s.combatTick)` only in components that care about ticks; render individual enemy HP/stamina separately.
+
+### High Risk (Mitigated)
+- **Logout cascade:** `LOGOUT` currently resets all 34 fields. With slices, must call 5 separate `reset()` functions. Mitigation: provide a `logoutAll()` helper that calls all reset functions in one shot. Dispatch a special `LOGOUT` action to all slices simultaneously.
+
+### Edge Cases
+1. **Store subscription during connection setup:** useZoneConnection connects before auth slice is synced. Mitigation: Ensure auth is loaded before connection is attempted (already done in App.tsx).
+2. **Circular dependencies:** If inventory.ts imports combat.ts to read stats. Avoid. Use Zustand's `useStore.getState()` to read other slices if needed (rare).
+3. **Test isolation:** Tests that mock a single slice must not break when other slices change. Mitigation: Use `resetXxxStore()` helpers and avoid global test fixtures that touch multiple slices.
+
+---
+
+## Implementation Checklist
+
+- [ ] **PR 1:** Create 5 new store files (auth, combat, terminal, connection, inventory) with full reducer logic
+  - [ ] Duplicate all reducer case logic from monolithic store
+  - [ ] Add test helpers (`resetXxxStore`, `initializeXxxStore`)
+  - [ ] 391 tests still pass (old store unchanged)
+  
+- [ ] **PR 2:** Compatibility layer (optional)
+  - [ ] Add selectors to monolithic store that delegate to sliced stores
+  - [ ] Keep old dispatch working; verify integration tests
+
+- [ ] **PR 3–7:** Migrate consumers one by one
+  - [ ] Each PR updates one component/hook
+  - [ ] Run full test suite after each PR
+  - [ ] Verify no behavioral changes
+
+- [ ] **PR 8:** Remove monolithic store
+  - [ ] Delete `/packages/client/src/store.ts`
+  - [ ] Update all remaining imports
+  - [ ] All tests pass
+
+- [ ] **PR 9 (Optional):** Optimize high-frequency slices
+  - [ ] Add fine-grained selectors for combat tick
+  - [ ] Benchmark re-render count in StatusPanel
+  - [ ] Verify performance improvement
+
+---
+
+## Comparison: Slices vs Single Store with StateCreator
+
+### Option A: Separate Stores (Recommended)
+```typescript
+const useAuthStore = create(...);
+const useCombatStore = create(...);
+const useTerminalStore = create(...);
+// Consumers: useAuthStore(), useCombatStore(), useTerminalStore()
+```
+**Pros:** Clear boundaries, independent DevTools, no forced subscriptions, easier to test  
+**Cons:** Multiple imports per component, slightly more boilerplate
+
+### Option B: Single Store with StateCreator Slices
+```typescript
+const useAppStore = create<AppState & { dispatch: (action: AppAction) => void }>()(
+  subscribeWithSelector(
+    devtools((set) => ({
+      ...authSlice(set),
+      ...combatSlice(set),
+      ...terminalSlice(set),
+      ...connectionSlice(set),
+      ...inventorySlice(set),
+    }), { name: 'ellmud-store' })
+  )
+);
+// Consumers: useAppStore(), same as now
+```
+**Pros:** Fewer imports, backward-compatible with existing code  
+**Cons:** All fields still in one namespace, single DevTools timeline, cross-slice subscriptions forced, no independent testing per slice
+
+**Decision:** Option A (separate stores) chosen because:
+1. Cleaner field ownership; no accidental cross-slice access
+2. Easier to parallelize reducer logic (5 small reducers vs 1 monolith)
+3. Better aligned with "domain slice" mental model
+4. Phase B allows coexistence with old store during migration
+
+---
+
+## Testing Strategy
+
+### Unit Tests (Per Slice)
+
+```typescript
+// auth.test.ts
+describe('authReducer', () => {
+  it('LOGIN_SUCCESS sets authenticated and token', () => {
+    const state = authReducer(initialAuthState, {
+      type: 'LOGIN_SUCCESS',
+      token: 'abc123',
+      playerId: 'p1',
+    });
+    expect(state.authenticated).toBe(true);
+    expect(state.token).toBe('abc123');
+  });
+});
+```
+
+### Integration Tests (Per Consumer)
+
+```typescript
+// App.integration.test.ts
+it('App syncs auth state to localStorage on login', () => {
+  const { getByText } = render(<App />);
+  useAuthStore.setState({ authenticated: true, token: 'xyz', playerId: 'p2' });
+  expect(localStorage.getItem('ellmud_token')).toBe('xyz');
+});
+```
+
+### Regression Tests (Migration PRs)
+
+- Before Phase C: Run all 391 tests with both monolithic and sliced stores in parallel
+- After Phase C: Run all tests with sliced stores only
+- No new tests required; existing tests verify behavior
+
+---
+
+## Example: Migrating StatusPanel (Phase C)
+
+### Before (Current)
+```typescript
+import { useAppStore, type CombatStats } from '../store.js';
+
+export function StatusPanel() {
+  const playerHp = useAppStore(s => s.playerHp);
+  const playerMaxHp = useAppStore(s => s.playerMaxHp);
+  const inCombat = useAppStore(s => s.inCombat);
+  const combatCombatants = useAppStore(s => s.combatCombatants);
+  const combatStats = useAppStore(s => s.combatStats);
+  // ... 17 more selectors
+  
+  return (
+    <div>
+      <HPBar current={playerHp} max={playerMaxHp} />
+      <CombatHUD {...} />
+    </div>
+  );
+}
+```
+
+### After (Phase C)
+```typescript
+import { useCombatStore, useInventoryStore } from '../store/index.js';
+
+export function StatusPanel() {
+  const { playerHp, playerMaxHp, inCombat, combatCombatants } = useCombatStore();
+  const { combatStats } = useInventoryStore();
+  // ... selectors now grouped by domain
+  
+  return (
+    <div>
+      <HPBar current={playerHp} max={playerMaxHp} />
+      <CombatHUD {...} />
+    </div>
+  );
+}
+```
+
+**Changes:**
+- Add `import` from domain stores instead of monolithic store
+- Replace individual `useAppStore(s => s.field)` with store-level subscriptions
+- Component logic unchanged; render output identical
+
+---
+
+## Backward Compatibility & Rollback
+
+### Rollback Path (If Needed)
+1. Keep monolithic store.ts file in git history
+2. Phase A creates new slices without touching old store
+3. If issues arise at any phase, revert that phase's PR and continue with old store
+4. No database migrations, no runtime configuration changes
+
+### Gradual Rollout
+- Phase 1–2: Infrastructure (new stores created, old store untouched)
+- Phase 3–7: Gradual consumer migration (old code still works)
+- Phase 8+: Cleanup (old store removed once all consumers migrated)
+
+---
+
+## Metrics for Success
+
+| Metric | Target | Measure |
+|--------|--------|---------|
+| Tests pass | 391/391 | Run test suite after each PR |
+| Store files | 5 separate | Verify 5 new files in `/store/` |
+| Action types | 24 distributed across 5 | Count actions per slice |
+| Reducer lines | ~20 each slice | Check file sizes; no slice > 150 LOC |
+| Component imports | Clear domain | No component imports from 2+ slices without reason |
+| DevTools entries | 5 parallel | Verify DevTools shows 5 timelines: auth, combat, terminal, connection, inventory |
+| Performance | Baseline | Measure StatusPanel re-render count before/after; should decrease |
+
+---
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Components                            │
+├─────────────────────────────────────────────────────────┤
+│ App.tsx   StatusPanel   ZoneExploration   MudPrompt ... │
+└──────────────┬─────────────┬────────────────┬───────────┘
+               │             │                │
+         ┌─────┴─────────────┼────────────────┴──────────┐
+         │                   │                           │
+    ┌────▼────┐         ┌────▼────┐         ┌──────────▼───┐
+    │ useAuth │         │useCombat│         │useInventory  │
+    │ Store   │         │Store    │         │Store         │
+    │         │         │         │         │              │
+    │ 5 flds  │         │13 flds  │         │10 flds       │
+    │ 3 acts  │         │ 6 acts  │         │ 9 acts       │
+    └─────────┘         └─────────┘         └──────────────┘
+         │                   │                    │
+         │              ┌────▼────┐         ┌─────▼────┐
+         │              │useTerminal        │useConnection
+         │              │Store    │         │Store      │
+         │              │         │         │           │
+         │              │ 4 flds  │         │ 3 flds    │
+         │              │ 5 acts  │         │ 4 acts    │
+         │              └─────────┘         └───────────┘
+         │                   │                    │
+         └───────────────────┼────────────────────┘
+                             │
+                   ┌─────────▼────────────┐
+                   │  Zustand DevTools    │
+                   │ (5 parallel entries) │
+                   └──────────────────────┘
+```
+
+---
+
+## Decision: Slice Boundaries Justification
+
+| Slice | Core Reason | Cross-Slice Refs? | Update Freq |
+|-------|-------------|-------------------|-------------|
+| **Auth** | Identity + persistence | None (read-only by App.tsx) | Never in-game |
+| **Combat** | Tick-driven, tightly coupled | Reads inventory.combatStats | Every 100ms |
+| **Terminal** | UI-only, append-only | None | Per message/tick |
+| **Connection** | Lifecycle state | Triggers resets in all slices on disconnect | Infrequent |
+| **Inventory** | Character progression | Reads by combat for stat calc | Infrequent |
+
+**Principle:** If two fields always update together, they belong in the same slice. If they have different update frequencies or consumers, separate them.
+
+---
+
+## Next Steps (Post-Approval)
+
+1. **Stakeholder review:** Confirm domain boundaries with Dale (game architect)
+2. **Test setup:** Verify 391 tests can run with dual-store setup (Phase B)
+3. **Begin Phase A:** Create 5 new store files, ensure old store still works
+4. **Assign PRs:** Route Phases 1–7 to appropriate agents (Regis for testing, Drizzt for components)
+5. **Monitor:** Track re-render count and test pass rate throughout migration
+
+---
+
+## Glossary
+
+- **Domain:** Logical grouping of state (auth, combat, inventory, etc.)
+- **Slice:** Zustand store handling one domain (useAuthStore, useCombatStore, etc.)
+- **Reducer:** Pure function `(state, action) => newState`
+- **Selector:** Function that extracts a field from state; used in hooks
+- **Dispatch:** Function `(action) => void` that triggers a reducer
+- **DevTools:** Zustand middleware that records action history and allows time-travel debugging
+- **Compatibility layer:** Code that allows old and new stores to coexist during migration
+
+---
+
+**Status:** Ready for review and approval  
+**Review Priority:** High (Phase 4 of Zustand migration)  
+**Estimated Effort:** 5–6 PRs, 2–3 weeks of development (parallelizable)
+
+# Decision: PR-Based Promotion to Protected Branches
+
+**Author:** Khelben (CI/CD Dev)
+**Date:** 2026-07
+**Status:** Implemented
+
+## Context
+
+The `squad-promote.yml` workflow used `git push --force` to update the prod branch. This violated branch protection rules that:
+- Prohibit force pushes
+- Require changes via pull request
+
+## Decision
+
+All promotions to branch-protected targets (prod) now use the PR flow:
+1. Create a temporary branch (`promote/uat-to-prod-{timestamp}`)
+2. Strip forbidden paths on that branch
+3. Open a PR from temp branch → prod
+4. Enable auto-merge (`gh pr merge --auto --merge --delete-branch`)
+5. ci-cd.yml auto-triggers on the merge push (no explicit dispatch needed)
+
+## Consequences
+
+- **Pro:** Respects branch protection, creates audit trail via PR history
+- **Pro:** No duplicate CI/CD runs (removed manual `gh workflow run` dispatch)
+- **Pro:** Auto-cleanup of temp branches via `--delete-branch`
+- **Con:** Slightly longer promotion time (PR must pass checks before merge)
+- **Con:** If auto-merge is not enabled in repo settings, the PR will sit open until manually merged
+
+## Notes
+
+If the repo doesn't have "Allow auto-merge" enabled in Settings → General, enable it or the `--auto` flag will fail. In that case, fall back to `gh pr merge --merge --delete-branch` (immediate merge, requires no required status checks or admin bypass).
+
+# Domain Store Slices — Implementation Report
+
+**Author:** Regis (Frontend Developer)
+**Date:** 2026-07-15
+**Branch:** `squad/zustand-domain-slices`
+**Blueprint:** `.squad/decisions/inbox/elminster-domain-slices-architecture.md`
+
+## Summary
+
+Decomposed the monolithic 34-field Zustand store into 5 focused domain stores following Elminster's architecture proposal. All 391 tests pass, TypeScript clean.
+
+## Architecture
+
+### Store Factory (`createStore.ts`)
+Generic factory wrapping every domain store with:
+- `subscribeWithSelector` — granular subscriptions
+- `devtools` — Redux DevTools integration
+- `{ dispatch: _, ...state }` pattern — strips dispatch before passing to reducer
+
+### Domain Stores
+| Store | Fields | Key State |
+|-------|--------|-----------|
+| `auth` | 6 | authenticated, token, playerId, email, username, userRole |
+| `terminal` | 4 | messages[], soundCues[], roomHeader, zoneState |
+| `combat` | 13 | inCombat, combatTick, enemyStatus, playerHp/Stamina, posture, combatants |
+| `connection` | 3 | room, connectionStatus, error |
+| `inventory` | 10 | inventory, loadout, stashItems, stats, activeCharacter, roomOccupants |
+
+### Cross-Store Helpers (`store/index.ts`)
+- `logoutAll()` — resets all 5 stores (replaces monolithic LOGOUT action)
+- `resetAllStores()` — test helper
+- `initializeAllStores(partial)` — distributes flat fields to correct domain stores
+
+### Backward Compatibility (`store.ts`)
+Kept as barrel exporting AppState, appReducer, useAppStore, resetAppStore, initializeAppStore. All existing tests import from here unchanged. `initializeAppStore` cascades to `initializeAllStores`.
+
+## Migration Scope
+
+19 consumer files migrated from `useAppStore` to domain-specific stores:
+- 8 components, 6 pages, 5 hooks
+- `useZoneConnection.ts` (583 lines) was the most complex — dispatches to all 5 stores
+
+## Key Decisions
+
+1. **Cross-domain side effects handled by callers, not reducers.** Old monolithic `CLEAR_MESSAGES` also cleared `roomOccupants`; now callers dispatch to both `terminalStore` and `inventoryStore`.
+
+2. **`CombatStoreAction` naming** avoids collision with `@ellmud/shared`'s `CombatAction` type.
+
+3. **All stores use the factory** — not just auth. Consistent middleware across all domains.
+
+4. **Tests unchanged** — backward-compatible barrel means zero test file modifications.
+
+## Verification
+
+- ✅ 391 tests pass (3 todo, baseline)
+- ✅ TypeScript clean (`tsc --noEmit`)
+- ✅ ESLint clean (lint-staged passed)
