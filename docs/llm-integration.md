@@ -89,7 +89,7 @@ interface NarrationRoom {
   creatures: NarrationCreature[];
   hazards: string[];
   traces: NarrationTrace[];   // Footprints, blood, sounds
-  shard_stability: number;    // 0.0 (collapsing) to 1.0 (stable)
+  zone_stability: number;    // Environmental difficulty 0.0–1.0
 }
 ```
 
@@ -146,7 +146,7 @@ The LLM client constructs prompts from the `NarrationContext`:
 
 ```
 System: "You are the narrative voice of Ellmud, a dark fantasy
-extraction MUD. Describe only what is present in the game state.
+MUD/MMORPG. Describe only what is present in the game state.
 Never mention HP numbers, damage values, percentages, or
 mechanical terms. Use qualitative language for health and damage."
 
@@ -172,7 +172,7 @@ LLM responses are validated before delivery. Responses are **rejected** if they 
 |---------|---------|-----|
 | HP / damage numbers | "deals 8 damage" | Leaks mechanical state |
 | Percentages | "at 75%" | Leaks precise values |
-| Schema keywords | "hp_pct", "shard_stability" | Echoes internal field names |
+| Schema keywords | "hp_pct", "zone_stability" | Echoes internal field names |
 | XP / level references | "level 5", "gained 200 XP" | Not in current game state |
 | Gold / currency numbers | "50 gold" | No universal currency exists |
 

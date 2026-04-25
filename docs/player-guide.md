@@ -1,21 +1,22 @@
-# Player Guide — Phase 1
+# Player Guide
 
-Welcome to **Ellmud**, a PvPvE extraction RPG set in a dark fantasy world of unstable dimensional shards.
+Welcome to **Ellmud**, a real-time multiplayer MUD/MMORPG with permadeath and persistent consequence.
 
-You are a **Shardwalker** — diving into procedurally generated dungeons to scavenge gear, fight creatures, and extract before the shard collapses. Everything you don't extract, you lose.
+You are an **adventurer** in a vast world of hand-crafted zones filled with creatures, loot, and other players. Venture into dangerous areas to earn gear and experience. If you fall, your equipped gear is lost and left behind on your corpse. Your legend is recorded in the Hall of Fame. Every adventure carries weight.
 
 ## The Gameplay Loop
 
 ```
-1. Prepare  →  Equip gear from your stash
-2. Enter    →  Join a shard through the Shardboard
-3. Explore  →  Navigate rooms, find loot, avoid hazards
-4. Fight    →  Combat creatures (or other players)
-5. Extract  →  Channel the extraction ritual to escape
-6. Return   →  Items you carried are saved to your stash
+1. Spawn        →  Appear in your faction stronghold
+2. Prepare      →  Equip gear from your stash, form a group (optional)
+3. Enter Zone   →  Choose an adventure zone from the Expedition Board
+4. Explore      →  Navigate rooms, find loot, encounter creatures and players
+5. Combat       →  Fight creatures (or defend yourself against players)
+6. Survive/Die  →  Reach a zone exit and walk out alive, or fall and lose your gear
+7. Recover      →  Return to your stronghold with loot or respawn with death debuff
 ```
 
-**Death means loss.** If you die in a shard, you drop all non-soulbound items and respawn in the Refuge with shard-sickness (a temporary debuff).
+**If you die in a zone:** You drop all non-soulbound equipped items on your corpse. Other players can loot them. You respawn in your faction stronghold and receive a temporary death penalty debuff (reduced stats, regeneration). Your death is recorded in the Hall of Fame.
 
 ## Basic Commands
 
@@ -55,46 +56,47 @@ Type a direction to move:
 
 ### Combat
 
-Combat is **tick-based** (1-second rounds). When you encounter a creature:
+Combat is **real-time and continuous**. When you encounter a creature:
 
 ```
-> attack revenant   — Initiate combat
+> attack revenant   — Initiate combat against the creature
 ```
 
-During each combat tick, choose one action:
+During combat, your character **auto-attacks** the target each server tick (1 second). You control your actions via an ability bar with 5 hotkeys (1–5):
 
-| Action | Command | Effect |
-|--------|---------|--------|
-| Strike | `strike` | Attack your target |
-| Dodge | `dodge` | Reduce incoming damage |
-| Flee | `flee [direction]` | Attempt to escape |
+| Action | Hotkey | Effect |
+|--------|--------|--------|
+| Ability 1 | `1` | Use your first equipped ability |
+| Ability 2 | `2` | Use your second equipped ability |
+| Ability 3 | `3` | Use your third equipped ability |
+| Ability 4 | `4` | Use your fourth equipped ability |
+| Ability 5 | `5` | Use your fifth equipped ability |
+| Flee | `F` or type `flee` | Attempt to escape from combat |
+| Target Next | `Tab` | Cycle to the next hostile creature |
 
-**If you don't type anything**, you automatically dodge.
-
-**Damage is simultaneous** — all attacks resolve from start-of-tick health, then all damage is applied at once.
+**Abilities have cooldowns and cost stamina.** Choose which abilities to equip before entering a zone. The right ability at the right time can turn a fight.
 
 Combat ends when:
-- All enemies are defeated
-- You flee successfully
-- 10 ticks pass with no strikes (timeout)
+- All creatures in your room are defeated
+- You successfully flee to another room
+- You die
+
+**Positioning:** Your position affects combat effectiveness. During combat, you can reposition (Front, Flank, or Rear) — melee attacks work best from Front or Flank, while ranged attacks work from any position.
 
 **Alias:** `k` for `attack`.
 
-### Extraction
+### Leaving a Zone
 
-To escape a shard with your loot, find an **extraction room** and channel the ritual:
+When you've explored enough or want to preserve your loot, navigate to a **zone exit**:
 
 ```
-> extract
+> look              — Check if there's an exit in this room
+> go north          — Move toward an exit if one exists in that direction
 ```
 
-Extraction takes **5 ticks** (5 seconds). During this time:
-- You **cannot** move, attack, or flee
-- You **can** look, check inventory, take, and drop items
-- The ritual generates **loud noise** (level 8) — creatures will investigate
-- Taking damage **interrupts** the extraction
+Once you've exited the zone, all items in your inventory are automatically transferred to your stash in your faction stronghold. You've successfully completed your adventure!
 
-Successfully extracting saves all carried items to your stash.
+**You can exit at any time** — there's no timer, no ritual, no collapse. Just navigate to the edge of the zone and walk out.
 
 ### Social
 
@@ -104,29 +106,34 @@ Successfully extracting saves all carried items to your stash.
 
 Speech is heard by other players in the same room.
 
-## The Refuge
+## Your Faction Stronghold
 
-The Refuge is your safe hub between shard runs. Here you can:
+Your faction stronghold is your home base — a safe space where you prepare for adventures and manage your gear between runs. Here you can:
 
 ```
 > stash             — View your persistent stash (weight & items)
 > store sword       — Move an item from inventory to stash
-> shardboard        — See available shard entries
-> enter <shard-id>  — Enter an open shard listed on the shardboard
-> look              — Survey the Refuge
+> take sword        — Equip an item from your stash
+> look              — Survey the stronghold
+> board             — Access the Expedition Board to enter zones
 ```
 
-Your **stash** persists between runs. Default capacity: 200 weight units.
+### Stash
 
-## The Shardboard
+Your **stash** persists between zone visits. It holds all the gear you're not currently using. Default capacity: 200 weight units.
 
-The Shardboard shows available shard entries. Each shard has:
+Items in your stash are **always safe**. They are not lost on death and cannot be taken by other players.
 
-- **Shard ID** — The identifier used with `enter <shard-id>`
-- **Biome** — The environment type (Flooded Crypt, Shattered Bastion, etc.)
-- **Tier** — Difficulty level (Tier 1 is the easiest)
+### Expedition Board
+
+The Expedition Board lists available **zones** you can enter. Each zone has:
+
+- **Zone Name** — The area name (Flooded Crypt, Lost Catacombs, etc.)
+- **Tier** — Difficulty level (Tier 1 is easier; higher tiers are more dangerous)
 - **Modifiers** — Special conditions (darkness, bountiful loot, etc.)
-- **Lifecycle** — Seeding, Open, Active, Destabilising, or Collapse
+- **Current Population** — How many players are currently in this zone
+
+Select a zone and enter. You'll spawn in the entry room and can immediately begin exploring.
 
 ## Items & Gear
 
@@ -171,21 +178,30 @@ Creature behavior follows a state machine: **idle** → **alert** (heard noise) 
 
 ## Combat Tips
 
-1. **Dodge is free** — If you're unsure, doing nothing defaults to dodge
-2. **Check your exits** — Know where you can flee before engaging
-3. **Extraction is loud** — Clear nearby rooms before extracting
-4. **Items on the ground vanish** when the shard collapses — extract or lose them
-5. **Simultaneous damage** means mutual kills are possible — don't start a fight at low health
+1. **Plan your abilities** — Equip the right mix before entering a zone
+2. **Use positioning** — Melee works best from Front/Flank; ranged from any position
+3. **Know your exits** — Remember how to get back before engaging tough enemies
+4. **Group up** — Form a group with friends for tougher zones
+5. **Don't overextend** — If you're low on health and gear, head for an exit
 
-## Shard Lifecycle
+## Death & The Hall of Fame
 
-Shards are unstable and temporary:
+**Permadeath is permanent.** When you die:
+- Your character is gone forever (you can create a new one)
+- All equipped gear drops on your corpse for others to loot
+- Soulbound items (cosmetics, special rewards) are preserved
+- Your death is recorded in the **Hall of Fame** with your stats (zones cleared, creatures slain, gear value, etc.)
+- You respawn in your faction stronghold with a **death penalty debuff** that reduces your stats temporarily (30 minutes or until removed at the infirmary)
 
-| Phase | What Happens |
-|-------|-------------|
-| **Open** | Entry points activate, you can join |
-| **Active** | Explore, fight, loot freely |
-| **Destabilising** | Hazards intensify, time is running out |
-| **Collapse** | Shard destroyed — anything not extracted is lost |
+**There is no resurrection.** Your legacy lives on in the Hall of Fame, but your character's journey is over.
 
-Watch for stability warnings in the room descriptions. When the ground shakes, it's time to extract.
+## Zone Design
+
+Zones are **hand-crafted**, persistent areas designed for exploration and discovery. You'll return to the same zones multiple times, learning layouts and discovering secrets. Each visit feels fresh because:
+
+- **Other players** are present, creating unpredictable encounters
+- **Creatures respawn** on timers, changing what threats you face  
+- **Loot is distributed**, so you never find the exact same items twice
+- **Environmental hazards** create tactical challenges (water, darkness, unstable terrain)
+
+Zones do not collapse. There is no timer. You can spend as long as you want exploring, as long as you have the stamina to survive.
