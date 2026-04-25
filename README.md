@@ -1,10 +1,14 @@
 # 🎮 Ellmud
 
-> **PvPvE Extraction RPG — Real-Time MUD**
+> **Real-Time Multiplayer MUD/MMORPG — Permadeath, Persistent World**
 
-Explore persistent zones filled with creatures and loot. Scavenge gear, fight for survival, manage your persistent stash in the Refuge, then dive into extraction runs. Everything you don't extract, you lose. **Death is permanent** — but your legend lives on in the Hall of Fame.
+Explore hand-crafted zones filled with creatures, danger, and other adventurers. Earn gear through combat and discovery. Manage your persistent stash between adventures. **Permadeath is permanent** — every decision carries weight. Your legend lives on in the Hall of Fame.
 
-Ellmud is a text-primary, real-time multiplayer extraction RPG built on WebSocket, with rich prose narration powered by LLM prose generation. Built in TypeScript with Colyseus for real-time multiplayer, React for the web client, and PostgreSQL for persistence.
+Ellmud is a multiplayer MUD/MMORPG with permadeath consequences and rich prose narration powered by LLM generation. Play via web browser with text-primary interface, or use the standalone **Unity client** for full 3D graphics. Both clients connect to the same persistent server-authoritative world.
+
+**Server:** TypeScript + Colyseus for real-time multiplayer, PostgreSQL for persistence.  
+**Web Client:** React + Vite for modern browser experience.  
+**Unity Client:** Standalone 3D graphics client for Windows/Mac/Linux.
 
 ---
 
@@ -58,7 +62,7 @@ npm run dev:client    # Terminal 2: Client + admin UI
 
 ## 🏗️ Project Structure
 
-This is a **monorepo** with four packages:
+This repository contains the **server and web client** as a TypeScript monorepo with four packages:
 
 ```
 packages/
@@ -73,6 +77,8 @@ packages/
 - **client:** Vite + React SPA; runs in the browser.
 - **e2e:** Vitest integration tests; runs against a live server.
 
+**Unity Client:** The standalone 3D graphics client (Unity + C#) is maintained in a separate repository and connects to the same WebSocket server.
+
 ---
 
 ## 🛠️ Tech Stack
@@ -81,11 +87,12 @@ packages/
 |-------|-----------|---------|
 | **Runtime** | Node.js 22 / TypeScript | Server and shared code |
 | **Real-Time** | Colyseus 0.17 | WebSocket multiplayer framework |
-| **Client** | React 18 + Vite | Web UI (game + admin) |
-| **Database** | PostgreSQL 18 | Player state, stash, run history, content |
-| **Cache** | Redis 8 | Narration cache, Colyseus presence |
+| **Web Client** | React 18 + Vite | Browser UI (game + admin dashboard) |
+| **Graphics Client** | Unity + C# | Standalone 3D client for cross-platform desktop |
+| **Database** | PostgreSQL 18 | Player state, stash, progression, content |
+| **Cache** | Redis 8 | Narration cache, session presence |
 | **Auth** | Microsoft Entra External ID + bcrypt | Production OAuth/OIDC + local dev login |
-| **AI** | Azure AI Foundry (GPT-4o-mini) | Prose narration generation |
+| **AI** | Azure AI Foundry (GPT-4o-mini) | LLM-powered prose narration |
 | **Testing** | Vitest | Unit tests, integration tests, e2e tests |
 | **Linting** | ESLint + TypeScript | Type safety and code quality |
 | **Deployment** | Docker + Azure Container Apps | Production hosting |
@@ -175,38 +182,39 @@ See `.env.example` for a complete template. Key variables:
 ## 🎮 Game Features (Current)
 
 ### ✅ Phase 1 — Core Loop
-- **Zones & Exploration:** The Warrens procedurally generated; explore on foot
-- **Tick-Based Combat:** Strike, dodge, flee in 1.5-second combat ticks
-- **Creatures:** Drowned Revenant and other monsters with procedural stats
-- **Loot System:** 17 unique items across 6 rarity tiers; contextual drop tables
-- **Extraction:** 5-tick channeled extraction before shard collapse (10 minutes)
-- **Stash & Loadout:** Persistent inventory separate from in-run inventory
-- **Command Parser:** 17+ game commands with aliases (look, take, attack, flee, etc.)
-- **Prose Narration:** Every action is narrated by the LLM (with template fallback)
+- **Zones & Exploration:** Hand-crafted adventure zones; navigate via compass and directional commands
+- **Real-Time Combat:** Server-tick-based (1 second); auto-attack with ability bar (hotkeys 1–5)
+- **Creatures:** Various hostile creatures with procedural stats, behaviors, and loot tables
+- **Loot System:** 17+ unique items across rarity tiers; contextual drop tables by zone and creature
+- **Permadeath:** Characters don't respawn. Death drops equipped gear on a corpse; others can loot it
+- **Stash & Loadout:** Persistent inventory (stash) separate from in-run inventory; manage gear between adventures
+- **Command Parser:** 20+ game commands with aliases (look, take, attack, flee, emote, etc.)
+- **LLM Narration:** Every action narrated by Azure GPT-4o-mini with template fallback for latency
 
 ### ✅ Phase 2 — Multiplayer & Admin
-- **Multiplayer Shards:** Multiple instances of the Warrens; players may encounter each other
-- **React Web Client:** Modern UI with login, character select, gameplay, inventory
-- **Admin Dashboard:** Real-time content CRUD for creatures, items, biomes, loot tables, rooms, templates, etc.
-- **PostgreSQL Persistence:** Players, stash, run history, audit logs
-- **Microsoft Entra Integration:** OAuth/OIDC login for production; bcrypt for dev
-- **Audit Log:** Track all admin actions with timestamps and user info
-- **Simulators:** Test loot drops and creature stat rolls before deploying
+- **Shared-World Zones:** Multiple instances of zones; players encounter each other naturally
+- **React Web Client:** Modern browser UI with login, character creation, gameplay, inventory management, map
+- **Admin Dashboard:** Real-time content CRUD for creatures, items, loot tables, rooms, narrative templates
+- **PostgreSQL Persistence:** Player characters, stash, progression, audit logs
+- **Microsoft Entra Integration:** OAuth/OIDC login for production; bcrypt username/password for dev
+- **Audit Log:** Track all admin actions with detailed timestamps and user info
+- **Simulators:** Test loot drops and creature stat rolls before deployment
 
 ### ✅ Phase 2.5 — Admin Tools & Polish
-- **Permadeath System:** Characters don't respawn; Hall of Fame records all deaths
-- **Passive Dodge:** Posture system affects dodge chance (stand, crouch, etc.)
+- **Permadeath Hall of Fame:** Record character deaths with statistics and achievement tracking
+- **Passive Defense:** Posture system (stand, crouch, etc.) affects dodge chance
 - **Corpse Containers:** Dead creatures and players drop loot containers
 - **ANSI Formatting Toolbar:** Admin can style prose in content editors
-- **Zone Designer:** Visual map editor for static zones (Warrens topology tools)
-- **Deploy Page:** Preview changes, promote content between staging and production
+- **Zone Designer:** Visual map editor for authoring static hand-crafted zones
+- **Deploy Pipeline:** Preview changes, promote content between staging and production
 
 ### 🔄 Phase 3 — Planned
-- SSH/Raw TCP client adapter (legacy MUD client support)
-- Advanced creature AI (behavior trees, multi-phase fights)
-- PvP system (arenas, player contracts, faction warfare)
-- Content expansion (Siltgate and other biomes, more creatures, events)
-- Performance optimization (creature AI threading, narrative batching)
+- **Unity 3D Client:** Standalone graphics client for Windows/Mac/Linux; isometric or third-person perspective; same gameplay as web client
+- **Advanced Creature AI:** Behavior trees, multi-phase boss fights, pack mechanics
+- **Content Expansion:** Siltgate, Lost Catacombs, and other biomes; expanded creature roster
+- **Faction System:** Strongholds, faction vendors, contracts, reputation tracking
+- **Skills & Progression:** Character skills (Swordsmanship, Evasion, Awareness) unlock new abilities
+- **Performance Optimization:** Creature AI threading, narrative generation batching, netcode optimization
 
 ---
 
@@ -233,11 +241,12 @@ See `.env.example` for a complete template. Key variables:
 Key pillars encoded in the game:
 
 - **Permadeath is permanent.** When you die, you're dead. No respawns, no resurrection. New character only.
-- **Extraction is the goal.** Dying in a shard means losing all in-run loot. Get out alive or lose it all.
+- **Death has real consequences.** Dying in a zone means losing your equipped gear. Other players can loot your corpse. This creates meaningful risk.
 - **Server is authoritative.** All game state lives on the server. Clients only send commands.
 - **Text is canonical.** The prose feed is your primary interface to the game. All mechanics are visible here first.
 - **Inventory ≠ Stash.** Inventory is your active gear (lost on death). Stash is your persistent storage (preserved).
-- **LLM-generated prose.** When available, the Azure AI Foundry enriches templates with creative prose. If it times out, we fall back to static text.
+- **Shared world by default.** Zones are shared between players. Overflow is handled by transparent instance management, but players share the world.
+- **LLM-enriched prose.** When available, Azure AI Foundry enriches templates with creative prose. If it times out, we fall back to static text.
 
 For deep design philosophy, see **[GDD.md](GDD.md)**.
 
@@ -275,4 +284,4 @@ npm run test      # Run all tests
 
 ---
 
-**Built with ❤️ by the Ellmud team. Join us and help shape the future of this extraction RPG.**
+**Built with ❤️ by the Ellmud team. Join us and help shape the future of this MUD/MMORPG.**
