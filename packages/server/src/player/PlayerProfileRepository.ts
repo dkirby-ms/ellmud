@@ -29,10 +29,10 @@ export const DEFAULT_PROFILE: PlayerProfile = {
 
 export interface PlayerProfileRepository {
   /** Load saved profile. Returns null for new players. */
-  load(playerId: string): Promise<PlayerProfile | null>;
+  load(playerId: string, characterId: string): Promise<PlayerProfile | null>;
 
   /** Upsert player profile (skills, stats, equipment). */
-  save(playerId: string, profile: PlayerProfile): Promise<void>;
+  save(playerId: string, characterId: string, profile: PlayerProfile): Promise<void>;
 }
 
 // ─── In-Memory Implementation ───────────────────────────────────────────────
@@ -40,14 +40,14 @@ export interface PlayerProfileRepository {
 export class InMemoryPlayerProfileRepository implements PlayerProfileRepository {
   private profiles = new Map<string, PlayerProfile>();
 
-  async load(playerId: string): Promise<PlayerProfile | null> {
-    const profile = this.profiles.get(playerId);
+  async load(_playerId: string, characterId: string): Promise<PlayerProfile | null> {
+    const profile = this.profiles.get(characterId);
     if (!profile) return null;
     // Return a deep copy to prevent external mutation
     return structuredClone(profile);
   }
 
-  async save(playerId: string, profile: PlayerProfile): Promise<void> {
-    this.profiles.set(playerId, structuredClone(profile));
+  async save(_playerId: string, characterId: string, profile: PlayerProfile): Promise<void> {
+    this.profiles.set(characterId, structuredClone(profile));
   }
 }

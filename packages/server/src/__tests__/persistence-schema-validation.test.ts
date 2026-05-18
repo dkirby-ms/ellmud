@@ -251,7 +251,7 @@ describe('001_schema.sql — Skills', () => {
     expect(sql).toMatch(/xp\s+INT\s+NOT NULL\s+DEFAULT\s+0\s+CHECK\s*\(xp\s*>=\s*0\)/i);
   });
 
-  it('has unique constraint on player_id + skill_name', () => {
+  it('initially defines unique constraint on player_id + skill_name', () => {
     expect(sql).toMatch(/CONSTRAINT\s+uq_player_skill\s+UNIQUE\s*\(player_id,\s*skill_name\)/i);
   });
 
@@ -262,6 +262,18 @@ describe('001_schema.sql — Skills', () => {
 
   it('has category column for skill grouping', () => {
     expect(sql).toMatch(/category\s+TEXT\s+NOT NULL/i);
+  });
+});
+
+describe('021_fix_player_skills_unique_constraint.sql', () => {
+  const sql = readMigration('021_fix_player_skills_unique_constraint.sql');
+
+  it('drops the legacy player-scoped unique constraint', () => {
+    expect(sql).toMatch(/ALTER TABLE\s+player_skills\s+DROP CONSTRAINT\s+IF EXISTS\s+uq_player_skill/i);
+  });
+
+  it('adds character-scoped unique constraint', () => {
+    expect(sql).toMatch(/ADD CONSTRAINT\s+uq_character_skill\s+UNIQUE\s*\(character_id,\s*skill_name\)/i);
   });
 });
 
