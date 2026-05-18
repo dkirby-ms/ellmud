@@ -74,6 +74,11 @@ spec:
 #         metadata: {
 #           metricName: 'Requests'
 #           metricNamespace: 'Microsoft.App/containerApps'
+#           resourceURI: 'Microsoft.App/containerApps/<container-app-name>'
+#           tenantId: '<azure-tenant-id>'
+#           subscriptionId: '<azure-subscription-id>'
+#           resourceGroupName: '<resource-group-name>'
+#           metricAggregationType: 'Total'
 #           targetValue: '30'
 #           activationTargetValue: '10'
 #         }

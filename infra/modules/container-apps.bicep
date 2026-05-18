@@ -91,6 +91,7 @@ param authRequired string = 'true'
 param simulateLoad string = ''
 
 var createEnvironment = existingEnvironmentId == ''
+var containerAppName = '${resourcePrefix}-app'
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
 // The deploy step (ci-cd.yml) overrides command/args with the real entrypoint
@@ -138,7 +139,7 @@ resource redisService 'Microsoft.App/containerApps@2024-03-01' = if (deployApp &
 }
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
-  name: '${resourcePrefix}-app'
+  name: containerAppName
   location: location
   tags: tags
   identity: {
@@ -218,6 +219,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
               metadata: {
                 metricName: 'Requests'
                 metricNamespace: 'Microsoft.App/containerApps'
+                resourceURI: 'Microsoft.App/containerApps/${containerAppName}'
+                tenantId: tenant().tenantId
+                subscriptionId: subscription().subscriptionId
+                resourceGroupName: resourceGroup().name
+                metricAggregationType: 'Total'
                 targetValue: '30'
                 activationTargetValue: '10'
               }
