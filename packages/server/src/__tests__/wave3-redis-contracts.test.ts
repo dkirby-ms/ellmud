@@ -113,6 +113,10 @@ vi.mock('ioredis', () => {
 function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): ServerConfig {
   return {
     maxPlayersPerZone: 1,
+    loadSimulator: {
+      enabled: false,
+      targetConnections: 0,
+    },
     maxReplicas: 1,
     matchmakerMode: 'in-process',
     redis: {

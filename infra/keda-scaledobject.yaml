@@ -14,6 +14,7 @@
 # The Bicep config (infra/modules/container-apps.bicep) implements this
 # natively via Container Apps scale rules. This YAML is for documentation
 # and AKS/standalone-KEDA portability.
+# For demo traffic generation, the app also supports SIMULATE_LOAD via ACA env vars.
 
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -73,6 +74,11 @@ spec:
 #         metadata: {
 #           metricName: 'Requests'
 #           metricNamespace: 'Microsoft.App/containerApps'
+#           resourceURI: 'Microsoft.App/containerApps/<container-app-name>'
+#           tenantId: '<azure-tenant-id>'
+#           subscriptionId: '<azure-subscription-id>'
+#           resourceGroupName: '<resource-group-name>'
+#           metricAggregationType: 'Total'
 #           targetValue: '30'
 #           activationTargetValue: '10'
 #         }

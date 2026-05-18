@@ -12,6 +12,12 @@ export interface ServerConfig {
   /** Max concurrent players allowed in a single zone room. Env override via MAX_PLAYERS_PER_ZONE. */
   maxPlayersPerZone: number;
 
+  /** Fake localhost WebSocket load generator configuration. */
+  loadSimulator: {
+    enabled: boolean;
+    targetConnections: number;
+  };
+
   /** Max Container Apps replicas. Phase 2 = 4 (KEDA auto-scaling). */
   maxReplicas: number;
 
@@ -83,6 +89,9 @@ export const TIER_MAX_PLAYERS: Record<number, number> = {
 /** Default max players for persistent shared zones (non-procedural). */
 export const ZONE_DEFAULT_MAX_PLAYERS = 100;
 
+/** Default number of fake WebSocket clients when load simulation is toggled on. */
+export const LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS = 50;
+
 /**
  * Get tier-specific max players for procedural instances.
  * Respects MAX_PLAYERS_PER_ZONE env override if set.
@@ -130,12 +139,52 @@ function envStr(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+function envLoadSimulator(): ServerConfig['loadSimulator'] {
+  const raw = process.env['SIMULATE_LOAD'];
+  if (raw === undefined) {
+    return {
+      enabled: false,
+      targetConnections: LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS,
+    };
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === '' || normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+    return {
+      enabled: false,
+      targetConnections: 0,
+    };
+  }
+
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+    return {
+      enabled: true,
+      targetConnections: LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS,
+    };
+  }
+
+  const numeric = Number.parseInt(normalized, 10);
+  if (!Number.isNaN(numeric)) {
+    const targetConnections = Math.max(0, numeric);
+    return {
+      enabled: targetConnections > 0,
+      targetConnections,
+    };
+  }
+
+  return {
+    enabled: true,
+    targetConnections: LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS,
+  };
+}
+
 export function loadConfig(): ServerConfig {
   const openaiEndpoint = process.env.OPENAI_LLM_ENDPOINT;
   const openaiKey = process.env.OPENAI_LLM_KEY;
 
   return {
     maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
+    loadSimulator: envLoadSimulator(),
     maxReplicas: envInt('MAX_REPLICAS', 4),
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
     redis: {
