@@ -532,7 +532,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Load persisted profile (skills, carry weight, equipment) or use defaults
     let profile: PlayerProfile;
     try {
-      const saved = await this.profileRepo.load(this.dbPlayerId(playerId));
+      const saved = await this.profileRepo.load(this.dbPlayerId(playerId), playerId);
       profile = saved ?? { ...DEFAULT_PROFILE };
     } catch (err) {
       this.log(`Failed to load profile for ${this.playerTag(playerId)}: ${err}`);
@@ -3692,7 +3692,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         maxCarryWeight: playerState.maxCarryWeight,
         equipment: playerState.equipment,
       };
-      await this.profileRepo.save(this.dbPlayerId(playerId), profile);
+      await this.profileRepo.save(this.dbPlayerId(playerId), playerId, profile);
     } catch (err) {
       this.log(`Failed to save profile for ${this.playerTag(playerId)}: ${err}`);
     }

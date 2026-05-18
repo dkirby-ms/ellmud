@@ -32,12 +32,12 @@ const SKILL_MAP: Record<string, keyof PlayerSkills> = {
 };
 
 export class PgPlayerProfileRepository implements PlayerProfileRepository {
-  async load(playerId: string): Promise<PlayerProfile | null> {
+  async load(playerId: string, characterId: string): Promise<PlayerProfile | null> {
     const skillResult = await query<SkillRow>(
       `SELECT skill_name, category, level, xp
        FROM player_skills
-       WHERE player_id = $1`,
-      [playerId],
+       WHERE character_id = $1`,
+      [characterId],
     );
 
     if (skillResult.rows.length === 0) return null;
@@ -68,7 +68,7 @@ export class PgPlayerProfileRepository implements PlayerProfileRepository {
     return { skills, maxCarryWeight, ...(equipment ? { equipment } : {}) };
   }
 
-  async save(playerId: string, profile: PlayerProfile): Promise<void> {
+  async save(playerId: string, characterId: string, profile: PlayerProfile): Promise<void> {
     const client = await getClient();
     try {
       await client.query('BEGIN');
@@ -83,11 +83,11 @@ export class PgPlayerProfileRepository implements PlayerProfileRepository {
           : 'awareness';
 
         await client.query(
-          `INSERT INTO player_skills (player_id, skill_name, category, level, updated_at)
-           VALUES ($1, $2, $3, $4, now())
-           ON CONFLICT (player_id, skill_name)
-           DO UPDATE SET level = $4, updated_at = now()`,
-          [playerId, skillName, category, value],
+          `INSERT INTO player_skills (player_id, character_id, skill_name, category, level, updated_at)
+           VALUES ($1, $2, $3, $4, $5, now())
+           ON CONFLICT (character_id, skill_name)
+           DO UPDATE SET level = $5, updated_at = now()`,
+          [playerId, characterId, skillName, category, value],
         );
       }
 
