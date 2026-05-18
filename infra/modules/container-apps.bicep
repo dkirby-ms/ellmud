@@ -87,6 +87,9 @@ param adminToken string = ''
 @description('Require authentication to join rooms')
 param authRequired string = 'true'
 
+@description('Optional load simulator toggle for KEDA demos. Set to "true" or a connection count; empty string disables it.')
+param simulateLoad string = ''
+
 var createEnvironment = existingEnvironmentId == ''
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
@@ -200,6 +203,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'OPENAI_LLM_MODEL', value: openaiLlmModel }
             { name: 'ENABLE_LLM_NARRATION', value: enableLlmNarration }
             { name: 'ADMIN_TOKEN', value: adminToken }
+            { name: 'SIMULATE_LOAD', value: simulateLoad }
           ]
         }
       ]
