@@ -106,3 +106,26 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 **Files Changed:**
 - `.github/workflows/squad-promote.yml`: Full rewrite of promotion logic
 
+### 2026-05-18T09:42:59.318-05:00: SIMULATE_LOAD ACA wiring
+
+- `infra/modules/container-apps.bicep` is the source of truth for Azure Container Apps runtime env injection; new demo toggles should land there as deploy-time parameters with safe empty-string defaults.
+- `infra/main.bicep` and `infra/main.bicepparam` are the handoff path for ACA module parameters, so infra-facing env toggles need updates in both places.
+- `.env.example` documents operator-facing runtime flags, and `infra/keda-scaledobject.yaml` carries reference comments for KEDA/ACA scaling demos.
+- For open infra PR compatibility checks, `gh pr diff <number>` against `infra/modules/container-apps.bicep` is enough to confirm whether a new env var change overlaps with scaling-rule edits.
+
+
+### 2026-05-18: SIMULATE_LOAD Infrastructure Wiring
+
+**Status:** ✅ Complete — Bicep parameter added and documented
+
+**What was done:**
+- Added `simulateLoad` optional Bicep parameter to `infra/main.bicep` and `infra/modules/container-apps.bicep`
+- Passed parameter as `SIMULATE_LOAD` environment variable to Azure Container App (default: empty string, demos off by default)
+- Updated `infra/main.bicepparam` with parameter defaults
+- Updated `.env.example` with `SIMULATE_LOAD` documentation
+- Updated `infra/keda-scaledobject.yaml` with comments explaining the toggle
+
+**PR #491 compatibility:** No conflicts found. This change adds a new parameter while PR #491 modifies scale rule metadata — different concerns, non-overlapping lines. Safe to merge in either order.
+
+**Integration:** Works with Drizzt's load simulator module. Load simulator reads `SIMULATE_LOAD` env var at startup. See orchestration logs and decisions.md.
+
