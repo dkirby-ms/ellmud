@@ -89,7 +89,6 @@ describe('Solo Play — Player Limit Enforcement', () => {
 describe('Solo Play — Config Module', () => {
   beforeEach(() => {
     delete process.env['MAX_PLAYERS_PER_ZONE'];
-    delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
     resetConfig();
@@ -97,7 +96,6 @@ describe('Solo Play — Config Module', () => {
 
   afterEach(() => {
     delete process.env['MAX_PLAYERS_PER_ZONE'];
-    delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
     resetConfig();
@@ -117,7 +115,6 @@ describe('Solo Play — Config Module', () => {
 
   it('should override config from env vars', async () => {
     process.env['MAX_PLAYERS_PER_ZONE'] = '4';
-    process.env['MAX_REPLICAS'] = '3';
     process.env['REDIS_PRESENCE_ENABLED'] = 'true';
     process.env['REDIS_CONNECTION_STRING'] = 'redis://prod:6380';
 

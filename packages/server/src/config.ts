@@ -185,7 +185,6 @@ export function loadConfig(): ServerConfig {
   return {
     maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
     loadSimulator: envLoadSimulator(),
-    maxReplicas: envInt('MAX_REPLICAS', 4),
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
     redis: {
       enabled: envBool('REDIS_PRESENCE_ENABLED', false),
