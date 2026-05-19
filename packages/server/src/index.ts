@@ -433,9 +433,8 @@ console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/monitor`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Matchmaker driver: ${isDriverRedis ? 'Redis' : 'local'}`);
-if (config.maxReplicas > 1 && (!isPresenceRedis || !isDriverRedis)) {
+if (!isPresenceRedis || !isDriverRedis) {
   console.warn('[Ellmud] Multi-replica scaling is not cluster-safe: Redis presence/driver and ingress sticky sessions must all be enabled.');
 }
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
 console.log(`[Ellmud] Zone capacity: ${ZONE_DEFAULT_MAX_PLAYERS} default, ${config.maxPlayersPerZone} env override${process.env.MAX_PLAYERS_PER_ZONE ? ' (active)' : ''}`);
-console.log(`[Ellmud] Max replicas: ${config.maxReplicas}`);

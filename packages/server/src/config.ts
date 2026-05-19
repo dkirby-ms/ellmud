@@ -18,9 +18,6 @@ export interface ServerConfig {
     targetConnections: number;
   };
 
-  /** Max Container Apps replicas. Phase 2 = 4 (KEDA auto-scaling). */
-  maxReplicas: number;
-
   /** Matchmaker mode. 'in-process' = Colyseus default built-in matchmaker. */
   matchmakerMode: 'in-process';
 
