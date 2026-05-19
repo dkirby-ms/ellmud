@@ -215,7 +215,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
               metadata: {
                 metricName: 'Requests'
                 metricNamespace: 'Microsoft.App/containerApps'
-                resourceURI: 'Microsoft.App/containerApps/${containerAppName}'
+                resourceURI: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroup().name}/providers/Microsoft.App/containerApps/${containerAppName}'
                 tenantId: tenant().tenantId
                 subscriptionId: subscription().subscriptionId
                 resourceGroupName: resourceGroup().name
