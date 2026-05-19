@@ -94,6 +94,16 @@ interface CharacterSummary {
   name: string;
 }
 
+async function loginUser(baseUrl: string, username: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${baseUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) return null as unknown as AuthResponse;
+  return (await res.json()) as AuthResponse;
+}
+
 async function registerUser(baseUrl: string, username: string, password: string): Promise<AuthResponse> {
   const res = await fetch(`${baseUrl}/auth/register`, {
     method: 'POST',
@@ -104,6 +114,22 @@ async function registerUser(baseUrl: string, username: string, password: string)
     throw new Error(`Registration failed (${res.status}): ${await res.text()}`);
   }
   return (await res.json()) as AuthResponse;
+}
+
+/** Try login first; only register if the user doesn't exist yet. */
+async function loginOrRegister(baseUrl: string, username: string, password: string): Promise<AuthResponse> {
+  const existing = await loginUser(baseUrl, username, password);
+  if (existing) return existing;
+  return registerUser(baseUrl, username, password);
+}
+
+async function listCharacters(baseUrl: string, token: string): Promise<CharacterSummary[]> {
+  const res = await fetch(`${baseUrl}/api/characters`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { characters: CharacterSummary[] };
+  return body.characters ?? [];
 }
 
 async function createCharacter(baseUrl: string, token: string, name: string): Promise<CharacterSummary> {
@@ -184,18 +210,25 @@ async function spawnVirtualUser(opts: VirtualUserOptions): Promise<VirtualUser> 
       playerId = sharedPlayerId;
       username = sharedUsername;
     } else {
-      // AUTO mode: unique credentials per virtual user
-      const suffix = `${Date.now()}_${index}`;
-      username = `lt_${suffix}`;
-      const password = `Lt!${suffix}`;
-      const auth = await registerUser(baseUrl, username, password);
+      // AUTO mode: deterministic credentials per index so accounts are reusable
+      username = `loadtest${index}`;
+      const password = `Lt!loadtest${index}`;
+      const auth = await loginOrRegister(baseUrl, username, password);
       token = auth.token;
       playerId = auth.playerId;
     }
 
-    // Each context needs its own active character
-    const characterName = `Lt${index}_${Math.floor(Math.random() * 9999)}`;
-    const character = await createCharacter(baseUrl, token, characterName);
+    // Reuse existing character if available, otherwise create one
+    const existingChars = await listCharacters(baseUrl, token);
+    let character: CharacterSummary;
+    if (existingChars.length > 0) {
+      character = existingChars[0];
+    } else {
+      const alpha = 'abcdefghijklmnopqrstuvwxyz';
+      const randAlpha = Array.from({ length: 4 }, () => alpha[Math.floor(Math.random() * 26)]).join('');
+      const characterName = `Lt${randAlpha}${alpha[index % 26]}`;
+      character = await createCharacter(baseUrl, token, characterName);
+    }
     await selectCharacter(baseUrl, token, character.id);
 
     // Open a real browser context and inject auth into localStorage
@@ -265,7 +298,7 @@ async function main(): Promise<void> {
     console.log('[load-test] Auth mode: TOKEN (shared credentials)');
   } else {
     console.log('[load-test] Auth mode: AUTO (self-registering per connection)');
-    console.log('[load-test] NOTE: Auto-created accounts are NOT cleaned up on the server.');
+    console.log('[load-test] NOTE: Accounts use deterministic names (loadtest0, loadtest1, ...) and are reused across runs.');
   }
 
   const browser = await chromium.launch({ headless: true });
