@@ -14,7 +14,6 @@
 # The Bicep config (infra/modules/container-apps.bicep) implements this
 # natively via Container Apps scale rules. This YAML is for documentation
 # and AKS/standalone-KEDA portability.
-# For demo traffic generation, the app also supports SIMULATE_LOAD via ACA env vars.
 
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -62,25 +61,29 @@ spec:
 # Container Apps Native Scaling (reference — actual config in Bicep)
 #
 # The Container Apps Bicep module (infra/modules/container-apps.bicep)
-# configures equivalent scaling via the built-in HTTP scaler:
+# configures equivalent scaling via:
 #
 #   scale: {
 #     minReplicas: 1
 #     maxReplicas: 4
 #     rules: [{
 #       name: 'websocket-connections'
-#       http: {
+#       custom: {
+#         type: 'azure-monitor'
 #         metadata: {
-#           concurrentRequests: '30'
+#           metricName: 'Requests'
+#           metricNamespace: 'Microsoft.App/containerApps'
+#           resourceURI: 'Microsoft.App/containerApps/<container-app-name>'
+#           tenantId: '<azure-tenant-id>'
+#           subscriptionId: '<azure-subscription-id>'
+#           resourceGroupName: '<resource-group-name>'
+#           metricAggregationType: 'Total'
+#           targetValue: '30'
+#           activationTargetValue: '10'
 #         }
 #       }
 #     }]
 #   }
-#
-# The HTTP scaler counts concurrent active connections — including
-# long-lived WebSocket connections — making it the correct choice
-# for Colyseus game servers. Scale-up at 30 concurrent connections
-# per replica (i.e., at 31 connections on 1 replica, scale to 2).
 #
 # Sticky sessions are enabled for WebSocket affinity:
 #   stickySessions: { affinity: 'sticky' }

@@ -1,4 +1,8 @@
-name: Squad Promote
+name: Squad Promote (uat → prod)
+
+# Promotes uat → prod via pull request (respects branch protection).
+# For dev → uat promotion, use scheduled-uat-promote.yml (runs automatically
+# on schedule, or trigger manually via workflow_dispatch).
 
 on:
   workflow_dispatch:
@@ -12,62 +16,16 @@ on:
 
 permissions:
   contents: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: prod-promote
+  cancel-in-progress: false
 
 jobs:
-  dev-to-preview:
-    name: Promote dev → preview
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Fetch all branches
-        run: git fetch --all
-
-      - name: Show current state (dry run info)
-        run: |
-          echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
-          echo "=== preview HEAD ===" && git log origin/preview -1 --oneline
-          echo "=== Files that would be stripped ==="
-          git diff origin/preview..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
-
-      - name: Merge dev → preview (strip forbidden paths)
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          git checkout preview
-          git merge origin/dev --no-commit --no-ff -X theirs || true
-
-          # Strip forbidden paths from merge commit
-          git rm -rf --cached --ignore-unmatch \
-            .ai-team/ \
-            .squad/ \
-            .ai-team-templates/ \
-            team-docs/ \
-            "docs/proposals/" || true
-
-          # Commit if there are staged changes
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: promote dev → preview (v$(node -e "console.log(require('./package.json').version)"))"
-            git push origin preview
-            echo "✅ Pushed preview branch"
-          else
-            echo "ℹ️ Nothing to commit — preview is already up to date"
-          fi
-
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
-
-  preview-to-main:
-    name: Promote preview → main (release)
-    needs: dev-to-preview
+  uat-to-prod:
+    name: Promote uat → prod (release)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,36 +43,100 @@ jobs:
 
       - name: Show current state
         run: |
-          echo "=== preview HEAD ===" && git log origin/preview -1 --oneline
-          echo "=== main HEAD ===" && git log origin/main -1 --oneline
-          echo "=== Version ===" && node -e "console.log('v' + require('./package.json').version)"
+          echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
+          echo "=== prod HEAD ===" && git log origin/prod -1 --oneline
 
-      - name: Validate preview is release-ready
+      - name: Validate uat is release-ready
         run: |
-          git checkout preview
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
-            echo "::error::Version $VERSION not found in CHANGELOG.md — update before releasing"
-            exit 1
-          fi
-          echo "✅ Version $VERSION has CHANGELOG entry"
+          git checkout uat
 
-          # Verify no forbidden files on preview
+          # Verify no forbidden files on uat
           FORBIDDEN=$(git ls-files | grep -E "^(\.(ai-team|squad|ai-team-templates)/|team-docs/|docs/proposals/)" || true)
           if [ -n "$FORBIDDEN" ]; then
-            echo "::error::Forbidden files found on preview: $FORBIDDEN"
+            echo "::error::Forbidden files found on uat: $FORBIDDEN"
             exit 1
           fi
-          echo "✅ No forbidden files on preview"
+          echo "✅ No forbidden files on uat"
 
-      - name: Merge preview → main
-        if: ${{ inputs.dry_run == 'false' }}
+      - name: Check if promotion needed
+        id: check
         run: |
-          git checkout main
-          git merge origin/preview --no-ff -m "chore: promote preview → main (v$(node -e "console.log(require('./package.json').version)"))"
-          git push origin main
-          echo "✅ Pushed main — squad-release.yml will tag and publish the release"
+          if [ "$(git rev-parse origin/uat)" = "$(git rev-parse origin/prod)" ]; then
+            echo "ℹ️ prod already matches uat — nothing to promote"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            COMMIT_COUNT=$(git rev-list --count origin/prod..origin/uat)
+            echo "📦 uat is $COMMIT_COUNT commit(s) ahead of prod"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dry run — show what would be promoted
+        if: ${{ inputs.dry_run == 'true' && steps.check.outputs.skip != 'true' }}
+        run: |
+          echo "🔍 DRY RUN — the following commits would be promoted to prod:"
+          echo ""
+          git log --oneline origin/prod..origin/uat
+          echo ""
+          echo "Files that would change:"
+          git diff --stat origin/prod..origin/uat
+          echo ""
+          echo "🔍 Dry run complete — no PR created."
+
+      - name: Create promotion branch and open PR
+        if: ${{ inputs.dry_run == 'false' && steps.check.outputs.skip != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          BRANCH="promote/uat-to-prod-${TIMESTAMP}"
+
+          # Create temp branch from uat content
+          git checkout -b "$BRANCH" origin/uat
+
+          # Strip forbidden paths (single source of truth)
+          bash .github/scripts/strip-forbidden-paths.sh
+
+          # Commit stripped paths if any were removed
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: strip forbidden paths for prod promotion"
+          fi
+
+          # Push the promotion branch
+          git push origin "$BRANCH"
+
+          # Build PR body with commit summary
+          COMMIT_LOG=$(git log --oneline origin/prod..origin/uat | head -50)
+          COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
+          PR_BODY="## Promoting uat → prod
+
+          **Commits being promoted:** ${COMMIT_COUNT}
+
+          ### Commit log
+          \`\`\`
+          ${COMMIT_LOG}
+          \`\`\`
+
+          ---
+          *Automated by squad-promote workflow.*"
+
+          # Create PR targeting prod
+          PR_URL=$(gh pr create \
+            --base prod \
+            --head "$BRANCH" \
+            --title "chore: promote uat → prod" \
+            --body "$PR_BODY")
+
+          echo "✅ PR created: $PR_URL"
+
+          # Auto-merge the PR (will merge once required checks pass)
+          gh pr merge "$PR_URL" --auto --merge --delete-branch
+
+          echo "✅ Auto-merge enabled — PR will merge when checks pass"
+
+      # CI/CD is triggered automatically by the push/merge to prod (ci-cd.yml on: push).
+      # No manual dispatch needed — that caused duplicate CI/CD runs.
 
       - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
+        if: ${{ inputs.dry_run == 'true' && steps.check.outputs.skip == 'true' }}
+        run: echo "🔍 Dry run complete — prod already matches uat, nothing to do."
