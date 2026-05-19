@@ -129,3 +129,17 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 
 **Integration:** Works with Drizzt's load simulator module. Load simulator reads `SIMULATE_LOAD` env var at startup. See orchestration logs and decisions.md.
 
+### 2026-05-19T21:59:42.077+00:00: ACA image source investigation
+
+- `infra/modules/container-apps.bicep` intentionally defines a bootstrap image (`node:22-alpine`) and placeholder command; the real server image is expected to be applied later.
+- `.github/workflows/ci-cd.yml` deploys with `az containerapp update --image ... --command ...`, so CI/CD overrides the Bicep default image at deploy time rather than consuming the Bicep image directly.
+- `ci-cd.yml` ignores `infra/**` and `.github/**` on push/PR, so infra-only changes do not automatically trigger the image-override deploy.
+- Any `az deployment group create` using `infra/main.bicep` can reapply the Container App module's bootstrap image. Recent infra commits `4095b659` (`activeRevisionsMode: 'Single'`) and `62cca97c` (AI Foundry disabled) are plausible redeploy points that could leave the app on the placeholder image if no follow-up CI/CD or manual `az containerapp update` ran.
+
+### 2026-05-19T22:04:11.514+00:00: ACA infra redeploy image preservation
+
+- `infra/main.bicep` and `infra/modules/container-apps.bicep` now accept `containerImage`, `containerCommand`, and `containerArgs` parameters, with the existing `node:22-alpine` placeholder preserved as the greenfield default.
+- `infra/deploy.sh` now queries the current ACA container spec (`image`, `command`, `args`) before `az deployment group create` and feeds those values back into the Bicep deployment for brownfield redeploys.
+- This keeps first deploys bootstrappable while making infra-only redeploys idempotent: the live app entrypoint is preserved unless CI/CD intentionally changes it later.
+- Key paths for this pattern: `infra/deploy.sh`, `infra/main.bicep`, and `infra/modules/container-apps.bicep`.
+
