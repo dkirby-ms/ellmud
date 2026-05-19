@@ -369,6 +369,7 @@ const httpServer = http.createServer(app);
 // When Redis driver is enabled, use RedisDriver for matchmaker coordination
 // across replicas. Otherwise, use default local driver (single replica only).
 let driver = undefined;
+let isDriverRedis = false;
 if (config.redis.driverEnabled && config.redis.enabled) {
   // Pre-validate Redis before constructing RedisDriver — the Colyseus
   // package emits unhandled ioredis `error` events on connection failure.
@@ -379,6 +380,7 @@ if (config.redis.driverEnabled && config.redis.enabled) {
     try {
       const { RedisDriver } = await import('@colyseus/redis-driver');
       driver = new RedisDriver(config.redis.connectionString);
+      isDriverRedis = true;
       console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
     } catch (err) {
       console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
@@ -430,7 +432,10 @@ console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/monitor`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
-console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Matchmaker driver: ${isDriverRedis ? 'Redis' : 'local'}`);
+if (config.maxReplicas > 1 && (!isPresenceRedis || !isDriverRedis)) {
+  console.warn('[Ellmud] Multi-replica scaling is not cluster-safe: Redis presence/driver and ingress sticky sessions must all be enabled.');
+}
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
 console.log(`[Ellmud] Zone capacity: ${ZONE_DEFAULT_MAX_PLAYERS} default, ${config.maxPlayersPerZone} env override${process.env.MAX_PLAYERS_PER_ZONE ? ' (active)' : ''}`);
 console.log(`[Ellmud] Max replicas: ${config.maxReplicas}`);

@@ -91,3 +91,26 @@
 - The load test can safely stress Colyseus via the same browser command path used by players: locate `input[aria-label="Command input"]`, `fill()`, then `press('Enter')`.
 - A jittered per-user action loop with default `--action-interval 3000` avoids synchronized bursts while still creating sustained websocket and game-command pressure.
 - Key paths for this workflow: `package.json`, `scripts/load-test.sh`, and `packages/e2e/src/load-test.ts`.
+
+### 2026-05-19T15:02:22.910+00:00: Colyseus Multi-Replica Affinity & Character-ID Fallback (DELIVERED)
+
+**Task:** Fix Azure Container Apps multi-replica Colyseus routing (`seat reservation expired`) and investigate the `player_skills.character_id` foreign-key save failure during disconnect cleanup.
+
+**Outcome:** ✅ DELIVERED
+
+**Architecture / design decisions:**
+- `packages/server/src/index.ts` already had Redis presence + Redis driver support; the missing infra piece was ACA ingress sticky sessions. Container Apps must keep the Colyseus HTTP matchmake request and follow-up WebSocket on the same replica.
+- `infra/modules/container-apps.bicep` now enables `ingress.stickySessions.affinity = 'sticky'` so ARR affinity is explicit in IaC.
+- `packages/server/src/rooms/ZoneRoom.ts` now resolves the active character server-side when a client sends only `playerId`; room state is keyed to `characters.id`, while `ownerPlayerIds` keeps the backing `players.id` for persistence.
+- Profile saves now skip unresolved player/character pairs instead of attempting a `player_skills` write with an invalid `character_id`.
+- Startup logging now reports the actual Redis driver state, not just the env toggle, and warns when multi-replica startup is not cluster-safe.
+
+**Patterns / user-relevant notes:**
+- For Colyseus on ACA, the safe production trio is: RedisPresence + RedisDriver + sticky ingress sessions.
+- Local dev still falls back cleanly: if Redis is disabled or unreachable, Presence/driver stay local/in-memory.
+
+**Key file paths:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/zoneroom-player-id.test.ts`
+- `infra/modules/container-apps.bicep`
