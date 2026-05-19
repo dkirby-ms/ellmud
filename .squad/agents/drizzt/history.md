@@ -4,6 +4,28 @@
 
 ---
 
+### 2026-05-19: Load-Test Stress Behavior & Root npm Script (DELIVERED)
+
+**Task:** Enhance the Playwright load test with active stress behavior (movement & chat commands) and expose it via root npm script.
+
+**Outcome:** ✅ DELIVERED — All tests, lint, and build passed.
+
+**Deliverables:**
+- **Enhanced load-test.ts:** Configurable stress behavior (jittered movement/chat commands, default enabled, `--no-stress` flag supported)
+- **scripts/load-test.sh:** Convenience wrapper for shared endpoint (200 concurrent connections)
+- **Root npm script:** `npm run load-test` for operator access without cd into packages/e2e
+
+**Design decisions:**
+- Default stress mode exercises command-input path (more realistic than idle sockets)
+- Jittered delays prevent command synchronization across clients
+- Operators can opt out with `--no-stress` for connection-only testing
+- Base action interval: 3000ms with randomization
+
+**Integration:** Engine now measures both connection scale and steady-state gameplay traffic.
+
+---
+
+
 ### 2026-04-13: Permadeath DB Schema & Hall of Fame API (DELIVERED)
 
 **Task:** Build permadeath database schema, server config, and Hall of Fame REST API.
@@ -52,3 +74,20 @@
 - `packages/server/src/player/PlayerProfileRepository.ts` now needs both IDs: `playerId` for `player_profile` rows and `characterId` for `player_skills` rows, because profile data stayed account-scoped while skills moved to character scope in migration 021.
 - `packages/server/src/rooms/ZoneRoom.ts` is the bridge between runtime IDs and persistence IDs: room-level `playerId` is the character ID, while `dbPlayerId(characterId)` resolves the owning `players.id` UUID before calling persistence repositories.
 - Guardrails now need to validate both layers together: repo tests should assert `ON CONFLICT (character_id, skill_name)` in `PgPlayerProfileRepository`, and schema validation should treat `001_schema.sql` as the original constraint plus `021_fix_player_skills_unique_constraint.sql` as the migration that flips skills to character scope.
+
+### 2026-05-19T13:28:21.097+00:00: Root-Invokable Load Test Stress Traffic (DELIVERED)
+
+**Task:** Make the Playwright load test runnable from the repo root, add a shell wrapper for the shared test endpoint, and keep virtual users active with chat plus movement traffic.
+
+**Outcome:** ✅ DELIVERED
+
+**Deliverables:**
+- **Root script:** `package.json` now exposes `npm run load-test`, delegating to `@ellmud/e2e` with CLI passthrough.
+- **Wrapper:** `scripts/load-test.sh` targets `https://ellmud-test.kirbytoso.xyz` with 200 connections and default stress traffic.
+- **Stress behavior:** `packages/e2e/src/load-test.ts` now defaults to active post-connect behavior, sending jittered movement commands plus `say ...` chat messages through the command input.
+
+**Key patterns learned:**
+- Root workspace delegation supports reusable tooling entrypoints; adding a trailing `--` keeps extra CLI flags flowing into the workspace script.
+- The load test can safely stress Colyseus via the same browser command path used by players: locate `input[aria-label="Command input"]`, `fill()`, then `press('Enter')`.
+- A jittered per-user action loop with default `--action-interval 3000` avoids synchronized bursts while still creating sustained websocket and game-command pressure.
+- Key paths for this workflow: `package.json`, `scripts/load-test.sh`, and `packages/e2e/src/load-test.ts`.
