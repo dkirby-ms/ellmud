@@ -3,38 +3,41 @@
  * External load testing tool for Ellmud.
  *
  * Launches N real browser contexts via Playwright, each navigating to the
- * deployed app and establishing a live Colyseus WebSocket connection.  The
+ * deployed app and establishing a live Colyseus WebSocket connection. The
  * connections are ramped gradually so KEDA can observe the scaling signal.
  *
  * Usage:
  *   npm run load-test -- --url https://app.example.com --connections 50
  *
  * Optional flags:
- *   --ramp-rate   <n>   Connections to open per second  (default: 2)
- *   --token       <jwt> Shared auth token for all contexts
- *   --player-id   <id>  Player UUID matching the token above
- *   --username    <str> Display name stored in localStorage (default: "load-tester")
+ *   --ramp-rate        <n>    Connections to open per second               (default: 2)
+ *   --token            <jwt>  Shared auth token for all contexts
+ *   --player-id        <id>   Player UUID matching the token above
+ *   --username         <str>  Display name stored in localStorage          (default: "load-tester")
+ *   --action-interval  <ms>   Base interval between stress actions         (default: 3000)
+ *   --stress                  Enable movement/chat stress traffic          (default)
+ *   --no-stress               Keep connections idle after joining
  *
  * AUTH NOTE
  * ---------
  * The zone page requires valid auth data in localStorage
  * (ellmud_token, ellmud_playerId, ellmud_username, plus an active character
- * selection).  This tool handles that in one of two ways:
+ * selection). This tool handles that in one of two ways:
  *
  *   1. AUTO mode (default): Each virtual user registers a unique account,
- *      creates a character, selects it, then enters /zone.  This works when
+ *      creates a character, selects it, then enters /zone. This works when
  *      the target server allows open registration and the "the-reliquary"
- *      starting zone exists.  Auto-created accounts are NOT cleaned up
+ *      starting zone exists. Auto-created accounts are NOT cleaned up
  *      automatically — they will persist on the server.
  *
  *   2. TOKEN mode (--token + --player-id): A single pre-created JWT and
- *      player ID are injected into every context's localStorage.  Each
+ *      player ID are injected into every context's localStorage. Each
  *      context still creates its own character (one per connection attempt).
- *      Use this when the server has registration disabled.  Pre-seed the
- *      token with:  POST /auth/register  or  POST /auth/login.
+ *      Use this when the server has registration disabled. Pre-seed the
+ *      token with: POST /auth/register or POST /auth/login.
  */
 
-import { chromium, type Browser, type BrowserContext } from '@playwright/test';
+import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing
@@ -47,12 +50,19 @@ function parseArgs(argv: string[]): {
   token: string | undefined;
   playerId: string | undefined;
   username: string;
+  stress: boolean;
+  actionInterval: number;
 } {
   const args = argv.slice(2);
   const get = (flag: string): string | undefined => {
-    const idx = args.indexOf(flag);
-    return idx !== -1 ? args[idx + 1] : undefined;
+    for (let idx = args.length - 2; idx >= 0; idx -= 1) {
+      if (args[idx] === flag) {
+        return args[idx + 1];
+      }
+    }
+    return undefined;
   };
+  const has = (flag: string): boolean => args.includes(flag);
 
   const url = get('--url');
   if (!url) {
@@ -69,14 +79,27 @@ function parseArgs(argv: string[]): {
 
   const rampRateRaw = get('--ramp-rate');
   const rampRate = rampRateRaw ? parseInt(rampRateRaw, 10) : 2;
+  if (!Number.isFinite(rampRate) || rampRate <= 0) {
+    console.error('Error: --ramp-rate must be a positive integer.');
+    process.exit(1);
+  }
+
+  const actionIntervalRaw = get('--action-interval');
+  const actionInterval = actionIntervalRaw ? parseInt(actionIntervalRaw, 10) : 3_000;
+  if (!Number.isFinite(actionInterval) || actionInterval <= 0) {
+    console.error('Error: --action-interval must be a positive integer (milliseconds).');
+    process.exit(1);
+  }
 
   return {
     url: url.replace(/\/$/, ''),
     connections,
-    rampRate: Math.max(1, rampRate),
+    rampRate,
     token: get('--token'),
     playerId: get('--player-id'),
     username: get('--username') ?? 'load-tester',
+    stress: has('--no-stress') ? false : true,
+    actionInterval,
   };
 }
 
@@ -159,6 +182,114 @@ async function selectCharacter(baseUrl: string, token: string, characterId: stri
 }
 
 // ---------------------------------------------------------------------------
+// Stress traffic helpers
+// ---------------------------------------------------------------------------
+
+const COMMAND_INPUT_SELECTOR = 'input[aria-label="Command input"]';
+const CONNECTED_COMMAND_INPUT_SELECTOR = `${COMMAND_INPUT_SELECTOR}:not([disabled])`;
+const MOVEMENT_COMMANDS = ['north', 'south', 'east', 'west', 'up', 'down'] as const;
+const CHAT_MESSAGES = [
+  'status check from the load test',
+  'watching websocket pressure rise',
+  'keda should see this crowd soon',
+  'roaming the reliquary for science',
+  'colyseus is getting a proper workout',
+  'another synthetic traveler arrives',
+] as const;
+
+function randomItem<T>(items: readonly T[]): T {
+  const item = items[Math.floor(Math.random() * items.length)];
+  if (item === undefined) {
+    throw new Error('randomItem requires a non-empty array.');
+  }
+  return item;
+}
+
+function nextActionDelay(baseIntervalMs: number): number {
+  const jitterMultiplier = 0.5 + Math.random();
+  return Math.max(500, Math.round(baseIntervalMs * jitterMultiplier));
+}
+
+async function waitWithAbort(ms: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) {
+    return false;
+  }
+
+  return await new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve(true);
+    }, ms);
+
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function buildStressCommand(userIndex: number): string {
+  if (Math.random() < 0.5) {
+    return randomItem(MOVEMENT_COMMANDS);
+  }
+
+  return `say ${randomItem(CHAT_MESSAGES)} [lt-${userIndex}]`;
+}
+
+type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'closed';
+
+interface StressLoopHandle {
+  stop: () => void;
+  done: Promise<void>;
+}
+
+interface VirtualUser {
+  index: number;
+  status: ConnectionStatus;
+  error?: string;
+  context: BrowserContext | null;
+  actionLoop?: Promise<void>;
+  stopActions?: () => void;
+  close: () => Promise<void>;
+}
+
+function startStressLoop(page: Page, user: VirtualUser, actionIntervalMs: number): StressLoopHandle {
+  const controller = new AbortController();
+  const input = page.locator(COMMAND_INPUT_SELECTOR);
+
+  const done = (async () => {
+    while (!controller.signal.aborted) {
+      const shouldContinue = await waitWithAbort(nextActionDelay(actionIntervalMs), controller.signal);
+      if (!shouldContinue) {
+        break;
+      }
+
+      const command = buildStressCommand(user.index);
+      await input.fill(command);
+      await input.press('Enter');
+    }
+  })().catch((err) => {
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    const message = err instanceof Error ? err.message : String(err);
+    user.error = `Stress loop failed: ${message}`;
+    if (user.status === 'connected') {
+      user.status = 'closed';
+    }
+    console.warn(`[load-test] User ${user.index} stress loop stopped: ${message}`);
+  });
+
+  return {
+    stop: () => controller.abort(),
+    done,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Virtual user — one browser context holding one WebSocket connection
 // ---------------------------------------------------------------------------
 
@@ -169,30 +300,33 @@ interface VirtualUserOptions {
   sharedToken?: string;
   sharedPlayerId?: string;
   sharedUsername: string;
-}
-
-type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'closed';
-
-interface VirtualUser {
-  index: number;
-  status: ConnectionStatus;
-  error?: string;
-  context: BrowserContext | null;
-  close: () => Promise<void>;
+  stressEnabled: boolean;
+  actionIntervalMs: number;
 }
 
 async function spawnVirtualUser(opts: VirtualUserOptions): Promise<VirtualUser> {
-  const { browser, baseUrl, index, sharedToken, sharedPlayerId, sharedUsername } = opts;
+  const {
+    browser,
+    baseUrl,
+    index,
+    sharedToken,
+    sharedPlayerId,
+    sharedUsername,
+    stressEnabled,
+    actionIntervalMs,
+  } = opts;
 
   const user: VirtualUser = {
     index,
     status: 'connecting',
     context: null,
     close: async () => {
+      user.stopActions?.();
       if (user.context) {
         await user.context.close().catch(() => undefined);
         user.context = null;
       }
+      await user.actionLoop?.catch(() => undefined);
       if (user.status !== 'failed') {
         user.status = 'closed';
       }
@@ -251,9 +385,15 @@ async function spawnVirtualUser(opts: VirtualUserOptions): Promise<VirtualUser> 
     await page.goto('/zone');
 
     // Wait for the command input to appear (= live WS connection established)
-    await page.waitForSelector('input[aria-label="Command input"]:not([disabled])', {
+    await page.waitForSelector(CONNECTED_COMMAND_INPUT_SELECTOR, {
       timeout: 30_000,
     });
+
+    if (stressEnabled) {
+      const stressLoop = startStressLoop(page, user, actionIntervalMs);
+      user.stopActions = stressLoop.stop;
+      user.actionLoop = stressLoop.done;
+    }
 
     user.status = 'connected';
   } catch (err) {
@@ -270,10 +410,7 @@ async function spawnVirtualUser(opts: VirtualUserOptions): Promise<VirtualUser> 
 // Reporter — prints a live status line every N seconds
 // ---------------------------------------------------------------------------
 
-function startReporter(
-  users: VirtualUser[],
-  intervalMs = 5_000,
-): NodeJS.Timeout {
+function startReporter(users: VirtualUser[], intervalMs = 5_000): NodeJS.Timeout {
   return setInterval(() => {
     const connected = users.filter((u) => u.status === 'connected').length;
     const connecting = users.filter((u) => u.status === 'connecting').length;
@@ -294,6 +431,9 @@ async function main(): Promise<void> {
 
   console.log(`[load-test] Target: ${config.url}`);
   console.log(`[load-test] Connections: ${config.connections} (ramp: ${config.rampRate}/s)`);
+  console.log(
+    `[load-test] Stress traffic: ${config.stress ? `enabled (${config.actionInterval}ms base interval)` : 'disabled'}`,
+  );
   if (config.token) {
     console.log('[load-test] Auth mode: TOKEN (shared credentials)');
   } else {
@@ -331,7 +471,7 @@ async function main(): Promise<void> {
       const batchSize = Math.min(config.rampRate, config.connections - spawned);
       const batch: Promise<VirtualUser>[] = [];
 
-      for (let i = 0; i < batchSize; i++) {
+      for (let i = 0; i < batchSize; i += 1) {
         const idx = spawned++;
         batch.push(
           spawnVirtualUser({
@@ -341,6 +481,8 @@ async function main(): Promise<void> {
             sharedToken: config.token,
             sharedPlayerId: config.playerId,
             sharedUsername: config.username,
+            stressEnabled: config.stress,
+            actionIntervalMs: config.actionInterval,
           }),
         );
       }
@@ -360,7 +502,7 @@ async function main(): Promise<void> {
       }
 
       if (spawned < config.connections && !shuttingDown) {
-        await new Promise((r) => setTimeout(r, 1_000));
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
       }
     }
 

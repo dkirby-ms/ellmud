@@ -20,5 +20,3 @@ param postgresDatabaseName = 'ellmud'
 // Admin API token — required for admin dashboard access (fail-closed when unset)
 // param adminToken = readEnvironmentVariable('ADMIN_TOKEN')
 
-// Load simulator for KEDA autoscaling demos. Set to "true" or a connection count.
-param simulateLoad = ''
