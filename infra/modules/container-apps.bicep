@@ -148,7 +148,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
   properties: {
     managedEnvironmentId: resolvedEnvironmentId
     configuration: {
-      activeRevisionsMode: 'Multiple'
+      activeRevisionsMode: 'Single'
       ingress: {
         external: true
         targetPort: 2567
