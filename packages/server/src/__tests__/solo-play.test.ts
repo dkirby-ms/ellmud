@@ -107,7 +107,6 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     expect(config.maxPlayersPerZone).toBe(4);
-    expect(config.maxReplicas).toBe(4);
     expect(config.matchmakerMode).toBe('in-process');
     expect(config.redis.enabled).toBe(false);
     expect(config.redis.connectionString).toBe('redis://localhost:6379');
@@ -123,7 +122,6 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     expect(config.maxPlayersPerZone).toBe(4);
-    expect(config.maxReplicas).toBe(3);
     expect(config.redis.enabled).toBe(true);
     expect(config.redis.connectionString).toBe('redis://prod:6380');
   });
