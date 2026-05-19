@@ -17,7 +17,7 @@ Ellmud is a multiplayer MUD/MMORPG with permadeath consequences and rich prose n
 ### Prerequisites
 - **Node.js** ≥ 22.0.0 (see `.nvmrc`)
 - **npm** 10+
-- **Docker** (optional; for PostgreSQL and Redis in development)
+- **Docker** (optional; for PostgreSQL and Redis in development) 
 
 ### Local Development Setup
 

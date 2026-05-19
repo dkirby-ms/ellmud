@@ -117,7 +117,6 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
       enabled: false,
       targetConnections: 0,
     },
-    maxReplicas: 1,
     matchmakerMode: 'in-process',
     redis: {
       enabled: false,

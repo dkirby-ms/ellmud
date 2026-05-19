@@ -164,14 +164,15 @@ module containerAppsApp 'modules/container-apps.bicep' = {
 }
 
 // 7. AI Foundry — GPT-4o-mini serverless endpoint
-module aiFoundry 'modules/ai-foundry.bicep' = {
-  name: 'ai-foundry'
-  params: {
-    resourcePrefix: resourcePrefix
-    location: location
-    tags: tags
-  }
-}
+// AI Foundry disabled — using external OpenAI endpoint instead
+// module aiFoundry 'modules/ai-foundry.bicep' = {
+//   name: 'ai-foundry'
+//   params: {
+//     resourcePrefix: resourcePrefix
+//     location: location
+//     tags: tags
+//   }
+// }
 
 // ─── RBAC: Container App → ACR Pull ─────────────────────────────────────────
 
@@ -206,5 +207,5 @@ output containerAppFqdn string = containerAppsApp.outputs.containerAppFqdn
 output containerAppEnvironmentName string = containerAppsEnv.outputs.environmentName
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
-output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
+// output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

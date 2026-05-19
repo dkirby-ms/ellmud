@@ -89,7 +89,6 @@ describe('Solo Play — Player Limit Enforcement', () => {
 describe('Solo Play — Config Module', () => {
   beforeEach(() => {
     delete process.env['MAX_PLAYERS_PER_ZONE'];
-    delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
     resetConfig();
@@ -97,7 +96,6 @@ describe('Solo Play — Config Module', () => {
 
   afterEach(() => {
     delete process.env['MAX_PLAYERS_PER_ZONE'];
-    delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
     resetConfig();
@@ -109,7 +107,6 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     expect(config.maxPlayersPerZone).toBe(4);
-    expect(config.maxReplicas).toBe(4);
     expect(config.matchmakerMode).toBe('in-process');
     expect(config.redis.enabled).toBe(false);
     expect(config.redis.connectionString).toBe('redis://localhost:6379');
@@ -117,7 +114,6 @@ describe('Solo Play — Config Module', () => {
 
   it('should override config from env vars', async () => {
     process.env['MAX_PLAYERS_PER_ZONE'] = '4';
-    process.env['MAX_REPLICAS'] = '3';
     process.env['REDIS_PRESENCE_ENABLED'] = 'true';
     process.env['REDIS_CONNECTION_STRING'] = 'redis://prod:6380';
 
@@ -126,7 +122,6 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     expect(config.maxPlayersPerZone).toBe(4);
-    expect(config.maxReplicas).toBe(3);
     expect(config.redis.enabled).toBe(true);
     expect(config.redis.connectionString).toBe('redis://prod:6380');
   });
