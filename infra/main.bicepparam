@@ -19,3 +19,4 @@ param postgresDatabaseName = 'ellmud'
 
 // Admin API token — required for admin dashboard access (fail-closed when unset)
 // param adminToken = readEnvironmentVariable('ADMIN_TOKEN')
+

@@ -39,10 +39,10 @@ The token defaults to a random UUID at startup (logged to console). Override via
 
 ### Dashboard Features
 
-- **Active Rooms** — View all ShardRoom and RefugeRoom instances
-- **Room State** — Inspect Colyseus Schema state (player positions, shard lifecycle, combat encounters)
+- **Active Rooms** — View all ZoneRoom and StrongholdRoom instances
+- **Room State** — Inspect Colyseus Schema state (player positions, creatures, loot, combat encounters)
 - **Connected Clients** — See which clients are connected to which rooms
-- **Server Metrics** — Uptime, memory usage, room count
+- **Server Metrics** — Uptime, memory usage, room count, active players
 
 ## Admin Dashboard Features
 
@@ -53,16 +53,16 @@ The admin dashboard provides full CRUD operations for 11 entity types:
 | Entity | Management |
 |--------|------------|
 | **Creatures** | List, create, edit stats/behaviors/drops |
-| **Items** | List, create, edit tiers/weights/attributes |
-| **Biomes** | List, create, edit atmospheres/creatures/loot |
-| **Modifiers** | List, create, edit stat bonuses/restrictions |
-| **Loot Tables** | List, create, edit drop rates and creature associations |
-| **Skills** | List, create, edit progression/abilities |
-| **Factions** | List, create, edit memberships/rewards |
-| **Rooms** | List, create, edit graph connections and properties |
-| **Narrative Templates** | List, create, edit prose for game events |
-| **Contracts** | View planned contract system (stub) |
-| **Recipes** | View planned crafting system (stub) |
+| **Items** | List, create, edit rarity tiers/weights/attributes |
+| **Biomes** | List, create, edit zones/atmosphere/creature spawns |
+| **Loot Tables** | List, create, edit drop rates and tier progression |
+| **Zones** | List, create, edit zone definitions, room graphs, lifecycle |
+| **Rooms** | List, create, edit room properties and exit connections |
+| **Creatures (Spawning)** | Configure creature respawn rates and encounter balance |
+| **Narrative Templates** | List, create, edit prose for game events and narration |
+| **Factions** | List, create, edit faction definitions and progression |
+| **Admin Users** | Manage admin accounts, roles, and permissions |
+| **Audit Log** | View all administrative actions and content changes |
 
 All changes are tracked in the **Audit Log** with full admin attribution.
 
@@ -133,7 +133,8 @@ Key admin-relevant settings:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUTH_REQUIRED` | `false` | Set to `true` to require authentication |
-| `MAX_PLAYERS_PER_SHARD` | `1` | Increase for multiplayer (Phase 2) |
+| `MAX_PLAYERS_PER_ZONE` | `100` | Maximum concurrent players in a single zone |
+| `ZONE_RESPAWN_INTERVAL` | `300` | Creature respawn interval in ticks (5 minutes default) |
 | `REDIS_PRESENCE_ENABLED` | `false` | Enable for multi-replica scaling |
 | `LOG_LEVEL` | `info` | Set to `debug` for verbose logging |
 
@@ -179,8 +180,9 @@ Combat encounters are deterministic. Given the same initial state and actions, t
 | "Unknown command" errors | Unrecognized verb | Check `parser.ts` for known verbs |
 | Narration returns template text | No Azure credentials or LLM timeout | Set `AZURE_*` env vars, check connectivity |
 | Auth token rejected | Token expired (24h TTL) or server restarted | Re-login; in-memory tokens don't survive restarts |
-| Player can't join shard | `MAX_PLAYERS_PER_SHARD=1` and shard occupied | Increase limit or wait for shard to collapse |
-| Extraction fails | Player not in extraction-type room | Check room type via monitor dashboard |
+| Player stuck in zone | Creature encounter ongoing, cannot exit | Wait for combat to end or respawn |
+| Loot not appearing | Creature not spawned or container respawn timer pending | Check creature spawn logs, verify loot table |
+| Zone appears empty | Creatures not configured or respawn timer too long | Add creature spawns, check ZONE_RESPAWN_INTERVAL |
 
 ### Database Migrations (Phase 2+)
 
@@ -192,11 +194,11 @@ SELECT * FROM _migrations ORDER BY applied_at;
 
 Migration files in `packages/server/src/db/migrations/`:
 - `001_create_players.sql` — Player accounts, identities, authentication
-- `002_create_items.sql` — Item definitions, stash entries, inventory
-- `003_create_skills.sql` — Player skill progression
-- `004_create_factions.sql` — Faction definitions, memberships
-- `005_create_run_history.sql` — Extraction run history, analytics
-- `006_create_audit_log.sql` — Admin action audit trail
+- `002_create_zones.sql` — Zone definitions, room graphs, encounter data
+- `003_create_items.sql` — Item definitions, loot tables, gear progression
+- `004_create_creatures.sql` — Creature types, spawning rules, AI behavior
+- `005_create_player_stash.sql` — Player stash entries, inventory, gear tracking
+- `006_create_audit_log.sql` — Admin action audit trail, content changes
 - `007_create_admin_users.sql` — Admin accounts, roles, sessions
 
 ## Phase 3+ Planned Features

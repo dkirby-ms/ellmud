@@ -70,6 +70,7 @@ param adminToken string = ''
 @description('Require authentication to join rooms (true for production)')
 param authRequired string = 'true'
 
+
 // ─── Variables ──────────────────────────────────────────────────────────────
 
 var resourcePrefix = 'ellmud-${environmentName}'

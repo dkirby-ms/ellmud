@@ -10,6 +10,7 @@ import { ColyseusTestServer } from '@colyseus/testing';
 import { bootTestServer, wait } from './helpers/index.js';
 import { MessageCollector } from './helpers/message-collector.js';
 import { MessageTypes } from '@ellmud/shared';
+import { DEFAULT_PLAYER_COMBAT_STATS } from '../character/CharacterRepository.js';
 
 
 let colyseus: ColyseusTestServer;
@@ -92,6 +93,46 @@ describe('ZoneRoom playerId keying', () => {
 
     const serverRoom = room as unknown as { players: Map<string, unknown> };
     expect(serverRoom.players.has(client.sessionId)).toBe(true);
+
+    await client.leave();
+  });
+
+  it('should resolve the active character when playerId is present but characterId is missing', async () => {
+    const room = await createZoneRoom();
+    const serverRoom = room as unknown as {
+      characterRepo: {
+        getActive: (playerId: string) => Promise<unknown>;
+        getById: (characterId: string) => Promise<unknown>;
+      };
+      players: Map<string, unknown>;
+      ownerPlayerIds: Map<string, string>;
+    };
+
+    const originalGetActive = serverRoom.characterRepo.getActive.bind(serverRoom.characterRepo);
+    const originalGetById = serverRoom.characterRepo.getById.bind(serverRoom.characterRepo);
+    const activeCharacter = {
+      id: 'resolved-character-1',
+      playerId: 'db-player-1',
+      name: 'Resolved Character',
+      startingZoneSlug: 'the-refuge',
+      factionSlug: null,
+      isActive: true,
+      createdAt: new Date(),
+      lastPlayedAt: null,
+      deletedAt: null,
+      combatStats: { ...DEFAULT_PLAYER_COMBAT_STATS },
+    };
+
+    serverRoom.characterRepo.getActive = async (playerId: string) =>
+      playerId === 'db-player-1' ? activeCharacter : originalGetActive(playerId);
+    serverRoom.characterRepo.getById = async (characterId: string) =>
+      characterId === activeCharacter.id ? activeCharacter : originalGetById(characterId);
+
+    const { client } = await connectWithPlayerId(room, 'db-player-1');
+
+    expect(serverRoom.players.has(activeCharacter.id)).toBe(true);
+    expect(serverRoom.players.has('db-player-1')).toBe(false);
+    expect(serverRoom.ownerPlayerIds.get(activeCharacter.id)).toBe('db-player-1');
 
     await client.leave();
   });

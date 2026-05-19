@@ -1,6 +1,6 @@
 # Contributing to Ellmud
 
-Thanks for your interest in contributing to **Ellmud**, a PvPvE Extraction RPG! This guide will help you get started.
+Thanks for your interest in contributing to **Ellmud**, a real-time multiplayer MUD/MMORPG with permadeath! This guide will help you get started.
 
 ## Getting Started
 
@@ -80,27 +80,29 @@ If you add features, please add corresponding tests.
 ## Areas of Contribution
 
 ### Game Logic & Systems
-- Creature AI and behaviors
-- Combat mechanics and balance
-- Item system and loot distribution
-- Extraction mechanics
-- New zone content (via GDD.md proposal)
+- Creature AI and behaviors (state machines, pack mechanics, boss fights)
+- Combat mechanics and balance (abilities, positioning, threat systems)
+- Item system and loot distribution (by zone, by creature type)
+- Progression and skills (leveling mechanics, ability unlocks)
+- **Zone design and content** (hand-crafted areas, encounters, environmental storytelling)
 
 ### Client & UI
-- Game client improvements
-- Admin dashboard features
+- Web client (React) improvements
+- Unity 3D client development and graphics
+- Admin dashboard features and tools
 - Player guide and tutorials
 - Accessibility improvements
 
 ### Backend & Infrastructure
 - Performance optimizations
 - Database schema improvements
-- API enhancements
+- API enhancements and WebSocket protocol
 - DevOps and deployment
 
 ### Documentation
 - Player guides and tutorials
-- Architecture documentation
+- Architecture documentation (server, protocol, clients)
+- Zone design specifications and guidelines
 - API reference improvements
 - Setup and troubleshooting
 

@@ -38,6 +38,7 @@ function mockQueryResult(rows: QueryResultRow[] = [], command = 'SELECT') {
 }
 
 const PLAYER_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const CHARACTER_ID = 'ffffffff-1111-2222-3333-444444444444';
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ describe('PgPlayerProfileRepository', () => {
     it('should return null for unknown player', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([]));
 
-      const profile = await repo.load('unknown-player');
+      const profile = await repo.load('unknown-player', 'unknown-character');
       expect(profile).toBeNull();
     });
 
@@ -70,7 +71,18 @@ describe('PgPlayerProfileRepository', () => {
         { max_carry_weight: 35, equipment: { weapon: 'Scimitar', armour: 'Mithral Chain' } },
       ]));
 
-      const profile = await repo.load(PLAYER_ID);
+      const profile = await repo.load(PLAYER_ID, CHARACTER_ID);
+
+      expect(queryMock).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('WHERE character_id = $1'),
+        [CHARACTER_ID],
+      );
+      expect(queryMock).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('WHERE player_id = $1'),
+        [PLAYER_ID],
+      );
 
       expect(profile).toEqual({
         skills: { stealth: 12, awareness: 8 },
@@ -87,7 +99,7 @@ describe('PgPlayerProfileRepository', () => {
       // Profile row missing
       queryMock.mockResolvedValueOnce(mockQueryResult([]));
 
-      const profile = await repo.load(PLAYER_ID);
+      const profile = await repo.load(PLAYER_ID, CHARACTER_ID);
 
       expect(profile).not.toBeNull();
       expect(profile!.maxCarryWeight).toBe(DEFAULT_PROFILE.maxCarryWeight);
@@ -102,7 +114,7 @@ describe('PgPlayerProfileRepository', () => {
         { max_carry_weight: 20, equipment: {} },
       ]));
 
-      const profile = await repo.load(PLAYER_ID);
+      const profile = await repo.load(PLAYER_ID, CHARACTER_ID);
       expect(profile!.equipment).toBeUndefined();
     });
   });
@@ -119,7 +131,7 @@ describe('PgPlayerProfileRepository', () => {
         .mockResolvedValueOnce({})  // player_profile upsert
         .mockResolvedValueOnce({}); // COMMIT
 
-      await repo.save(PLAYER_ID, {
+      await repo.save(PLAYER_ID, CHARACTER_ID, {
         skills: { stealth: 15, awareness: 10 },
         maxCarryWeight: 40,
         equipment: { weapon: 'Scimitar', tier: 'legendary' },
@@ -129,8 +141,15 @@ describe('PgPlayerProfileRepository', () => {
       expect(mockClient.query.mock.calls[0][0]).toBe('BEGIN');
 
       // Skills
-      expect(mockClient.query.mock.calls[1][0]).toContain('INSERT INTO player_skills');
-      expect(mockClient.query.mock.calls[2][0]).toContain('INSERT INTO player_skills');
+      const firstSkillCall = mockClient.query.mock.calls[1];
+      expect(firstSkillCall[0]).toContain('INSERT INTO player_skills');
+      expect(firstSkillCall[0]).toContain('character_id');
+      expect(firstSkillCall[0]).toContain('ON CONFLICT (character_id, skill_name)');
+      expect(firstSkillCall[1]).toEqual([PLAYER_ID, CHARACTER_ID, 'stealth', 'subterfuge', 15]);
+
+      const secondSkillCall = mockClient.query.mock.calls[2];
+      expect(secondSkillCall[0]).toContain('INSERT INTO player_skills');
+      expect(secondSkillCall[1]).toEqual([PLAYER_ID, CHARACTER_ID, 'awareness', 'awareness', 10]);
 
       // Extended profile
       const profileCall = mockClient.query.mock.calls[3];
@@ -154,7 +173,7 @@ describe('PgPlayerProfileRepository', () => {
         .mockResolvedValueOnce({})  // profile
         .mockResolvedValueOnce({}); // COMMIT
 
-      await repo.save(PLAYER_ID, {
+      await repo.save(PLAYER_ID, CHARACTER_ID, {
         skills: { stealth: 5, awareness: 5 },
         maxCarryWeight: 20,
       });
@@ -168,7 +187,7 @@ describe('PgPlayerProfileRepository', () => {
         .mockResolvedValueOnce({})  // BEGIN
         .mockRejectedValueOnce(new Error('db error'));
 
-      await expect(repo.save(PLAYER_ID, {
+      await expect(repo.save(PLAYER_ID, CHARACTER_ID, {
         skills: { stealth: 5, awareness: 5 },
         maxCarryWeight: 20,
       })).rejects.toThrow('db error');
@@ -186,7 +205,7 @@ describe('PgPlayerProfileRepository', () => {
         .mockResolvedValueOnce({})  // profile
         .mockResolvedValueOnce({}); // COMMIT
 
-      await repo.save(PLAYER_ID, {
+      await repo.save(PLAYER_ID, CHARACTER_ID, {
         skills: { stealth: 5, awareness: 5 },
         maxCarryWeight: 20,
       });
@@ -201,7 +220,7 @@ describe('PgPlayerProfileRepository', () => {
         .mockResolvedValueOnce({})  // profile
         .mockResolvedValueOnce({}); // COMMIT
 
-      await repo.save(PLAYER_ID, {
+      await repo.save(PLAYER_ID, CHARACTER_ID, {
         skills: { stealth: 20, awareness: 15 },
         maxCarryWeight: 50,
         equipment: { weapon: 'Icingdeath', armour: 'Mithral Chain', tier: 'legendary' },

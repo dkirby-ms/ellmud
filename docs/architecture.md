@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Ellmud is a PvPvE extraction RPG built as a real-time MUD. This document describes the system architecture, component boundaries, and data flow.
+Ellmud is a real-time multiplayer MUD/MMORPG with permadeath and persistent consequences. This document describes the system architecture, component boundaries, and data flow.
 
 ## Design Principle
 
@@ -11,36 +11,39 @@ All game state is server-authoritative and deterministic. The LLM is a narrative
 ## High-Level Architecture
 
 ```
-┌─────────────────┐
-│  Web Terminal    │  @colyseus/sdk (message-only, no Schema sync)
-│  (Browser)       │
-└────────┬────────┘
-         │ WebSocket
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  Azure Container Apps                                │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Colyseus 0.17.x  (Express + WebSocket)       │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌────────────┐  │  │
-│  │  │ShardRoom │  │RefugeRoom│  │ Matchmaker │  │  │
-│  │  │(per shard│  │(persistent│  │ (built-in) │  │  │
-│  │  │ 20-40min)│  │  hub)    │  │            │  │  │
-│  │  └──────────┘  └──────────┘  └────────────┘  │  │
-│  │       │              │                        │  │
-│  │  ┌────┴──────────────┴────────────────────┐   │  │
-│  │  │  Game Systems                           │   │  │
-│  │  │  Combat · Extraction · Creatures · Items│   │  │
-│  │  │  Stash · Commands · Auth · Narrative    │   │  │
-│  │  └────────────────────────────────────────┘   │  │
-│  └───────────────────────────────────────────────┘  │
-│         │              │              │              │
-│    ┌────┴───┐    ┌─────┴────┐   ┌────┴──────┐      │
-│    │ Redis  │    │PostgreSQL│   │Azure AI   │      │
-│    │(cache +│    │(player   │   │Foundry    │      │
-│    │presence│    │ persist) │   │(GPT-4o-   │      │
-│    │)       │    │          │   │ mini)     │      │
-│    └────────┘    └──────────┘   └───────────┘      │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  Clients (Web + Unity)                                    │
+│  Both connect via WebSocket (message-only, no state sync) │
+└────────┬─────────────────────────────────────────┬───────┘
+         │                                          │
+    WebSocket                                  WebSocket
+         │                                          │
+         ▼                                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  Azure Container Apps                                    │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Colyseus 0.17.x  (Express + WebSocket)           │  │
+│  │  ┌──────────┐  ┌────────────────┐  ┌──────────┐  │  │
+│  │  │ZoneRoom  │  │StrongholdRoom  │  │Matchmaker│  │  │
+│  │  │(Persistent│  │(Persistent hub,│  │(built-in)│  │  │
+│  │  │ adventure │  │ safe spawn)    │  │          │  │  │
+│  │  │ zones)   │  │                │  │          │  │  │
+│  │  └──────────┘  └────────────────┘  └──────────┘  │  │
+│  │       │              │                         │  │
+│  │  ┌────┴──────────────┴──────────────────────┐   │  │
+│  │  │  Game Systems                             │   │  │
+│  │  │  Combat · Creatures · Items · Loot       │   │  │
+│  │  │  Stash · Groups · Commands · Narrative   │   │  │
+│  │  └────────────────────────────────────────────┘   │  │
+│  └───────────────────────────────────────────────────┘  │
+│         │              │              │                  │
+│    ┌────┴───┐    ┌─────┴────┐   ┌────┴──────┐          │
+│    │ Redis  │    │PostgreSQL│   │Azure AI   │          │
+│    │(cache, │    │(player   │   │Foundry    │          │
+│    │session │    │state,    │   │(GPT-4o-   │          │
+│    │presence│    │content)  │   │mini)      │          │
+│    └────────┘    └──────────┘   └───────────┘          │
+└─────────────────────────────────────────────────────────┘
          │
     ┌────┴──────────┐
     │ Application   │
@@ -54,31 +57,26 @@ All game state is server-authoritative and deterministic. The LLM is a narrative
 
 | Room | Purpose | Lifetime | Tick |
 |------|---------|----------|------|
-| `ShardRoom` | Exploration, combat, extraction | 20-40 min (shard lifecycle) | 1s |
-| `RefugeRoom` | Persistent hub, stash, loadout | Permanent | 1s |
+| `ZoneRoom` | Adventure zones (persistent or temporary) | Persistent or per-zone lifecycle | 1s |
+| `StrongholdRoom` | Persistent faction hub (spawn, stash, preparation) | Permanent | 1s |
 
-**ShardRoom lifecycle:** `seeding` → `open` → `active` → `destabilising` → `collapse`
+**ZoneRoom:** Hand-crafted persistent zones or temporary instanced zones. Players navigate, fight creatures, find loot, and exit via zone boundaries to return to stronghold with gear.
 
-- Seeding: generates room graph, spawns creatures, places loot
-- Open: entry points activate, players may join
-- Active: full exploration, combat, extraction
-- Destabilising: final 25% — hazards intensify
-- Collapse: shard destroyed, remaining items lost
-
-**RefugeRoom:** Safe zone. Stash management, shardboard access, no combat.
+**StrongholdRoom:** Safe faction hub. Stash management, Expedition Board (zone selection), no combat, no creature spawns. Players spawn here after character creation and after death.
 
 ### Game Systems
 
 | System | Location | Responsibility |
 |--------|----------|---------------|
 | Commands | `commands/parser.ts` | Parse text input into `{verb, args}` |
-| Combat | `combat/` | Tick-based simultaneous resolution |
-| Extraction | `extraction/` | Multi-tick channeled escape |
-| Creatures | `creatures/` | AI behavior trees, spawning, loot |
-| Items | `items/registry.ts` | Item definitions, stats, durability |
-| Stash | `stash/` | Persistent inventory (per player) |
-| Narrative | `narrative/` | LLM → cache → template pipeline |
-| Auth | `auth/` | Username/password, JWT-like tokens |
+| Combat | `combat/` | Real-time tick-based resolution (1s tick, auto-attack + abilities) |
+| Creatures | `creatures/` | AI behavior trees, spawning, loot drops |
+| Items & Loot | `items/`, `loot/` | Item definitions, rarity tiers, loot tables, durability |
+| Stash | `stash/` | Persistent inventory storage (per player) |
+| Groups | `groups/` | Group formation, loot distribution, group frames |
+| Narrative | `narrative/` | LLM → cache → template pipeline for prose |
+| Auth | `auth/` | OAuth/Entra login, session tokens |
+| Zones | `zones/` | Zone definitions, room graphs, zone instancing |
 
 ### External Services
 
@@ -150,11 +148,10 @@ The client is a prose-only terminal. **No Colyseus Schema state is ever synced t
 |-----------|------------|---------|
 | Client → Server | `cmd` | `{ verb: string, args: string[] }` |
 | Server → Client | `narrate` | `{ text: string, type: NarrationType, timestamp: number }` |
-| Server → Client | `room_header` | `{ roomName: string, exits: string[], stability: number }` |
-| Server → Client | `shard_state` | `{ state: ShardState, collapseTimer?: number }` |
+| Server → Client | `room_header` | `{ roomName: string, exits: string[], zone: string }` |
 | Server → Client | `combat_result` | `{ tick, encounterId, results[], combatEnded }` |
-| Server → Client | `extraction_state` | `{ playerId, state, ticksRemaining?, narration, timestamp }` |
-| Server → Client | `stash_update` | Stash contents update |
+| Server → Client | `group_update` | `{ groupId, leader, members[], lootMode, timestamp }` |
+| Server → Client | `stash_update` | Stash contents and loadout changes |
 
 ## Security Model
 

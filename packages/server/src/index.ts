@@ -28,7 +28,7 @@ import {
 import { createHealthRouter } from './health.js';
 import { createVersionRouter } from './api/version.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter, initAdminAuth } from './admin/index.js';
-import { getConfig, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
+import { getConfig, LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
@@ -50,6 +50,7 @@ import { initCharacterFlagsProvider } from './db/CharacterFlagsRepository.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
 import { initContentRegistry } from './content/index.js';
+import { LoadSimulator, createLoadSimulatorRouter, registerLoadSimulatorShutdown } from './load-simulator/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -166,6 +167,14 @@ const { presence, isRedis: isPresenceRedis } = await createPresence(config);
 
 const app = express();
 app.use(express.json());
+
+const loadSimulator = new LoadSimulator({
+  url: `ws://127.0.0.1:${PORT}`,
+  defaultTargetConnections: config.loadSimulator.enabled
+    ? config.loadSimulator.targetConnections
+    : LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS,
+});
+registerLoadSimulatorShutdown(loadSimulator);
 
 // Global rate limiter — baseline protection for all endpoints (500 req / 15 min per IP).
 // Per-route limiters (authLimiter, apiLimiter, adminWriteLimiter) enforce tighter tiers.
@@ -319,6 +328,7 @@ console.log('[Ellmud] Zone management API: enabled');
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
+app.use(createLoadSimulatorRouter({ loadSimulator }));
 
 // User management CRUD — admin-only user accounts
 if (USE_PG) {
@@ -359,6 +369,7 @@ const httpServer = http.createServer(app);
 // When Redis driver is enabled, use RedisDriver for matchmaker coordination
 // across replicas. Otherwise, use default local driver (single replica only).
 let driver = undefined;
+let isDriverRedis = false;
 if (config.redis.driverEnabled && config.redis.enabled) {
   // Pre-validate Redis before constructing RedisDriver — the Colyseus
   // package emits unhandled ioredis `error` events on connection failure.
@@ -369,6 +380,7 @@ if (config.redis.driverEnabled && config.redis.enabled) {
     try {
       const { RedisDriver } = await import('@colyseus/redis-driver');
       driver = new RedisDriver(config.redis.connectionString);
+      isDriverRedis = true;
       console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
     } catch (err) {
       console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
@@ -408,12 +420,22 @@ if (!registeredZoneSlugs.has('the-refuge')) {
 
 await server.listen(PORT);
 
+if (config.loadSimulator.enabled) {
+  console.log(`[Ellmud] Load simulator: auto-start requested via SIMULATE_LOAD (${config.loadSimulator.targetConnections} target connections)`);
+  loadSimulator.start(config.loadSimulator.targetConnections);
+} else {
+  console.log('[Ellmud] Load simulator: disabled');
+}
+
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/monitor`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
-console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Matchmaker driver: ${isDriverRedis ? 'Redis' : 'local'}`);
+if (config.maxReplicas > 1 && (!isPresenceRedis || !isDriverRedis)) {
+  console.warn('[Ellmud] Multi-replica scaling is not cluster-safe: Redis presence/driver and ingress sticky sessions must all be enabled.');
+}
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
 console.log(`[Ellmud] Zone capacity: ${ZONE_DEFAULT_MAX_PLAYERS} default, ${config.maxPlayersPerZone} env override${process.env.MAX_PLAYERS_PER_ZONE ? ' (active)' : ''}`);
 console.log(`[Ellmud] Max replicas: ${config.maxReplicas}`);
