@@ -73,7 +73,7 @@ spec:
 #         metadata: {
 #           metricName: 'Requests'
 #           metricNamespace: 'Microsoft.App/containerApps'
-#           resourceURI: '/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.App/containerApps/<container-app-name>'
+#           resourceURI: 'subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.App/containerApps/<container-app-name>'
 #           tenantId: '<tenant-id>'
 #           subscriptionId: '<subscription-id>'
 #           resourceGroupName: '<resource-group-name>'
