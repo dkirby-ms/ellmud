@@ -186,7 +186,7 @@ jobs:
               "REDIS_PRESENCE_ENABLED=true" \
               "REDIS_CACHE_ENABLED=true" \
               "REDIS_DRIVER_ENABLED=true" \
-              "MAX_PLAYERS_PER_ZONE=4" \
+
               "MAX_REPLICAS=4" \
               "OPENAI_LLM_ENDPOINT=${{ secrets.OPENAI_LLM_ENDPOINT }}" \
               "OPENAI_LLM_KEY=${{ secrets.OPENAI_LLM_KEY }}" \
