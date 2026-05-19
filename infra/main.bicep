@@ -70,8 +70,6 @@ param adminToken string = ''
 @description('Require authentication to join rooms (true for production)')
 param authRequired string = 'true'
 
-@description('Optional load simulator toggle for KEDA demos. Set to "true" or a connection count; empty string disables it.')
-param simulateLoad string = ''
 
 // ─── Variables ──────────────────────────────────────────────────────────────
 
@@ -162,7 +160,6 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     enableLlmNarration: enableLlmNarration
     adminToken: adminToken
     authRequired: authRequired
-    simulateLoad: simulateLoad
   }
 }
 

@@ -14,6 +14,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:ci": "npm run test -w @ellmud/shared -w @ellmud/server -w @ellmud/client",
     "test:e2e": "npm run test -w @ellmud/e2e",
+    "load-test": "npm run load-test -w @ellmud/e2e --",
     "lint": "npm run lint --workspaces --if-present",
     "version:bump": "npm version --no-git-tag-version",
     "version:sync": "node scripts/sync-versions.mjs",

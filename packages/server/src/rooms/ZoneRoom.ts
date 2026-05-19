@@ -490,8 +490,24 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const authPlayerId = authData?.playerId && authData.playerId !== 'anonymous' ? authData.playerId : undefined;
     const rawPlayerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
 
-    // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
-    const playerId = (options['characterId'] as string) || rawPlayerId;
+    // Character ID: prefer the explicit join option, otherwise resolve the
+    // player's active character server-side so persistence uses a real
+    // characters.id value even when the client reconnects before hydrating it.
+    const requestedCharacterId = typeof options['characterId'] === 'string' && options['characterId'].trim().length > 0
+      ? options['characterId'] as string
+      : undefined;
+    let playerId = requestedCharacterId || rawPlayerId;
+    if (!requestedCharacterId && rawPlayerId !== client.sessionId) {
+      try {
+        const activeCharacter = await this.characterRepo.getActive(rawPlayerId);
+        if (activeCharacter?.id) {
+          playerId = activeCharacter.id;
+          this.log(`Resolved active character ${this.playerTag(playerId)} for player ${rawPlayerId}`);
+        }
+      } catch (err) {
+        this.log(`Failed to resolve active character for player ${rawPlayerId}: ${err}`);
+      }
+    }
 
     // Guard against the same playerId joining twice (double-click / client race condition / browser refresh).
     // If the player is already present, displace the old session rather than corrupting state.
@@ -3687,12 +3703,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /** Extract persistable profile from player state and save it. */
   private async savePlayerProfile(playerId: string, playerState: PlayerState): Promise<void> {
     try {
+      const dbPlayerId = this.dbPlayerId(playerId);
+      if (dbPlayerId === playerId) {
+        this.log(`Skipping profile save for ${this.playerTag(playerId)}: no resolved owner player ID / character ID pair`);
+        return;
+      }
+
       const profile: PlayerProfile = {
         skills: { ...playerState.skills },
         maxCarryWeight: playerState.maxCarryWeight,
         equipment: playerState.equipment,
       };
-      await this.profileRepo.save(this.dbPlayerId(playerId), playerId, profile);
+      await this.profileRepo.save(dbPlayerId, playerId, profile);
     } catch (err) {
       this.log(`Failed to save profile for ${this.playerTag(playerId)}: ${err}`);
     }

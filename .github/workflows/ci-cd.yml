@@ -179,7 +179,7 @@ jobs:
               "ENTRA_TENANT_SUBDOMAIN=${{ secrets.ENTRA_TENANT_SUBDOMAIN }}" \
               "ENTRA_REDIRECT_URI=${{ secrets.ENTRA_REDIRECT_URI }}" \
               "CLIENT_URL=${{ secrets.CLIENT_URL }}" \
-              "ALLOW_LOCAL_AUTH=false" \
+              "ALLOW_LOCAL_AUTH=true" \
               "AUTH_REQUIRED=true" \
               "ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }}" \
               "DEV_MODE_ENABLED=false" \
