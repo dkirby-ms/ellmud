@@ -112,6 +112,10 @@ jobs:
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # CI/CD is triggered automatically by the push to uat (ci-cd.yml on: push).
-      # No manual dispatch needed — that caused duplicate CI/CD runs and repeated
-      # Discord notifications.
+      # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security policy).
+      # Explicitly dispatch CI/CD after a successful push to uat.
+      - name: Trigger CI/CD
+        if: steps.merge.outputs.pushed == 'true'
+        run: gh workflow run ci-cd.yml --ref uat
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
