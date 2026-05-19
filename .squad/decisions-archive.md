@@ -6513,7 +6513,6 @@ rules: [
 
 **Configuration** (`packages/server/src/config.ts`)
 - New `driverEnabled` flag added to redis config
-- Proper defaults: `MAX_PLAYERS_PER_SHARD=4`, `MAX_REPLICAS=4`
 - ✅ **Phase 2 defaults are correct**
 
 ---
