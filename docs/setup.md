@@ -93,7 +93,6 @@ All environment variables have sensible defaults for local development. No `.env
 | `CLIENT_URL` | `http://localhost:3000` | React client URL (for OAuth redirects) |
 | `AUTH_REQUIRED` | `false` | Require auth tokens to join rooms |
 | `MAX_PLAYERS_PER_SHARD` | `1` | Max concurrent players per shard (Phase 1: solo, Phase 2+: scale) |
-| `MAX_REPLICAS` | `1` | Max Container Apps replicas |
 | `ENTRA_CLIENT_ID` | *(none)* | Microsoft Entra External ID client ID |
 | `ENTRA_CLIENT_SECRET` | *(none)* | Microsoft Entra External ID client secret |
 | `ENTRA_TENANT_ID` | *(none)* | Microsoft Entra tenant ID |

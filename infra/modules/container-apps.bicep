@@ -186,8 +186,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'REDIS_CACHE_ENABLED', value: 'true' }
             { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
             { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
-
-            { name: 'MAX_REPLICAS', value: '4' }
             { name: 'ENTRA_CLIENT_ID', value: entraClientId }
             { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }

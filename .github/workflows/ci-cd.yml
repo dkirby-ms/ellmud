@@ -186,8 +186,6 @@ jobs:
               "REDIS_PRESENCE_ENABLED=true" \
               "REDIS_CACHE_ENABLED=true" \
               "REDIS_DRIVER_ENABLED=true" \
-
-              "MAX_REPLICAS=4" \
               "OPENAI_LLM_ENDPOINT=${{ secrets.OPENAI_LLM_ENDPOINT }}" \
               "OPENAI_LLM_KEY=${{ secrets.OPENAI_LLM_KEY }}" \
               "OPENAI_LLM_MODEL=${{ secrets.OPENAI_LLM_MODEL }}" \
@@ -327,7 +325,7 @@ jobs:
           az containerapp revision set-mode \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --mode multiple
+            --mode single
 
           az containerapp ingress traffic set \
             --name ${{ secrets.CONTAINER_APP_NAME }} \

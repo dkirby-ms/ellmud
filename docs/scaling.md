@@ -10,7 +10,6 @@ to single-player values to simplify development and deployment.
 | Parameter | Env Var | Default | Phase 1 | Phase 2+ |
 |---|---|---|---|---|
 | Players per shard | `MAX_PLAYERS_PER_SHARD` | `1` | 1 (solo) | 2–4 (multiplayer) |
-| Container replicas | `MAX_REPLICAS` | `1` | 1 (no scale-out) | 2–N (auto-scale) |
 | Matchmaker mode | — | `in-process` | Colyseus built-in | Colyseus built-in |
 | Redis presence | `REDIS_PRESENCE_ENABLED` | `false` | Wired, disabled | Enabled |
 | Redis connection | `REDIS_CONNECTION_STRING` | `redis://localhost:6379` | Unused | Required |
@@ -20,11 +19,6 @@ to single-player values to simplify development and deployment.
 - **Matchmaker:** Colyseus runs matchmaking in-process by default. No separate
   matchmaker service is needed. The built-in `Server.define()` + `filterBy()`
   handles room creation and lookup.
-
-- **Container Apps:** Azure Container Apps should be configured with
-  `minReplicas: 1`, `maxReplicas: 1` for Phase 1. The Bicep/IaC configuration
-  lives in issue #18. The `MAX_REPLICAS` config value here is documentation —
-  actual replica count is enforced at the infrastructure layer.
 
 - **Redis Presence:** The server config wires Redis presence settings but keeps
   them disabled by default. When Phase 2 enables multi-replica deployment,
