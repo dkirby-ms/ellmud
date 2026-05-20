@@ -4,7 +4,7 @@ How to deploy the Ellmud game server infrastructure from scratch on Azure.
 
 ## Prerequisites
 
-- [Azure CLI](https://aka.ms/install-azure-cli) v2.60+ installed and logged in (`az login`)
+- [Azure CLI](https://aka.ms/install-azure-cli) v2.61+ installed and logged in (`az login`)
 - An Azure subscription with Contributor access
 - Azure AI Services access (for GPT-4o-mini deployment)
 
@@ -34,11 +34,14 @@ Set the `environmentName` parameter in `main.bicepparam` to `uat` or `prod`.
 export POSTGRES_ADMIN_PASSWORD='<choose-a-secure-password>'
 
 # 2. Run the deployment script
-chmod +x infra/deploy.sh
+chmod +x infra/deploy.sh infra/configure-grafana-postgres-datasource.sh
 ./infra/deploy.sh
+
+# 3. Optional: include Grafana PostgreSQL wiring in the same deploy
+CONFIGURE_GRAFANA_POSTGRES_DATASOURCE=true ./infra/deploy.sh
 ```
 
-This creates resource group `ellmud-rg` in `eastus2` and deploys all infrastructure.
+This creates resource group `ellmud-rg` in `eastus2` and deploys all infrastructure. Use the optional flag when your Azure identity also has Grafana Editor/Admin access and you want dashboards to query PostgreSQL immediately.
 
 ### Custom resource group or region
 
@@ -69,6 +72,7 @@ infra/
   main.bicep              # Orchestrator — wires all modules together
   main.bicepparam         # Parameter file (region, names, env vars)
   deploy.sh               # One-command deployment script
+  configure-grafana-postgres-datasource.sh # Idempotent Grafana PostgreSQL datasource wiring
   setup-gh-environments.sh # GitHub environment + secrets setup
   modules/
     monitoring.bicep       # Application Insights + Log Analytics
@@ -89,7 +93,7 @@ The orchestrator (`main.bicep`) handles dependencies automatically:
 4. **Container Apps Environment** — hosting platform (needs Log Analytics)
 5. **Redis** — cache container (needs Container Apps Environment)
 6. **Game Server App** — reuses the environment, wired to Postgres + Redis
-7. **AI Foundry** — GPT-4o-mini endpoint (independent)
+7. **Managed Grafana** — observability workspace with Monitoring Reader RBAC
 8. **RBAC** — ACR Pull role for the Container App's managed identity
 
 ## Resource Naming Convention
@@ -129,6 +133,16 @@ After infrastructure is deployed:
 2. **Verify health** — The bootstrap placeholder responds on `/` with `{"status":"ok","mode":"placeholder"}`
 3. **Check logs** — `az containerapp logs show --name ellmud-uat-app --resource-group ellmud-rg`
 4. **Open Grafana** — use the deployment output `grafanaEndpoint`; the instance can read Azure Monitor/App Insights data through its managed identity's `Monitoring Reader` role on the resource group
+5. **Configure PostgreSQL as a Grafana data source** — generic Grafana data sources are not exposed as ARM/Bicep resources, so use the helper script (or the underlying `az grafana data-source create/update` flow) after deployment:
+
+```bash
+export POSTGRES_ADMIN_PASSWORD='<your-secure-password>'
+./infra/configure-grafana-postgres-datasource.sh ellmud-rg uat
+```
+
+The helper is idempotent: it creates the `Ellmud PostgreSQL` data source if missing and updates it if it already exists. It never stores credentials in git; supply them through `POSTGRES_ADMIN_PASSWORD` or `GRAFANA_POSTGRES_PASSWORD`. If you have a dedicated read-only database login, prefer passing `GRAFANA_POSTGRES_USER` / `GRAFANA_POSTGRES_PASSWORD`. Your Azure identity needs Grafana Editor or Grafana Admin access on the workspace for the CLI call to succeed.
+
+Azure networking is already wired for this path: the PostgreSQL Flexible Server is using the public access model and keeps the `AllowAzureServices` firewall rule in place, so Azure Managed Grafana can reach the server over SSL without extra VNet plumbing.
 
 ## GitHub Environments Setup
 
@@ -153,3 +167,4 @@ az group delete --name ellmud-rg --yes --no-wait
 - **Redis is ephemeral** — no persistence (AOF/RDB disabled), used for Colyseus presence only
 - **No custom domain** — uses Container Apps default FQDN
 - **No Key Vault** — secrets passed directly for simplicity; add Key Vault in Phase 2
+- **Grafana provisioning split** — the Managed Grafana workspace is deployed with Bicep, but PostgreSQL data source wiring is a post-deploy Azure CLI step because generic Grafana data sources are not first-class ARM/Bicep resources
