@@ -188,6 +188,7 @@ async function selectCharacter(baseUrl: string, token: string, characterId: stri
 const COMMAND_INPUT_SELECTOR = 'input[aria-label="Command input"]';
 const CONNECTED_COMMAND_INPUT_SELECTOR = `${COMMAND_INPUT_SELECTOR}:not([disabled])`;
 const MOVEMENT_COMMANDS = ['north', 'south', 'east', 'west', 'up', 'down'] as const;
+const HUB_ESCAPE_SEQUENCE = ['down', 'east', 'east', 'east', 'east', 'east'] as const;
 const MOB_TARGETS = ['rat', 'skeleton', 'goblin', 'spider', 'zombie'] as const;
 const LOOT_COMMANDS = ['loot', ...MOB_TARGETS.map((target) => `loot ${target}`)] as const;
 const TAKE_TARGETS = ['gold', 'potion', 'gem', 'key'] as const;
@@ -300,8 +301,42 @@ function startStressLoop(page: Page, user: VirtualUser, actionIntervalMs: number
     await input.press('Enter');
   };
 
+  const runHubEscapeSequence = async (): Promise<void> => {
+    for (const [index, command] of HUB_ESCAPE_SEQUENCE.entries()) {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      try {
+        await runCommand(command);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[load-test] User ${user.index} hub escape step '${command}' failed: ${message}`);
+      }
+
+      const isZoneTransferStep = index === HUB_ESCAPE_SEQUENCE.length - 1;
+      const delayMs = isZoneTransferStep ? 3_000 : 500 + Math.floor(Math.random() * 301);
+      const shouldContinue = await waitWithAbort(delayMs, controller.signal);
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    try {
+      await runCommand('look');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[load-test] User ${user.index} post-transfer look failed: ${message}`);
+    }
+  };
+
   const done = (async () => {
     await runCommand('look');
+    await runHubEscapeSequence();
 
     while (!controller.signal.aborted) {
       const shouldContinue = await waitWithAbort(nextActionDelay(actionIntervalMs), controller.signal);

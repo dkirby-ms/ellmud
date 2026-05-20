@@ -38,3 +38,11 @@
 - `packages/e2e/src/load-test.ts` keeps the existing auth, connection, reporter, and shutdown wiring; only the stress behavior should change for gameplay simulations.
 - The browser-driven load test submits commands through `page.locator('input[aria-label="Command input"]')` with `fill()` + `press('Enter')`, so command generation should stay string-based.
 - The richer gameplay loop now starts each connected user with `look`, then rotates weighted movement/combat/loot/chat/state/item/who commands to better mimic live zone activity.
+
+### 2026-05-20T21:00:25.794+00:00 — Load-test navigation escape sequence
+- Reliquary load-test users spawn in `reliquary-inn`, so random movement alone strands them unless they first reach `reliquary-commons` via `down`, `east`, `east`.
+- `startStressLoop()` should treat that hub path as best-effort setup with 500–1000ms spacing between moves, then keep the existing 25% random movement weight once users are in the commons network.
+
+### 2026-05-20T21:02:07.093+00:00 — Load-test Siltgate handoff
+- The full best-effort load-test escape route from the Reliquary inn to Siltgate is `down`, then five `east` commands; the last `east` crosses zones from `reliquary-filtration-annex` into `the-siltgate/pipe-bridge`.
+- `startStressLoop()` should pause about 3 seconds after that final `east` so the client can complete the Colyseus room handoff, then issue `look` to seed the stress loop with fresh room context in the new zone.
