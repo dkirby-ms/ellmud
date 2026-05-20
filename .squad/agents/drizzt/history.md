@@ -135,3 +135,31 @@
 - `packages/server/src/rooms/ZoneRoom.ts`
 - `packages/server/src/__tests__/zoneroom-player-id.test.ts`
 - `infra/modules/container-apps.bicep`
+
+### 2026-05-20T12:16:21.884+00:00: Hot-Zone Load Ceiling Diagnosis (INVESTIGATED)
+
+**Task:** Diagnose the ~50-user UAT ceiling, duplicate zone-room creation, and mid-session disconnects seen during external load testing against ACA.
+
+**Findings / patterns:**
+- The ACA `concurrentRequests: '30'` rule in `infra/modules/container-apps.bicep` is only an HTTP autoscale trigger; it is not a WebSocket hard cap. The app still runs one hot Colyseus room per process/replica, with `1.0` vCPU and `2Gi` RAM per replica.
+- There is no explicit app-side socket cap: `packages/server/src/index.ts` passes a plain `http.createServer(app)` into `new WebSocketTransport({ server: httpServer })`, `packages/server/src/config.ts` gives persistent zones a 100-player default, and `packages/server/src/rooms/ZoneRoom.ts` applies that value to `this.maxClients` for zone rooms.
+- The practical ceiling is the join/runtime workload on one replica. `ZoneRoom.onJoin()` performs a long serial hydration path (active character/profile/faction/character/base stats/flags/last inn/posture/starter kit/inventory/loadout/stats/exploration) before the client is fully ready, so one 1-vCPU replica can bog down well below the configured 100-player room limit.
+- Duplicate rooms are explained by Colyseus matchmaking timing, not `filterBy()`. The client joins zone-specific room names directly (`joinOrCreate('zone:<slug>')`), but Colyseus only waits `COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME` (default 0.5 s) for a concurrent creator before creating another room. `handleCreateRoom()` does not publish/persist the room until after `ZoneRoom.onCreate()` finishes, and that `onCreate()` does async zone loading plus initialization work, so burst joins can legitimately create parallel rooms for the same zone and even spread them across replicas.
+- Existing connection drops line up with the transport heartbeat being too aggressive for a saturated replica. The server does not override Colyseus WS heartbeat settings, so the transport default is `pingInterval=3000` ms and `pingMaxRetries=2`; under load that means roughly ~6 s of missed pong budget before `terminate()`. Combined with the heavy join path, 1-second sim tick, and stress-command traffic, that is a plausible trigger for the observed mid-session socket loss.
+- The load-test "stall at 50" is amplified by the harness: it waits for each ramp batch with `Promise.allSettled(batch)`, and each failed user can sit up to 30 s in `waitForSelector(...)`, so two stuck joins freeze the visible ramp for ~30 s even though the real issue is backend saturation/timeouts.
+
+**Key file paths:**
+- `infra/modules/container-apps.bicep`
+- `packages/server/src/index.ts`
+- `packages/server/src/config.ts`
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/client/src/services/connection.ts`
+- `packages/client/src/pages/ZoneExploration.tsx`
+- `packages/client/src/hooks/useZoneConnection.ts`
+- `packages/e2e/src/load-test.ts`
+- `packages/e2e/src/fixtures/player-fixture.ts`
+- `node_modules/@colyseus/core/src/MatchMaker.ts`
+- `node_modules/@colyseus/core/src/matchmaker/RegisteredHandler.ts`
+- `node_modules/@colyseus/core/src/Room.ts`
+- `node_modules/@colyseus/core/src/utils/Utils.ts`
+- `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`

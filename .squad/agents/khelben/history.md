@@ -143,3 +143,24 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 - This keeps first deploys bootstrappable while making infra-only redeploys idempotent: the live app entrypoint is preserved unless CI/CD intentionally changes it later.
 - Key paths for this pattern: `infra/deploy.sh`, `infra/main.bicep`, and `infra/modules/container-apps.bicep`.
 
+### 2026-05-20T13:37:30.442+00:00: Discord release chirp — stale changelog fix
+
+**Status:** ✅ Complete
+
+**Problem:** The Discord UAT deploy notification was always showing the same stale v0.2.0-dev.64 changelog entry. Root cause: the changelog extraction step only ran the `git log` path for `push` events. For `workflow_dispatch` (how `scheduled-uat-promote.yml` triggers ci-cd.yml), `github.event.before` is empty, so it always fell back to `CHANGELOG.md` — which always showed the same latest release entry regardless of what actually shipped.
+
+**What changed (`ci-cd.yml`, `notify-discord-uat` job, "Extract changelog from commits" step):**
+
+1. **`workflow_dispatch` path added:** When the event is `workflow_dispatch`, the step now checks if `HEAD` is a merge commit (has a second parent). If yes — which is the case for scheduled promotes — it extracts commits via `git log --no-merges HEAD^1..HEAD^2`, capturing exactly what dev brought in. If HEAD is not a merge commit (manual dispatch for a non-merge state), it falls back to commits since the last tag.
+
+2. **Expanded noise filters:** Added `grep -v "^\• chore:"` and `grep -v "^\• chore("` to the filter pipeline (both push and dispatch paths), catching all scoped/unscoped chore commits that aren't player-facing, not just `chore(release):`.
+
+3. **Removed CHANGELOG.md fallback:** If after filtering the changelog is empty, the step now emits empty `content` rather than reading `CHANGELOG.md`. This prevents stale content.
+
+4. **Skip notification when empty:** Added `if: steps.changelog.outputs.content != ''` to the "Announce UAT deploy to Discord" step. If all commits were noise (or nothing new shipped), the chirp is suppressed entirely instead of posting stale data.
+
+**Files changed:**
+- `.github/workflows/ci-cd.yml`: rewritten "Extract changelog from commits" step + `if` guard on Discord announce step
+
+**Key insight:** `github.event.before` is undefined for `workflow_dispatch`. Always check event type before using SHA-range git log. For merge-based promote flows, the second parent (`HEAD^2`) is the canonical source of "what got merged in."
+
