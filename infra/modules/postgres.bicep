@@ -54,7 +54,7 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-03-0
   }
 }
 
-// Allow Azure services to connect
+// Keep the public endpoint reachable from Azure services such as Managed Grafana.
 resource firewallAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-03-01-preview' = {
   name: 'AllowAzureServices'
   parent: postgresServer

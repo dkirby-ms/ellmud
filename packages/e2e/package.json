@@ -12,7 +12,8 @@
     "load-test:ws": "tsx src/load-test-ws.ts"
   },
   "dependencies": {
-    "@colyseus/sdk": "~0.17.35"
+    "@colyseus/sdk": "~0.17.35",
+    "@ellmud/shared": "*"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

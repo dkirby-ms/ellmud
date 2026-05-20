@@ -171,3 +171,10 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 - The Container App does not need extra Azure RBAC just to emit telemetry when it uses the App Insights connection string; ingestion is connection-string based, so Grafana is the identity that needs read access.
 - `infra/main.bicep` should wire Grafana after the ACA app module so observability resources come up after the workload and expose `grafanaName` / `grafanaEndpoint` as deployment outputs.
 
+### 2026-05-20T16:54:33.072+00:00: Grafana PostgreSQL datasource automation
+
+- `Microsoft.Dashboard/grafana` can provision the workspace in Bicep, but generic Grafana data sources still need a post-deploy flow; for Azure Managed Grafana in this repo, use `az grafana data-source create/update` rather than trying to model PostgreSQL as an ARM child resource.
+- `infra/configure-grafana-postgres-datasource.sh` is now the idempotent helper for wiring PostgreSQL into Managed Grafana, and `infra/deploy.sh` can invoke it when `CONFIGURE_GRAFANA_POSTGRES_DATASOURCE=true`.
+- `infra/modules/postgres.bicep` should keep the Flexible Server on the public-access path and retain the `AllowAzureServices` firewall rule so Managed Grafana can reach the server over the public endpoint.
+- `docs/deployment.md` is the operator-facing place to document the split: Bicep deploys the workspace, Azure CLI finishes the PostgreSQL datasource with credentials supplied from environment variables rather than committed secrets.
+

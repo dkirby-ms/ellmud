@@ -43,6 +43,27 @@
 
 ## Learnings
 
+### 2026-05-20T16:54:33.072+00:00: Portable Grafana Dashboard for game_metrics (DELIVERED)
+
+**Task:** Create an importable Grafana dashboard JSON model for PostgreSQL-backed gameplay metrics.
+
+**Architecture / design decisions:**
+- Store Grafana dashboard JSON under `infra/grafana/dashboards/` so Azure Managed Grafana can import a checked-in artifact directly.
+- Keep datasource wiring portable by referencing PostgreSQL via `${DS_POSTGRESQL}` instead of hard-coded datasource UIDs.
+- Query `game_metrics.metadata` with PostgreSQL JSONB operators and Grafana time macros so dashboard panels stay aligned with the engine event schema.
+
+**Patterns / user-relevant notes:**
+- Hourly grouping works well for deaths, kills, loot, and active-player trend panels on short default ranges like the last 6 hours.
+- Fixed-window leaderboard panels should declare their own time window explicitly (the top-killers table is pinned to the last 24 hours).
+- Combat efficiency is best visualized as aggregated hit ratio from `combat_stats.hits` and `combat_stats.misses`, not raw hit/miss event counts.
+
+**Key file paths:**
+- `infra/grafana/dashboards/game-metrics.json`
+- `packages/server/src/metrics/MetricsService.ts`
+- `packages/server/src/metrics/index.ts`
+- `packages/server/src/metrics/metrics-provider.ts`
+
+
 ### 2026-05-19T23:09:36.915+00:00: UAT WebSocket Ceiling Investigation (INVESTIGATED)
 
 **Task:** Investigate why a live UAT load test plateaued around 54 connected players with one shared zone room and no server-side crash logs.
@@ -213,3 +234,21 @@
 - `packages/client/src/pages/ZoneExploration.tsx`
 - `packages/server/src/api/characters.ts`
 - `packages/server/src/api/spawn-zone.ts`
+
+### 2026-05-20T17:17:22.953+00:00: WS Load Harness Resilience & Noise Suppression (DELIVERED)
+
+**Task:** Harden the raw Colyseus load harness for 200-connection test-environment runs.
+
+**Architecture / design decisions:**
+- `packages/e2e/src/load-test-ws.ts` now registers no-op handlers for every known server→client `MessageTypes` payload immediately after join so Colyseus stops flooding the console with unregistered-message warnings.
+- Join resilience now defaults to a 30s timeout with one retry per join attempt, plus optional reconnect-on-unexpected-leave backoff so close code `4002` is counted and can be recovered without losing the virtual user immediately.
+- A `--quiet` flag now filters the remaining known Colyseus SDK noise while preserving the harness's own status, failure, and summary output.
+
+**Patterns / user-relevant notes:**
+- For protocol-only Colyseus load tests, intentionally registering sink handlers is a valid strategy when the harness only needs connection pressure, not payload inspection.
+- The clean workspace import path for shared protocol contracts in e2e is `@ellmud/shared`; `../../shared/src/...` breaks standalone TypeScript checks under the e2e tsconfig.
+
+**Key file paths:**
+- `packages/e2e/src/load-test-ws.ts`
+- `packages/e2e/package.json`
+- `.squad/agents/drizzt/history.md`

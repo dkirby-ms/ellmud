@@ -7,7 +7,35 @@
  */
 
 import { Client, type Room } from '@colyseus/sdk';
-import { MessageTypes, type CommandMessage } from '../../shared/src/index.ts';
+import { MessageTypes, type CommandMessage } from '@ellmud/shared';
+
+const KNOWN_ROOM_MESSAGE_TYPES = [
+  MessageTypes.NARRATE,
+  MessageTypes.ROOM_HEADER,
+  MessageTypes.ZONE_STATE,
+  MessageTypes.COMBAT_RESULT,
+  MessageTypes.PLAYER_STATE,
+  MessageTypes.TELEGRAPH,
+  MessageTypes.OVERLAY_STATE,
+  MessageTypes.STASH_UPDATE,
+  MessageTypes.LOADOUT_UPDATE,
+  MessageTypes.INVENTORY_UPDATE,
+  MessageTypes.ROOM_SWITCH,
+  MessageTypes.ZONE_TRANSFER,
+  MessageTypes.EXPLORATION_DATA,
+  MessageTypes.EXPLORATION_UPDATE,
+  MessageTypes.ROOM_OCCUPANTS,
+  MessageTypes.FLAG_STATE,
+  MessageTypes.EFFECTIVE_STATS,
+  MessageTypes.COMBAT_STATE,
+  MessageTypes.PLAYER_LIST,
+  MessageTypes.HELP_DATA,
+] as const;
+
+const QUIET_SDK_NOISE_PATTERNS = [
+  '@colyseus/sdk: onMessage() not registered',
+  'Room connection was closed unexpectedly',
+] as const;
 
 interface LoadTestConfig {
   url: string;
@@ -18,6 +46,10 @@ interface LoadTestConfig {
   username: string;
   stress: boolean;
   actionInterval: number;
+  joinTimeoutMs: number;
+  quiet: boolean;
+  reconnect: boolean;
+  reconnectAttempts: number;
 }
 
 function parseArgs(argv: string[]): LoadTestConfig {
@@ -59,15 +91,33 @@ function parseArgs(argv: string[]): LoadTestConfig {
     process.exit(1);
   }
 
+  const joinTimeoutRaw = get('--join-timeout');
+  const joinTimeoutMs = joinTimeoutRaw ? parseInt(joinTimeoutRaw, 10) : 30_000;
+  if (!Number.isFinite(joinTimeoutMs) || joinTimeoutMs <= 0) {
+    console.error('Error: --join-timeout must be a positive integer (milliseconds).');
+    process.exit(1);
+  }
+
+  const reconnectAttemptsRaw = get('--reconnect-attempts');
+  const reconnectAttempts = reconnectAttemptsRaw ? parseInt(reconnectAttemptsRaw, 10) : 1;
+  if (!Number.isFinite(reconnectAttempts) || reconnectAttempts < 0) {
+    console.error('Error: --reconnect-attempts must be a non-negative integer.');
+    process.exit(1);
+  }
+
   return {
     url: url.replace(/\/$/, ''),
     connections,
     rampRate,
     token: get('--token'),
     playerId: get('--player-id'),
-    username: get('--username') ?? 'load-tester',
+    username: get('--username') ?? 'loadtest',
     stress: has('--no-stress') ? false : true,
     actionInterval,
+    joinTimeoutMs,
+    quiet: has('--quiet'),
+    reconnect: has('--no-reconnect') ? false : reconnectAttempts > 0,
+    reconnectAttempts,
   };
 }
 
@@ -83,6 +133,23 @@ interface CharacterSummary {
 
 interface SpawnZoneResponse {
   target: string;
+}
+
+interface UserSession {
+  token: string;
+  characterId: string;
+  roomName: string;
+}
+
+interface HarnessStats {
+  successfulJoins: number;
+  usersEverConnected: number;
+  totalConnectMs: number;
+  unexpectedDisconnects: number;
+  disconnect4002: number;
+  joinRetries: number;
+  reconnectAttempts: number;
+  reconnectSuccesses: number;
 }
 
 async function expectJson<T>(res: Response, context: string): Promise<T> {
@@ -268,26 +335,69 @@ function getWsCandidates(baseUrl: string): string[] {
   return ordered.filter((candidate, index) => ordered.indexOf(candidate) === index);
 }
 
+function registerNoopMessageHandlers(room: Room): void {
+  for (const type of KNOWN_ROOM_MESSAGE_TYPES) {
+    room.onMessage(type, () => undefined);
+  }
+}
+
+function shouldSuppressSdkNoise(line: string): boolean {
+  return QUIET_SDK_NOISE_PATTERNS.some((pattern) => line.includes(pattern));
+}
+
+function installQuietSdkFilter(enabled: boolean): void {
+  if (!enabled) {
+    return;
+  }
+
+  const originalWarn = console.warn.bind(console);
+  const originalError = console.error.bind(console);
+
+  console.warn = (...args: unknown[]) => {
+    const line = args.map((arg) => String(arg)).join(' ');
+    if (shouldSuppressSdkNoise(line)) {
+      return;
+    }
+    originalWarn(...args);
+  };
+
+  console.error = (...args: unknown[]) => {
+    const line = args.map((arg) => String(arg)).join(' ');
+    if (shouldSuppressSdkNoise(line)) {
+      return;
+    }
+    originalError(...args);
+  };
+}
+
 async function joinZoneRoom(
   wsCandidates: string[],
   roomName: string,
   token: string,
   characterId: string,
-): Promise<{ room: Room; wsEndpoint: string }> {
+  joinTimeoutMs: number,
+): Promise<{ room: Room; wsEndpoint: string; attemptCount: number }> {
   const failures: string[] = [];
+  const maxAttempts = 2;
 
-  for (const wsEndpoint of wsCandidates) {
-    try {
-      const client = new Client(wsEndpoint);
-      const room = await withTimeout(
-        client.joinOrCreate(roomName, { token, characterId }),
-        10_000,
-        `Join ${roomName} via ${wsEndpoint}`,
-      );
-      return { room, wsEndpoint };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      failures.push(`${wsEndpoint}: ${message}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    for (const wsEndpoint of wsCandidates) {
+      try {
+        const client = new Client(wsEndpoint);
+        const room = await withTimeout(
+          client.joinOrCreate(roomName, { token, characterId }),
+          joinTimeoutMs,
+          `Join ${roomName} via ${wsEndpoint}`,
+        );
+        return { room, wsEndpoint, attemptCount: attempt };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push(`attempt ${attempt} ${wsEndpoint}: ${message}`);
+      }
+    }
+
+    if (attempt < maxAttempts) {
+      await sleep(1_000 * attempt);
     }
   }
 
@@ -295,6 +405,7 @@ async function joinZoneRoom(
 }
 
 type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'closed';
+type ConnectReason = 'initial' | 'reconnect';
 
 interface StressLoopHandle {
   stop: () => void;
@@ -307,9 +418,13 @@ interface VirtualUser {
   error?: string;
   room: Room | null;
   connectPromise?: Promise<void>;
+  reconnectPromise?: Promise<void>;
   actionLoop?: Promise<void>;
   stopActions?: () => void;
   closing: boolean;
+  reconnectCount: number;
+  everConnected: boolean;
+  session?: UserSession;
   close: () => Promise<void>;
 }
 
@@ -319,13 +434,34 @@ interface VirtualUserOptions {
   index: number;
   sharedToken?: string;
   sharedPlayerId?: string;
+  usernamePrefix: string;
   stressEnabled: boolean;
   actionIntervalMs: number;
+  joinTimeoutMs: number;
+  reconnectEnabled: boolean;
+  reconnectAttempts: number;
+  quiet: boolean;
   users: VirtualUser[];
+  stats: HarnessStats;
 }
 
 function countUsers(users: VirtualUser[], status: ConnectionStatus): number {
   return users.filter((user) => user.status === status).length;
+}
+
+function countUsersEverConnected(users: VirtualUser[]): number {
+  return users.filter((user) => user.everConnected).length;
+}
+
+function averageConnectTimeMs(stats: HarnessStats): number {
+  if (stats.successfulJoins === 0) {
+    return 0;
+  }
+  return Math.round(stats.totalConnectMs / stats.successfulJoins);
+}
+
+function nextReconnectDelay(attempt: number): number {
+  return Math.min(5_000, attempt * 1_000);
 }
 
 function startStressLoop(room: Room, user: VirtualUser, actionIntervalMs: number): StressLoopHandle {
@@ -334,7 +470,7 @@ function startStressLoop(room: Room, user: VirtualUser, actionIntervalMs: number
   const done = (async () => {
     while (!controller.signal.aborted) {
       const shouldContinue = await waitWithAbort(nextActionDelay(actionIntervalMs), controller.signal);
-      if (!shouldContinue || user.closing) {
+      if (!shouldContinue || user.closing || user.room !== room) {
         break;
       }
 
@@ -342,7 +478,7 @@ function startStressLoop(room: Room, user: VirtualUser, actionIntervalMs: number
       room.send(MessageTypes.COMMAND, command);
     }
   })().catch((err) => {
-    if (controller.signal.aborted || user.closing) {
+    if (controller.signal.aborted || user.closing || user.room !== room) {
       return;
     }
 
@@ -360,85 +496,204 @@ function startStressLoop(room: Room, user: VirtualUser, actionIntervalMs: number
   };
 }
 
+async function prepareUserSession(user: VirtualUser, opts: VirtualUserOptions): Promise<UserSession> {
+  const { baseUrl, index, sharedToken, sharedPlayerId, usernamePrefix } = opts;
+
+  let token: string;
+
+  if (sharedToken && sharedPlayerId) {
+    token = sharedToken;
+  } else {
+    const username = `${usernamePrefix}${index}`;
+    const password = `Lt!${usernamePrefix}${index}`;
+    const auth = await loginOrRegister(baseUrl, username, password);
+    token = auth.token;
+  }
+
+  if (user.closing) {
+    throw new Error('User was closed before session bootstrap completed.');
+  }
+
+  const existingChars = await listCharacters(baseUrl, token);
+  let character: CharacterSummary;
+  if (existingChars.length > 0) {
+    character = existingChars[0]!;
+  } else {
+    const alpha = 'abcdefghijklmnopqrstuvwxyz';
+    const randAlpha = Array.from({ length: 4 }, () => alpha[Math.floor(Math.random() * alpha.length)]).join('');
+    const characterName = `Lt${randAlpha}${alpha[index % alpha.length]}`;
+    character = await createCharacter(baseUrl, token, characterName);
+  }
+
+  await selectCharacter(baseUrl, token, character.id);
+  const spawnZone = await fetchSpawnZone(baseUrl, token);
+
+  return {
+    token,
+    characterId: character.id,
+    roomName: spawnZone.target,
+  };
+}
+
+function stopUserActions(user: VirtualUser): void {
+  user.stopActions?.();
+  user.stopActions = undefined;
+  user.actionLoop = undefined;
+}
+
+function startUserActions(user: VirtualUser, opts: VirtualUserOptions, room: Room): void {
+  stopUserActions(user);
+  if (!opts.stressEnabled) {
+    return;
+  }
+
+  const stressLoop = startStressLoop(room, user, opts.actionIntervalMs);
+  user.stopActions = stressLoop.stop;
+  user.actionLoop = stressLoop.done;
+}
+
+async function finalizeUnexpectedDisconnect(user: VirtualUser, code: number, opts: VirtualUserOptions): Promise<void> {
+  const canReconnect = opts.reconnectEnabled && user.session && user.reconnectCount < opts.reconnectAttempts;
+
+  if (!canReconnect) {
+    user.status = 'failed';
+    user.error = `Disconnected unexpectedly (code ${code}).`;
+    if (!opts.quiet) {
+      console.warn(`[load-test] User ${user.index} disconnected unexpectedly (code ${code}).`);
+    }
+    return;
+  }
+
+  const attempt = user.reconnectCount + 1;
+  user.reconnectCount = attempt;
+  opts.stats.reconnectAttempts += 1;
+  user.status = 'connecting';
+
+  const reconnectPromise = (async () => {
+    const delayMs = nextReconnectDelay(attempt);
+    if (!opts.quiet) {
+      console.log(`[load-test] User ${user.index} reconnecting after code ${code} (attempt ${attempt}/${opts.reconnectAttempts}) in ${delayMs}ms…`);
+    }
+    await sleep(delayMs);
+
+    if (user.closing || !user.session) {
+      return;
+    }
+
+    try {
+      await establishRoomConnection(user, opts, user.session, 'reconnect');
+      opts.stats.reconnectSuccesses += 1;
+    } catch (err) {
+      user.status = 'failed';
+      user.error = err instanceof Error ? err.message : String(err);
+      if (!opts.quiet) {
+        console.warn(`[load-test] User ${user.index} reconnect FAILED: ${user.error}`);
+      }
+    }
+  })().finally(() => {
+    if (user.reconnectPromise === reconnectPromise) {
+      user.reconnectPromise = undefined;
+    }
+  });
+
+  user.reconnectPromise = reconnectPromise;
+  await reconnectPromise;
+}
+
+function bindRoomLifecycle(room: Room, user: VirtualUser, opts: VirtualUserOptions): void {
+  registerNoopMessageHandlers(room);
+
+  room.onError((code, message) => {
+    if (user.room !== room) {
+      return;
+    }
+
+    user.error = `Room error ${code}: ${message ?? 'Unknown error'}`;
+    if (user.status === 'connecting') {
+      user.status = 'failed';
+      if (!opts.quiet) {
+        console.warn(`[load-test] User ${user.index} room error: ${user.error}`);
+      }
+    }
+  });
+
+  room.onLeave((code) => {
+    if (user.room !== room) {
+      return;
+    }
+
+    stopUserActions(user);
+    user.room = null;
+
+    if (user.closing || code === 1000) {
+      if (user.status !== 'failed') {
+        user.status = 'closed';
+      }
+      return;
+    }
+
+    opts.stats.unexpectedDisconnects += 1;
+    if (code === 4002) {
+      opts.stats.disconnect4002 += 1;
+    }
+
+    void finalizeUnexpectedDisconnect(user, code, opts);
+  });
+}
+
+async function establishRoomConnection(
+  user: VirtualUser,
+  opts: VirtualUserOptions,
+  session: UserSession,
+  reason: ConnectReason,
+): Promise<void> {
+  const connectStartedAt = Date.now();
+  user.status = 'connecting';
+
+  const { room, wsEndpoint, attemptCount } = await joinZoneRoom(
+    opts.wsCandidates,
+    session.roomName,
+    session.token,
+    session.characterId,
+    opts.joinTimeoutMs,
+  );
+
+  if (user.closing) {
+    await room.leave().catch(() => undefined);
+    return;
+  }
+
+  user.session = session;
+  user.room = room;
+  bindRoomLifecycle(room, user, opts);
+  startUserActions(user, opts, room);
+  user.status = 'connected';
+
+  if (attemptCount > 1) {
+    opts.stats.joinRetries += attemptCount - 1;
+  }
+
+  if (!user.everConnected) {
+    user.everConnected = true;
+    opts.stats.usersEverConnected += 1;
+  }
+
+  opts.stats.successfulJoins += 1;
+  opts.stats.totalConnectMs += Date.now() - connectStartedAt;
+
+  const liveUsers = countUsers(opts.users, 'connected');
+  const action = reason === 'reconnect' ? 'reconnected' : 'connected';
+  console.log(`[load-test] User ${user.index} ${action} (${liveUsers} live) via ${wsEndpoint}`);
+}
+
 async function connectVirtualUser(user: VirtualUser, opts: VirtualUserOptions): Promise<void> {
-  const {
-    baseUrl,
-    wsCandidates,
-    index,
-    sharedToken,
-    sharedPlayerId,
-    stressEnabled,
-    actionIntervalMs,
-    users,
-  } = opts;
-
   try {
-    let token: string;
-
-    if (sharedToken && sharedPlayerId) {
-      token = sharedToken;
-    } else {
-      const username = `loadtest${index}`;
-      const password = `Lt!loadtest${index}`;
-      const auth = await loginOrRegister(baseUrl, username, password);
-      token = auth.token;
-    }
-
+    const session = await prepareUserSession(user, opts);
     if (user.closing) {
       return;
     }
 
-    const existingChars = await listCharacters(baseUrl, token);
-    let character: CharacterSummary;
-    if (existingChars.length > 0) {
-      character = existingChars[0]!;
-    } else {
-      const alpha = 'abcdefghijklmnopqrstuvwxyz';
-      const randAlpha = Array.from({ length: 4 }, () => alpha[Math.floor(Math.random() * alpha.length)]).join('');
-      const characterName = `Lt${randAlpha}${alpha[index % alpha.length]}`;
-      character = await createCharacter(baseUrl, token, characterName);
-    }
-
-    await selectCharacter(baseUrl, token, character.id);
-    const spawnZone = await fetchSpawnZone(baseUrl, token);
-
-    if (user.closing) {
-      return;
-    }
-
-    const { room, wsEndpoint } = await joinZoneRoom(wsCandidates, spawnZone.target, token, character.id);
-    if (user.closing) {
-      await room.leave().catch(() => undefined);
-      return;
-    }
-
-    user.room = room;
-    room.onError((code, message) => {
-      user.error = `Room error ${code}: ${message ?? 'Unknown error'}`;
-      if (user.status === 'connecting') {
-        user.status = 'failed';
-      } else if (!user.closing && user.status === 'connected') {
-        user.status = 'closed';
-      }
-      console.warn(`[load-test] User ${user.index} room error: ${user.error}`);
-    });
-    room.onLeave((code) => {
-      if (user.status !== 'failed' && user.status !== 'closed') {
-        user.status = 'closed';
-      }
-      if (!user.closing) {
-        console.warn(`[load-test] User ${user.index} disconnected (code ${code}).`);
-      }
-    });
-
-    if (stressEnabled) {
-      const stressLoop = startStressLoop(room, user, actionIntervalMs);
-      user.stopActions = stressLoop.stop;
-      user.actionLoop = stressLoop.done;
-    }
-
-    user.status = 'connected';
-    console.log(`[load-test] User ${user.index} connected (${countUsers(users, 'connected')} live) via ${wsEndpoint}`);
+    await establishRoomConnection(user, opts, session, 'initial');
   } catch (err) {
     user.status = 'failed';
     user.error = err instanceof Error ? err.message : String(err);
@@ -453,13 +708,15 @@ function createVirtualUser(opts: VirtualUserOptions): VirtualUser {
     status: 'connecting',
     room: null,
     closing: false,
+    reconnectCount: 0,
+    everConnected: false,
     close: async () => {
       if (user.closing) {
         return;
       }
       user.closing = true;
-      user.stopActions?.();
-      await user.actionLoop?.catch(() => undefined);
+      stopUserActions(user);
+      await user.reconnectPromise?.catch(() => undefined);
       const room = user.room;
       user.room = null;
       if (room) {
@@ -475,36 +732,62 @@ function createVirtualUser(opts: VirtualUserOptions): VirtualUser {
   return user;
 }
 
-function startReporter(users: VirtualUser[], intervalMs = 5_000): NodeJS.Timeout {
+function printReporterLine(users: VirtualUser[], stats: HarnessStats): void {
+  const connected = countUsers(users, 'connected');
+  const connecting = countUsers(users, 'connecting');
+  const failed = countUsers(users, 'failed');
+  const closed = countUsers(users, 'closed');
+  console.log(
+    `[load-test] connections: ${connected} live | ${connecting} connecting | ${failed} failed | ${closed} closed | ${stats.unexpectedDisconnects} disconnects (4002: ${stats.disconnect4002}) | avg connect ${averageConnectTimeMs(stats)}ms | total spawned: ${users.length}`,
+  );
+}
+
+function startReporter(users: VirtualUser[], stats: HarnessStats, intervalMs = 5_000): NodeJS.Timeout {
   return setInterval(() => {
-    const connected = countUsers(users, 'connected');
-    const connecting = countUsers(users, 'connecting');
-    const failed = countUsers(users, 'failed');
-    const closed = countUsers(users, 'closed');
-    console.log(
-      `[load-test] connections: ${connected} live | ${connecting} connecting | ${failed} failed | ${closed} closed (total spawned: ${users.length})`,
-    );
+    printReporterLine(users, stats);
   }, intervalMs);
+}
+
+function printSummary(users: VirtualUser[], stats: HarnessStats): void {
+  const failed = countUsers(users, 'failed');
+  console.log(
+    `[load-test] Summary: spawned ${users.length} | connected ${countUsersEverConnected(users)} | failed ${failed} | disconnected ${stats.unexpectedDisconnects} (4002: ${stats.disconnect4002}) | avg connect ${averageConnectTimeMs(stats)}ms | join retries ${stats.joinRetries} | reconnects ${stats.reconnectSuccesses}/${stats.reconnectAttempts}`,
+  );
 }
 
 async function main(): Promise<void> {
   const config = parseArgs(process.argv);
+  installQuietSdkFilter(config.quiet);
+
   const wsCandidates = getWsCandidates(config.url);
+  const stats: HarnessStats = {
+    successfulJoins: 0,
+    usersEverConnected: 0,
+    totalConnectMs: 0,
+    unexpectedDisconnects: 0,
+    disconnect4002: 0,
+    joinRetries: 0,
+    reconnectAttempts: 0,
+    reconnectSuccesses: 0,
+  };
 
   console.log(`[load-test] Target: ${config.url}`);
   console.log(`[load-test] Connections: ${config.connections} (ramp: ${config.rampRate}/s)`);
   console.log(`[load-test] Stress traffic: ${config.stress ? `enabled (${config.actionInterval}ms base interval)` : 'disabled'}`);
+  console.log(`[load-test] Join timeout: ${config.joinTimeoutMs}ms`);
+  console.log(`[load-test] Reconnects: ${config.reconnect ? `enabled (${config.reconnectAttempts} attempt(s))` : 'disabled'}`);
+  console.log(`[load-test] Logging: ${config.quiet ? 'quiet SDK noise filtering enabled' : 'standard'}`);
   console.log(`[load-test] WS candidates: ${wsCandidates.join(', ')}`);
   if (config.token) {
     console.log('[load-test] Auth mode: TOKEN (shared credentials)');
   } else {
     console.log('[load-test] Auth mode: AUTO (self-registering per connection)');
-    console.log('[load-test] NOTE: Accounts use deterministic names (loadtest0, loadtest1, ...) and are reused across runs.');
+    console.log(`[load-test] NOTE: Accounts use deterministic names (${config.username}0, ${config.username}1, ...) and are reused across runs.`);
   }
 
   const users: VirtualUser[] = [];
   let shuttingDown = false;
-  const reporterHandle = startReporter(users);
+  const reporterHandle = startReporter(users, stats);
 
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) {
@@ -514,9 +797,7 @@ async function main(): Promise<void> {
     console.log(`\n[load-test] ${signal} received — closing ${users.length} connection(s)…`);
     clearInterval(reporterHandle);
     await Promise.allSettled(users.map((user) => user.close()));
-    const connected = countUsers(users, 'connected');
-    const failed = countUsers(users, 'failed');
-    console.log(`[load-test] Shutdown complete. ${connected} were live, ${failed} failed.`);
+    printSummary(users, stats);
     process.exit(0);
   };
 
@@ -532,9 +813,15 @@ async function main(): Promise<void> {
         index: users.length,
         sharedToken: config.token,
         sharedPlayerId: config.playerId,
+        usernamePrefix: config.username,
         stressEnabled: config.stress,
         actionIntervalMs: config.actionInterval,
+        joinTimeoutMs: config.joinTimeoutMs,
+        reconnectEnabled: config.reconnect,
+        reconnectAttempts: config.reconnectAttempts,
+        quiet: config.quiet,
         users,
+        stats,
       });
       users.push(user);
     }
@@ -546,6 +833,7 @@ async function main(): Promise<void> {
 
   if (!shuttingDown) {
     console.log(`[load-test] Ramp complete. ${countUsers(users, 'connected')}/${config.connections} connections live. Holding… (Ctrl+C to stop)`);
+    printReporterLine(users, stats);
   }
 
   await new Promise<void>((resolve) => {

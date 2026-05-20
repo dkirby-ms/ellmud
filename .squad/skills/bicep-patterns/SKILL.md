@@ -58,6 +58,12 @@ Provision Azure Managed Grafana as its own module with `Microsoft.Dashboard/graf
 
 To let Grafana read Azure Monitor / App Insights-backed telemetry, assign its managed identity the built-in `Monitoring Reader` role at resource-group scope. The emitting app does not need extra Azure RBAC when it sends telemetry via `APPLICATIONINSIGHTS_CONNECTION_STRING`; the connection string is sufficient for ingestion.
 
+### Azure Managed Grafana SQL Data Sources
+
+Generic Grafana data sources such as PostgreSQL are not first-class ARM/Bicep resources even though the workspace itself is. Keep the workspace in Bicep, then use `az grafana data-source create/update` as an idempotent post-deploy step for the actual datasource definition.
+
+For Azure Database for PostgreSQL Flexible Server, keep the deployment on the public access model and retain the `AllowAzureServices` firewall rule when Grafana will connect over the public endpoint. Feed credentials at runtime from environment variables or secret stores; never hardcode them into Bicep or repo files.
+
 ## Anti-Patterns
 
 - **dependsOn on existing resources** — Bicep compilation error. Always invalid.
