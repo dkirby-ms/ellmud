@@ -252,3 +252,44 @@
 - `packages/e2e/src/load-test-ws.ts`
 - `packages/e2e/package.json`
 - `.squad/agents/drizzt/history.md`
+
+### 2026-05-20T17:59:23.199+00:00: ACA Multi-Replica Seat Reservation Diagnosis (INVESTIGATED)
+
+**Task:** Diagnose why the UAT WebSocket load test starts failing as soon as ACA scales `ellmud-uat-app` above one replica.
+
+**Findings / patterns:**
+- UAT is deployed with the intended multi-replica server stack: `infra/modules/container-apps.bicep` enables `ingress.stickySessions.affinity = 'sticky'`, and recent replica startup logs show `Cache: Redis, Presence: Redis` plus `Matchmaker driver: Redis` on every scaled-out replica.
+- The HTTP auth and `/api/spawn-zone` calls are not the seat-reservation boundary. `packages/server/src/api/spawn-zone.ts` only returns a zone slug/target; the actual Colyseus seat reservation is created by `joinOrCreate()` during `POST /matchmake/joinOrCreate/:roomName`, then consumed on the follow-up WebSocket handshake.
+- Colyseus still keeps reserved seats inside the room process (`node_modules/@colyseus/core/src/Room.ts` stores `_reservedSeats` in memory, and `Transport.ts` throws `seat reservation expired.` when the handshake reaches a room instance without that reservation). Redis presence/driver share room discovery and matchmaker coordination, but they do not make seat consumption replica-agnostic.
+- The current raw Node load harness is not affinity-safe on ACA. `packages/e2e/src/load-test-ws.ts` does REST calls with `fetch`, then `@colyseus/sdk` performs its own matchmake HTTP request and separate WebSocket upgrade. In Node, the SDK does not persist `Set-Cookie` affinity from the matchmake response into the WebSocket handshake; it only forwards static configured headers. That makes ACA sticky sessions ineffective for this harness once more than one replica is live.
+- Log Analytics confirms the failure window coincides with scale-out (`17:48:21Z` → 2 replicas, `17:48:36Z` → 3, `17:49:06Z` → 4), and gameplay join logs were emitted by more than one container group during that window, proving traffic was actually landing on multiple replicas.
+
+**Key file paths:**
+- `infra/modules/container-apps.bicep`
+- `packages/server/src/index.ts`
+- `packages/server/src/api/spawn-zone.ts`
+- `packages/e2e/src/load-test-ws.ts`
+- `node_modules/@colyseus/sdk/src/Client.ts`
+- `node_modules/@colyseus/sdk/src/HTTP.ts`
+- `node_modules/@colyseus/sdk/src/transport/WebSocketTransport.ts`
+- `node_modules/@colyseus/core/src/Room.ts`
+- `node_modules/@colyseus/core/src/Transport.ts`
+
+### 2026-05-20T18:12:16.280+00:00: ACA Affinity Cookie Passthrough for WS Load Testing (DELIVERED)
+
+**Task:** Patch the raw Colyseus WebSocket load harness so ACA affinity survives the matchmake-to-WebSocket handoff during multi-replica scale-out.
+
+**Architecture / design decisions:**
+- `packages/e2e/src/load-test-ws.ts` now performs the Colyseus `POST /matchmake/joinOrCreate/:roomName` step manually for each websocket candidate, captures `ARRAffinity` and `ARRAffinity_SameSite` from `Set-Cookie`, and then calls `Client.consumeSeatReservation()` instead of relying on `client.joinOrCreate()`.
+- The harness injects the captured cookie pair into the Node websocket upgrade as a `Cookie` header via Colyseus `Client` options, which keeps the seat-reservation consume step pinned to the same ACA replica.
+- Cookie passthrough is conditional; local/dev endpoints still work when no ACA affinity cookies are present.
+
+**Patterns / user-relevant notes:**
+- In Node, the Colyseus SDK can forward static websocket headers from `Client` options, but it does not automatically persist matchmake response cookies into the websocket handshake.
+- For ACA sticky-session safety, the critical boundary is Colyseus matchmake HTTP to websocket consume-seat, not the earlier auth or `/api/spawn-zone` REST calls.
+
+**Key file paths:**
+- `packages/e2e/src/load-test-ws.ts`
+- `node_modules/@colyseus/sdk/src/Client.ts`
+- `node_modules/@colyseus/sdk/src/HTTP.ts`
+- `node_modules/@colyseus/sdk/src/transport/WebSocketTransport.ts`

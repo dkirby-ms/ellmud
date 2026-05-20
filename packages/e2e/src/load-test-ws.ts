@@ -6,7 +6,7 @@
  * This keeps per-user memory low enough for high-connection fan-out runs.
  */
 
-import { Client, type Room } from '@colyseus/sdk';
+import { Client, type Room, type SeatReservation } from '@colyseus/sdk';
 import { MessageTypes, type CommandMessage } from '@ellmud/shared';
 
 const KNOWN_ROOM_MESSAGE_TYPES = [
@@ -36,6 +36,8 @@ const QUIET_SDK_NOISE_PATTERNS = [
   '@colyseus/sdk: onMessage() not registered',
   'Room connection was closed unexpectedly',
 ] as const;
+
+const ACA_AFFINITY_COOKIE_NAMES = ['ARRAffinity', 'ARRAffinity_SameSite'] as const;
 
 interface LoadTestConfig {
   url: string;
@@ -341,6 +343,66 @@ function registerNoopMessageHandlers(room: Room): void {
   }
 }
 
+function extractSetCookies(headers: Headers): string[] {
+  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === 'function') {
+    return getSetCookie.call(headers);
+  }
+
+  const combined = headers.get('set-cookie');
+  if (!combined) {
+    return [];
+  }
+
+  return combined
+    .split(/,(?=[^;,]+=)/)
+    .map((cookie) => cookie.trim())
+    .filter((cookie) => cookie.length > 0);
+}
+
+function buildAffinityCookieHeader(headers: Headers): string | undefined {
+  const setCookies = extractSetCookies(headers);
+  const affinityCookies = ACA_AFFINITY_COOKIE_NAMES.flatMap((name) => {
+    const cookie = setCookies.find((candidate) => candidate.startsWith(`${name}=`));
+    const cookiePair = cookie?.split(';', 1)[0]?.trim();
+    return cookiePair ? [cookiePair] : [];
+  });
+
+  return affinityCookies.length > 0 ? affinityCookies.join('; ') : undefined;
+}
+
+function getMatchmakeEndpoint(wsEndpoint: string, roomName: string): string {
+  const url = new URL(wsEndpoint);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  url.pathname = `/matchmake/joinOrCreate/${encodeURIComponent(roomName)}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+async function joinZoneRoomWithAffinity(
+  wsEndpoint: string,
+  roomName: string,
+  token: string,
+  characterId: string,
+): Promise<Room> {
+  const matchmakeResponse = await fetch(getMatchmakeEndpoint(wsEndpoint, roomName), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ token, characterId }),
+  });
+  const reservation = await expectJson<SeatReservation>(matchmakeResponse, 'Matchmake');
+  const affinityCookie = buildAffinityCookieHeader(matchmakeResponse.headers);
+  const client = new Client(
+    wsEndpoint,
+    affinityCookie ? { headers: { Cookie: affinityCookie } } : undefined,
+  );
+  return await client.consumeSeatReservation(reservation);
+}
+
 function shouldSuppressSdkNoise(line: string): boolean {
   return QUIET_SDK_NOISE_PATTERNS.some((pattern) => line.includes(pattern));
 }
@@ -383,9 +445,8 @@ async function joinZoneRoom(
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     for (const wsEndpoint of wsCandidates) {
       try {
-        const client = new Client(wsEndpoint);
         const room = await withTimeout(
-          client.joinOrCreate(roomName, { token, characterId }),
+          joinZoneRoomWithAffinity(wsEndpoint, roomName, token, characterId),
           joinTimeoutMs,
           `Join ${roomName} via ${wsEndpoint}`,
         );
