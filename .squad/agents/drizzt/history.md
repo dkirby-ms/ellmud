@@ -315,3 +315,24 @@
 - `packages/server/src/rooms/ZoneRoom.ts`
 - `packages/server/src/db/migrations/023_room_metrics_nullable_player_id.sql`
 - `packages/server/src/__tests__/metrics-service.test.ts`
+
+## Learnings
+
+**Date:** 2026-05-20T20:00:00.902+00:00
+**Task:** Add Grafana dashboard panels for room metrics (room_snapshot, room_join, room_leave, chat_message) in a new "Room & Connection Metrics" row.
+
+**Architecture / design decisions:**
+- New row section "Room & Connection Metrics" placed at y=26, immediately after the "Leaderboards & Hotspots" row which ends at y=26.
+- Panel IDs 200–204 reserved for this row to avoid conflicts with existing 1–7 and 100–101.
+- Active Players panel uses AVG of `playerCount` per 5-minute bucket grouped by `zoneName` — averaging is more accurate than SUM since multiple rooms in the same zone each emit their own snapshot.
+- Room Population Table uses `DISTINCT ON (metadata->>'roomId') ORDER BY ... created_at DESC` to get the latest snapshot per room without a lateral join or window function — clean and performant for small room counts.
+- Join/Leave Rate uses `event_type AS metric` directly so both series emerge from one query target (the `room_join`/`room_leave` label names self-document).
+- Chat Messages panel uses bar chart draw style (consistent with the existing "Loot activity" panel style for count-per-bucket data).
+
+**Patterns / user-relevant notes:**
+- `$__timeGroupAlias` with `'5m'` is appropriate for room metrics since snapshots fire every 60 seconds — 5-minute buckets give enough granularity without noise.
+- The table panel for room population intentionally omits `$__timeFilter` because it always wants the latest snapshot regardless of the dashboard time window.
+- Thresholds on the Room Population Table (green → yellow at 5 → red at 10) give at-a-glance congestion signals.
+
+**Key file paths:**
+- `infra/grafana/dashboards/game-metrics.json`

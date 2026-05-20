@@ -31,3 +31,10 @@
 3. `peaceful` before teleport if you need to control which creatures engage
 4. `adminSpawnCreature(id, room, 'warrens')` — must pass zoneSlug for non-reliquary zones
 5. Flee is probabilistic (50% base) — use retry loop up to 5 attempts
+
+## Learnings
+
+### 2026-05-20T19:51:09.439+00:00 — Playwright load-test gameplay mix
+- `packages/e2e/src/load-test.ts` keeps the existing auth, connection, reporter, and shutdown wiring; only the stress behavior should change for gameplay simulations.
+- The browser-driven load test submits commands through `page.locator('input[aria-label="Command input"]')` with `fill()` + `press('Enter')`, so command generation should stay string-based.
+- The richer gameplay loop now starts each connected user with `look`, then rotates weighted movement/combat/loot/chat/state/item/who commands to better mimic live zone activity.
