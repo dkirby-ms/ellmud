@@ -12,7 +12,7 @@ param tags object
 var grafanaName = '${resourcePrefix}-grafana'
 var monitoringReaderRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  '43d8d2a0-ff03-4c20-9adf-8a3a78921d9e' // Monitoring Reader
+  '43d0d8ad-25c7-4714-9337-8ba259a9fe05' // Monitoring Reader
 )
 
 resource grafana 'Microsoft.Dashboard/grafana@2024-10-01' = {
