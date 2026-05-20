@@ -52,6 +52,12 @@ This avoids duplicate resource declarations when a module is called multiple tim
 
 The `listKeys()` function triggers a linter warning. Suppress with `#disable-next-line outputs-should-not-contain-secrets` when intentional (e.g., Log Analytics key for Container Apps). Phase 2 should use Key Vault references instead.
 
+### Azure Managed Grafana Access
+
+Provision Azure Managed Grafana as its own module with `Microsoft.Dashboard/grafana`, `sku.name = 'Standard'`, `identity.type = 'SystemAssigned'`, and the shared `tags` object used elsewhere in `infra/`.
+
+To let Grafana read Azure Monitor / App Insights-backed telemetry, assign its managed identity the built-in `Monitoring Reader` role at resource-group scope. The emitting app does not need extra Azure RBAC when it sends telemetry via `APPLICATIONINSIGHTS_CONNECTION_STRING`; the connection string is sufficient for ingestion.
+
 ## Anti-Patterns
 
 - **dependsOn on existing resources** — Bicep compilation error. Always invalid.

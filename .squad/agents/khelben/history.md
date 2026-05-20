@@ -164,3 +164,10 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 
 **Key insight:** `github.event.before` is undefined for `workflow_dispatch`. Always check event type before using SHA-range git log. For merge-based promote flows, the second parent (`HEAD^2`) is the canonical source of "what got merged in."
 
+### 2026-05-20T15:36:05.073+00:00: Azure Managed Grafana infra wiring
+
+- `infra/modules/monitoring.bicep` already provisions workspace-based Application Insights plus Log Analytics, and `infra/modules/container-apps.bicep` already injects `APPLICATIONINSIGHTS_CONNECTION_STRING` into the ACA workload.
+- `infra/modules/grafana.bicep` is the new observability module for Azure Managed Grafana: use `Microsoft.Dashboard/grafana` with `sku.name = 'Standard'`, `identity.type = 'SystemAssigned'`, shared tags, and a resource-group-scope `Monitoring Reader` role assignment for Grafana's managed identity.
+- The Container App does not need extra Azure RBAC just to emit telemetry when it uses the App Insights connection string; ingestion is connection-string based, so Grafana is the identity that needs read access.
+- `infra/main.bicep` should wire Grafana after the ACA app module so observability resources come up after the workload and expose `grafanaName` / `grafanaEndpoint` as deployment outputs.
+

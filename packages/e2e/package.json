@@ -8,7 +8,11 @@
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
     "test:report": "playwright show-report",
-    "load-test": "tsx src/load-test.ts"
+    "load-test": "tsx src/load-test.ts",
+    "load-test:ws": "tsx src/load-test-ws.ts"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "~0.17.35"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

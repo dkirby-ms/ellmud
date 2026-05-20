@@ -106,6 +106,7 @@ All resources follow the pattern `ellmud-{env}-{resource-type}`:
 | ACR | `ellmud{env}acr` | `ellmuduatacr` |
 | App Insights | `ellmud-{env}-ai` | `ellmud-uat-ai` |
 | Log Analytics | `ellmud-{env}-logs` | `ellmud-uat-logs` |
+| Grafana | `ellmud-{env}-grafana` | `ellmud-uat-grafana` |
 | AI Services | `ellmud-{env}-ai-services` | `ellmud-uat-ai-services` |
 
 ## Environment Variables
@@ -127,6 +128,7 @@ After infrastructure is deployed:
 1. **Push a container image** — CI/CD will build and push to ACR, then update the Container App
 2. **Verify health** — The bootstrap placeholder responds on `/` with `{"status":"ok","mode":"placeholder"}`
 3. **Check logs** — `az containerapp logs show --name ellmud-uat-app --resource-group ellmud-rg`
+4. **Open Grafana** — use the deployment output `grafanaEndpoint`; the instance can read Azure Monitor/App Insights data through its managed identity's `Monitoring Reader` role on the resource group
 
 ## GitHub Environments Setup
 

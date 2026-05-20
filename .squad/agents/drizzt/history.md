@@ -189,3 +189,27 @@
 - `node_modules/@colyseus/core/src/MatchMaker.ts`
 - `node_modules/@colyseus/core/src/utils/Utils.ts`
 - `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`
+
+### 2026-05-20T15:22:42.185+00:00: Browser-Free Colyseus Load Test Harness (DELIVERED)
+
+**Task:** Build a lightweight e2e load test path that skips Playwright browsers and drives auth plus zone joins through raw HTTP + WebSocket.
+
+**Architecture / design decisions:**
+- `packages/e2e/src/load-test-ws.ts` now performs the full player bootstrap with HTTP calls (`/auth/login`, `/auth/register`, `/api/characters`, `/api/characters/:id/select`, `/api/spawn-zone`) and then joins the returned `zone:<slug>` room via the Colyseus JS SDK with `{ token, characterId }`.
+- The WS harness reuses the same command pressure shape as the browser load test, but sends protocol-native `MessageTypes.COMMAND` payloads directly after parsing direction aliases into `go <dir>`.
+- Local/dev websocket resolution now tries both the app host and the Colyseus dev port (`:2567`) so one CLI flag (`--url`) still works against browser-served local stacks and same-origin deployed stacks.
+- The WS ramp no longer waits for each batch to finish connecting before spawning the next batch, avoiding the Playwright harness stall pattern when a subset of joins hang or time out.
+
+**Patterns / user-relevant notes:**
+- `/api/spawn-zone` is the canonical way to resolve which persistent zone room a selected character should join; it reflects the active character's starting zone and keeps the load harness aligned with the real client flow.
+- For protocol-level load tests, joining `joinOrCreate(spawnTarget, { token, characterId })` plus sending `MessageTypes.COMMAND` traffic is enough; no DOM, localStorage, or browser navigation is required.
+
+**Key file paths:**
+- `packages/e2e/src/load-test-ws.ts`
+- `packages/e2e/package.json`
+- `package.json`
+- `scripts/load-test-ws.cmd`
+- `packages/client/src/services/connection.ts`
+- `packages/client/src/pages/ZoneExploration.tsx`
+- `packages/server/src/api/characters.ts`
+- `packages/server/src/api/spawn-zone.ts`
