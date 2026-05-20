@@ -158,15 +158,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
   properties: {
     managedEnvironmentId: resolvedEnvironmentId
     configuration: {
-      activeRevisionsMode: 'Single'
       ingress: {
         external: true
         targetPort: 2567
         transport: 'http'
         allowInsecure: false
-        stickySessions: {
-          affinity: 'sticky'
-        }
         traffic: [
           {
             latestRevision: true
@@ -222,9 +218,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
         rules: [
           {
             name: 'websocket-connections'
-            http: {
+            custom: {
+              type: 'azure-monitor'
               metadata: {
-                concurrentRequests: '30'
+                metricName: 'Requests'
+                metricNamespace: 'Microsoft.App/containerApps'
+                resourceURI: 'subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroup().name}/providers/Microsoft.App/containerApps/${containerAppName}'
+                tenantId: tenant().tenantId
+                subscriptionId: subscription().subscriptionId
+                resourceGroupName: resourceGroup().name
+                metricAggregationType: 'Total'
+                targetValue: '30'
+                activationTargetValue: '10'
               }
             }
           }
