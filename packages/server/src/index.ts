@@ -5,8 +5,6 @@ import { fileURLToPath } from 'url';
 const __dirnameInit = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirnameInit, '../../../.env') });
 
-import { Server } from '@colyseus/core';
-import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
@@ -53,6 +51,7 @@ import { initContentRegistry } from './content/index.js';
 import { LoadSimulator, createLoadSimulatorRouter, registerLoadSimulatorShutdown } from './load-simulator/index.js';
 
 const config = getConfig();
+process.env.COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME ??= String(config.matchmaker.concurrentCreateRoomWaitTimeS);
 const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
 let USE_PG = !!process.env.DATABASE_URL;
@@ -388,8 +387,17 @@ if (config.redis.driverEnabled && config.redis.enabled) {
   }
 }
 
+const [{ Server }, { WebSocketTransport }] = await Promise.all([
+  import('@colyseus/core'),
+  import('@colyseus/ws-transport'),
+]);
+
 const server = new Server({
-  transport: new WebSocketTransport({ server: httpServer }),
+  transport: new WebSocketTransport({
+    server: httpServer,
+    pingInterval: config.websocket.pingIntervalMs,
+    pingMaxRetries: config.websocket.pingMaxRetries,
+  }),
   presence,
   driver,
 });
@@ -433,6 +441,8 @@ console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/monitor`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Matchmaker driver: ${isDriverRedis ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Matchmaker create-room wait: ${config.matchmaker.concurrentCreateRoomWaitTimeS}s`);
+console.log(`[Ellmud] WebSocket heartbeat: ${config.websocket.pingIntervalMs}ms x ${config.websocket.pingMaxRetries} retries`);
 if (!isPresenceRedis || !isDriverRedis) {
   console.warn('[Ellmud] Multi-replica scaling is not cluster-safe: Redis presence/driver and ingress sticky sessions must all be enabled.');
 }

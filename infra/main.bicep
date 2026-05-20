@@ -70,6 +70,19 @@ param adminToken string = ''
 @description('Require authentication to join rooms (true for production)')
 param authRequired string = 'true'
 
+@description('Container image to run (defaults to bootstrap placeholder until CI/CD deploys the real image)')
+param containerImage string = 'node:22-alpine'
+
+@description('Container command array (defaults to the bootstrap placeholder entrypoint)')
+param containerCommand array = [
+  '/bin/sh'
+  '-c'
+]
+
+@description('Container args array (defaults to the bootstrap placeholder HTTP responder)')
+param containerArgs array = [
+  'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(2567,\'0.0.0.0\')"'
+]
 
 // ─── Variables ──────────────────────────────────────────────────────────────
 
@@ -147,6 +160,9 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     postgresAdminPassword: postgresAdminPassword
     redisServiceName: '${resourcePrefix}-redis'
     deployApp: true
+    containerImage: containerImage
+    containerCommand: containerCommand
+    containerArgs: containerArgs
     entraClientId: entraClientId
     entraClientSecret: entraClientSecret
     entraTenantId: entraTenantId

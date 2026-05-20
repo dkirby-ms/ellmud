@@ -45,6 +45,20 @@ param redisServiceName string = ''
 @description('Deploy the game server container app (false = environment only)')
 param deployApp bool = false
 
+@description('Container image to run (defaults to bootstrap placeholder until CI/CD deploys the real image)')
+param containerImage string = 'node:22-alpine'
+
+@description('Container command array (defaults to the bootstrap placeholder entrypoint)')
+param containerCommand array = [
+  '/bin/sh'
+  '-c'
+]
+
+@description('Container args array (defaults to the bootstrap placeholder HTTP responder)')
+param containerArgs array = [
+  'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(2567,\'0.0.0.0\')"'
+]
+
 @description('Entra External ID client ID')
 param entraClientId string = ''
 
@@ -90,13 +104,9 @@ param authRequired string = 'true'
 var createEnvironment = existingEnvironmentId == ''
 var containerAppName = '${resourcePrefix}-app'
 
-// Bootstrap placeholder — replaced by real image after first CI/CD deploy.
-// The deploy step (ci-cd.yml) overrides command/args with the real entrypoint
-// and clears these bootstrap values via --command and --args "".
-// Listens on 2567 (Colyseus default) so ingress config stays stable.
-var bootstrapImage = 'node:22-alpine'
-var bootstrapCommand = 'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(2567,\'0.0.0.0\')"'
-
+// Bootstrap defaults keep first deploys greenfield-safe until CI/CD publishes
+// the real server image. Brownfield infra redeploys should pass the current
+// image/entrypoint back into these params so ACA state stays unchanged.
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (createEnvironment) {
   name: '${resourcePrefix}-cae'
   location: location
@@ -171,9 +181,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
       containers: [
         {
           name: 'ellmud'
-          image: bootstrapImage
-          command: ['/bin/sh', '-c']
-          args: [bootstrapCommand]
+          image: containerImage
+          command: empty(containerCommand) ? null : containerCommand
+          args: empty(containerArgs) ? null : containerArgs
           resources: {
             cpu: json('1.0')
             memory: '2Gi'

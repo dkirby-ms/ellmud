@@ -21,6 +21,20 @@ export interface ServerConfig {
   /** Matchmaker mode. 'in-process' = Colyseus default built-in matchmaker. */
   matchmakerMode: 'in-process';
 
+  /** Colyseus matchmaker tuning. */
+  matchmaker: {
+    /** Seconds to wait for a concurrent room creator before creating a duplicate room. */
+    concurrentCreateRoomWaitTimeS: number;
+  };
+
+  /** WebSocket heartbeat tuning. */
+  websocket: {
+    /** Interval between server pings in milliseconds. */
+    pingIntervalMs: number;
+    /** Missed pong retries before the socket is terminated. */
+    pingMaxRetries: number;
+  };
+
   /** Redis configuration — shared connection for cache + presence. */
   redis: {
     /** Enable Redis-backed presence for multi-replica scaling. */
@@ -132,6 +146,13 @@ function envBool(key: string, fallback: boolean): boolean {
   return val === 'true' || val === '1';
 }
 
+function envFloat(key: string, fallback: number): number {
+  const val = process.env[key];
+  if (val === undefined) return fallback;
+  const parsed = Number.parseFloat(val);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function envStr(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
@@ -183,6 +204,13 @@ export function loadConfig(): ServerConfig {
     maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
     loadSimulator: envLoadSimulator(),
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
+    matchmaker: {
+      concurrentCreateRoomWaitTimeS: envFloat('COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME', 10),
+    },
+    websocket: {
+      pingIntervalMs: envInt('WS_PING_INTERVAL', 6000),
+      pingMaxRetries: envInt('WS_PING_MAX_RETRIES', 4),
+    },
     redis: {
       enabled: envBool('REDIS_PRESENCE_ENABLED', false),
       connectionString: envStr(
