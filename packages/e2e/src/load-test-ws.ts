@@ -374,7 +374,7 @@ function buildAffinityCookieHeader(headers: Headers): string | undefined {
 function getMatchmakeEndpoint(wsEndpoint: string, roomName: string): string {
   const url = new URL(wsEndpoint);
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
-  url.pathname = `/matchmake/joinOrCreate/${encodeURIComponent(roomName)}`;
+  url.pathname = `/matchmake/joinOrCreate/${roomName}`;
   url.search = '';
   url.hash = '';
   return url.toString();
