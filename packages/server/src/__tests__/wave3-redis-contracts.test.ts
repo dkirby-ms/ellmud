@@ -118,6 +118,13 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
       targetConnections: 0,
     },
     matchmakerMode: 'in-process',
+    matchmaker: {
+      concurrentCreateRoomWaitTimeS: 10,
+    },
+    websocket: {
+      pingIntervalMs: 6000,
+      pingMaxRetries: 4,
+    },
     redis: {
       enabled: false,
       connectionString: 'redis://localhost:6379',
