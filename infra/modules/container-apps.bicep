@@ -221,15 +221,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             custom: {
               type: 'azure-monitor'
               metadata: {
-                metricName: 'Requests'
-                metricNamespace: 'Microsoft.App/containerApps'
-                resourceURI: 'subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroup().name}/providers/Microsoft.App/containerApps/${containerAppName}'
-                tenantId: tenant().tenantId
-                subscriptionId: subscription().subscriptionId
-                resourceGroupName: resourceGroup().name
-                metricAggregationType: 'Total'
-                targetValue: '30'
-                activationTargetValue: '10'
+                concurrentRequests: '50'
               }
             }
           }

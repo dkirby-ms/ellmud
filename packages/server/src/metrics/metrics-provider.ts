@@ -15,6 +15,10 @@ class NoOpMetricsService extends MetricsService {
   recordKill(): void { /* no-op */ }
   recordLootPickup(): void { /* no-op */ }
   recordCombatStats(): void { /* no-op */ }
+  recordRoomJoin(): void { /* no-op */ }
+  recordRoomLeave(): void { /* no-op */ }
+  recordChatMessage(): void { /* no-op */ }
+  recordRoomSnapshot(): void { /* no-op */ }
 }
 
 let _service: MetricsService | null = null;
