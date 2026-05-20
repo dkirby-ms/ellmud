@@ -216,6 +216,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private sandboxRoomIds = new Set<string>();
   /** Cached zone slugs for fast synchronous lookups (dev tools: goto validation). */
   private knownZoneSlugs = new Set<string>();
+  /** Deferred post-join hydration tasks keyed by character ID. */
+  private joinHydrationTasks = new Map<string, Promise<void>>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -544,68 +546,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.playerIds.set(client.sessionId, playerId);
     // Track the real players-table ID for DB persistence (characterId FKs to characters, not players).
     this.ownerPlayerIds.set(playerId, rawPlayerId);
-
-    // Load persisted profile (skills, carry weight, equipment) or use defaults
-    let profile: PlayerProfile;
-    try {
-      const saved = await this.profileRepo.load(this.dbPlayerId(playerId), playerId);
-      profile = saved ?? { ...DEFAULT_PROFILE };
-    } catch (err) {
-      this.log(`Failed to load profile for ${this.playerTag(playerId)}: ${err}`);
-      profile = { ...DEFAULT_PROFILE };
-    }
-
-    // Load faction membership and cache slug for death routing
-    try {
-      const factionSlug = await this.factionRepo.getPlayerFactionSlug(this.dbPlayerId(playerId));
-      if (factionSlug) {
-        this.playerFactionSlugs.set(playerId, factionSlug);
-        this.log(`Player ${this.playerTag(playerId)} faction: ${factionSlug}`);
-      }
-    } catch (err) {
-      this.log(`Failed to load factions for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Load character name for combat narration and log formatting.
-    // Try by character ID first, then by active character for the player account.
-    try {
-      const character = await this.characterRepo.getById(playerId)
-        ?? await this.characterRepo.getActive(playerId);
-      if (character?.name) {
-        this.characterNames.set(playerId, character.name);
-      }
-      if (character?.startingZoneSlug) {
-        this.playerStartingZones.set(playerId, character.startingZoneSlug);
-      }
-    } catch (err) {
-      this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Load combat stats for the player (base stats from DB + equipment bonuses).
-    try {
-      const baseStats = await this.characterRepo.getBaseStats(playerId);
-      // Build equipment bonus from currently equipped items (if any).
-      const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
-      // Equipment will be populated after inventory load; for now, cache base stats.
-      // We refresh below after inventory/loadout restoration.
-      const equipment = calculateEquipmentBonuses(equippedSlots);
-      const effective = calculatePlayerEffectiveStats(baseStats, equipment);
-      this.playerStatsCache.set(playerId, effective);
-      this.playerWeaponTypes.set(playerId, equipment.weaponSkill);
-    } catch (err) {
-      this.log(`Failed to load combat stats for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Load character flags (anon, rp) into cache for room visibility (Issue #370)
-    try {
-      const flagsRepo = getCharacterFlagsRepository();
-      const flags = await flagsRepo.getFlags(playerId);
-      this.playerFlagsCache.set(playerId, flags);
-    } catch (err) {
-      this.log(`Failed to load flags for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
     // Determine entry room based on zone vs instance.
@@ -618,7 +558,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
         startRoom = targetRoom;
       } else {
-        // Check for last inn location in this zone
+        // Keep the last-inn lookup in the critical path because it changes the spawn room.
         let innRoom: string | undefined;
         try {
           const lastInn = await this.characterRepo.getLastInn(playerId);
@@ -636,55 +576,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
     }
 
-    // Initialize player state at assigned entry room with persisted profile
-    const playerState = new PlayerState(
-      playerId,
-      startRoom,
-      profile.maxCarryWeight,
-      profile.skills,
-      profile.equipment,
-    );
+    // Create a lightweight connected player immediately. Heavy hydration resumes on the next tick.
+    const playerState = new PlayerState(playerId, startRoom);
     this.players.set(playerId, playerState);
-
-    // Load persisted posture from DB (#371)
-    try {
-      const savedPosture = await this.characterRepo.loadPosture(playerId);
-      if (isValidPosture(savedPosture)) {
-        playerState.posture = savedPosture;
-      }
-    } catch (err) {
-      this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Grant starter kit to inventory on first zone join (non-fatal)
-    try {
-      const kitCount = await grantStarterKit(playerId, playerState, this.characterRepo, isCharacterPg());
-      if (kitCount > 0) {
-        this.log(`Starter kit: granted ${kitCount} item(s) to ${this.playerTag(playerId)}`);
-      }
-    } catch (err) {
-      this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Load persisted inventory from DB (#409)
-    try {
-      const savedItems = await this.inventoryRepo.loadInventory(this.dbPlayerId(playerId));
-      for (const entry of savedItems) {
-        for (let i = 0; i < entry.quantity; i++) {
-          playerState.addItem({
-            id: entry.itemId,
-            name: entry.name,
-            weight: entry.weight,
-            description: entry.description,
-          });
-        }
-      }
-      if (savedItems.length > 0) {
-        this.log(`Loaded ${savedItems.length} inventory item(s) for ${this.playerTag(playerId)}`);
-      }
-    } catch (err) {
-      this.log(`Failed to load inventory for ${this.playerTag(playerId)}: ${err}`);
-    }
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
@@ -701,69 +595,228 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.log(`Entry narration error: ${err}`);
       });
 
-    // Send initial room look
+    // Send the minimum state required for the client to consider the player connected.
     const lookResult = handleLook(this.buildCommandContext(playerState, []));
     this.deliverResult(client, lookResult);
     this.sendTraceNarrations(client, startRoom);
-
-    // Send exploration data so client map can render the starting room
-    await this.sendExplorationData(client, playerId, startRoom);
-
-    // Send initial room occupants
     this.sendRoomOccupants(client, playerId, startRoom);
-
     this.sendZoneState(client, {
       state: this.lifecycle,
     });
+    this.sendHydratedPlayerState(client, playerId);
 
-    // Send initial player state (HP, stamina, status effects, posture)
-    // Combatant doesn't exist yet, so we use cached HP or default stats
+    const hydrationTask = this.deferJoinHydration(client, playerId, rawPlayerId);
+    this.joinHydrationTasks.set(playerId, hydrationTask);
+    hydrationTask.finally(() => {
+      if (this.joinHydrationTasks.get(playerId) === hydrationTask) {
+        this.joinHydrationTasks.delete(playerId);
+      }
+    });
+  }
+
+  private deferJoinHydration(client: Client, playerId: string, rawPlayerId: string): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        void this.hydratePlayerAfterJoin(client, playerId, rawPlayerId)
+          .catch((err) => {
+            this.log(`Deferred join hydration failed for ${this.playerTag(playerId)}: ${err}`);
+          })
+          .finally(resolve);
+      }, 0);
+    });
+  }
+
+  private async hydratePlayerAfterJoin(client: Client, playerId: string, rawPlayerId: string): Promise<void> {
+    await this.yieldToEventLoop();
+    if (!this.isJoinHydrationActive(client, playerId)) return;
+
+    const playerState = this.players.get(playerId);
+    if (!playerState) return;
+
+    try {
+      // Restore persisted profile first so weight limits / passive skills stop using defaults.
+      try {
+        const saved = await this.profileRepo.load(this.dbPlayerId(playerId), playerId);
+        const profile = saved ?? { ...DEFAULT_PROFILE };
+        playerState.maxCarryWeight = profile.maxCarryWeight;
+        playerState.skills = { ...playerState.skills, ...profile.skills };
+        playerState.equipment = profile.equipment;
+      } catch (err) {
+        this.log(`Failed to load profile for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      this.sendInventoryUpdate(client, playerId);
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        const factionSlug = await this.factionRepo.getPlayerFactionSlug(this.dbPlayerId(playerId));
+        if (factionSlug) {
+          this.playerFactionSlugs.set(playerId, factionSlug);
+          this.log(`Player ${this.playerTag(playerId)} faction: ${factionSlug}`);
+        }
+      } catch (err) {
+        this.log(`Failed to load factions for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        const character = await this.characterRepo.getById(playerId)
+          ?? await this.characterRepo.getActive(rawPlayerId);
+        if (character?.name) {
+          this.characterNames.set(playerId, character.name);
+        }
+        if (character?.startingZoneSlug) {
+          this.playerStartingZones.set(playerId, character.startingZoneSlug);
+        }
+      } catch (err) {
+        this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        const baseStats = await this.characterRepo.getBaseStats(playerId);
+        const effective = calculatePlayerEffectiveStats(baseStats, calculateEquipmentBonuses([]));
+        this.playerStatsCache.set(playerId, effective);
+        this.playerBaseStatsCache.set(playerId, baseStats);
+      } catch (err) {
+        this.log(`Failed to load combat stats for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      try {
+        const flagsRepo = getCharacterFlagsRepository();
+        const flags = await flagsRepo.getFlags(playerId);
+        this.playerFlagsCache.set(playerId, flags);
+      } catch (err) {
+        this.log(`Failed to load flags for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      this.sendRoomOccupants(client, playerId, playerState.currentRoomId);
+      this.sendHydratedPlayerState(client, playerId);
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        const savedPosture = await this.characterRepo.loadPosture(playerId);
+        if (isValidPosture(savedPosture)) {
+          playerState.posture = savedPosture;
+        }
+      } catch (err) {
+        this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      let inventoryChanged = false;
+      try {
+        const kitCount = await grantStarterKit(playerId, playerState, this.characterRepo, isCharacterPg());
+        if (kitCount > 0) {
+          inventoryChanged = true;
+          this.log(`Starter kit: granted ${kitCount} item(s) to ${this.playerTag(playerId)}`);
+        }
+      } catch (err) {
+        this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        const savedItems = await this.inventoryRepo.loadInventory(this.dbPlayerId(playerId));
+        for (const entry of savedItems) {
+          for (let i = 0; i < entry.quantity; i++) {
+            playerState.addItem({
+              id: entry.itemId,
+              name: entry.name,
+              weight: entry.weight,
+              description: entry.description,
+            });
+          }
+        }
+        if (savedItems.length > 0) {
+          inventoryChanged = true;
+          this.log(`Loaded ${savedItems.length} inventory item(s) for ${this.playerTag(playerId)}`);
+        }
+      } catch (err) {
+        this.log(`Failed to load inventory for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      if (inventoryChanged) {
+        this.sendInventoryUpdate(client, playerId);
+      }
+      this.sendHydratedPlayerState(client, playerId);
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      await this.sendExplorationData(client, playerId, playerState.currentRoomId);
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      try {
+        await this.sendLoadoutAndStashUpdate(client, playerId);
+      } catch (err) {
+        this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      await this.yieldToEventLoop();
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+
+      await this.rebuildPlayerStatsCache(playerId);
+      if (!this.isJoinHydrationActive(client, playerId)) return;
+      this.sendHydratedPlayerState(client, playerId);
+
+      const downedRecord = this.downingSystem.getDownedPlayer(playerId);
+      if (downedRecord) {
+        const maxHp = this.playerStatsCache.get(playerId)?.maxHp ?? 100;
+        client.send(MessageTypes.PLAYER_STATE, {
+          hp: downedRecord.currentHp,
+          maxHp,
+          stamina: 0,
+          maxStamina: 0,
+          statusEffects: [],
+          posture: playerState.posture,
+        } satisfies PlayerStateMessage);
+
+        this.sendOverlayState(client, {
+          playerId,
+          state: 'downed',
+          narration: 'You are bleeding out...',
+          timestamp: Date.now(),
+        });
+
+        this.log(`Reconnected player ${this.playerTag(playerId)} is downed — restored bleed-out state`);
+      }
+    } catch (err) {
+      this.log(`Deferred join hydration failed for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  private isJoinHydrationActive(client: Client, playerId: string): boolean {
+    return this.playerIds.get(client.sessionId) === playerId && this.players.has(playerId);
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
+  private sendHydratedPlayerState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    const maxHp = this.playerStatsCache.get(playerId)?.maxHp ?? 100;
     client.send(MessageTypes.PLAYER_STATE, {
-      hp: this.playerCurrentHp.get(playerId) ?? 100, // DEFAULT_PLAYER_STATS.maxHp
-      maxHp: 100,
+      hp: this.playerCurrentHp.get(playerId) ?? maxHp,
+      maxHp,
       stamina: 0,
       maxStamina: 0,
       statusEffects: [],
-      posture: playerState.posture,
+      posture: player?.posture ?? 'standing',
     } satisfies PlayerStateMessage);
-
-    // Send full stash + loadout state to client on join (#377)
-    try {
-      await this.sendLoadoutAndStashUpdate(client, playerId);
-    } catch (err) {
-      this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
-    }
-
-    // Rebuild stats cache with actual equipped items now that loadout is restored (#453)
-    await this.rebuildPlayerStatsCache(playerId);
-
-    // Send current inventory to client on join
-    this.sendInventoryUpdate(client, playerId);
-
-    // Restore downed state for reconnecting players — if the player is still
-    // bleeding out in DowningSystem, override the fresh HP=100 we just sent
-    // and re-show the bleed-out overlay so the client matches server state.
-    const downedRecord = this.downingSystem.getDownedPlayer(playerId);
-    if (downedRecord) {
-      const maxHp = this.playerStatsCache.get(playerId)?.maxHp ?? 100;
-      client.send(MessageTypes.PLAYER_STATE, {
-        hp: downedRecord.currentHp,
-        maxHp,
-        stamina: 0,
-        maxStamina: 0,
-        statusEffects: [],
-        posture: playerState.posture,
-      } satisfies PlayerStateMessage);
-
-      this.sendOverlayState(client, {
-        playerId,
-        state: 'downed',
-        narration: 'You are bleeding out...',
-        timestamp: Date.now(),
-      });
-
-      this.log(`Reconnected player ${this.playerTag(playerId)} is downed — restored bleed-out state`);
-    }
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -836,6 +889,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
       const roomId = this.players.get(playerId)!.currentRoomId;
+
+      const hydrationTask = this.joinHydrationTasks.get(playerId);
+      if (hydrationTask) {
+        try {
+          await hydrationTask;
+        } catch (err) {
+          this.log(`Join hydration cleanup wait failed for ${this.playerTag(playerId)}: ${err}`);
+        }
+      }
 
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);

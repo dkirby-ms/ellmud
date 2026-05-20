@@ -163,3 +163,29 @@
 - `node_modules/@colyseus/core/src/Room.ts`
 - `node_modules/@colyseus/core/src/utils/Utils.ts`
 - `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`
+
+### 2026-05-20T13:34:19.228+00:00: Zone Join Deferral, Heartbeat Relaxation, and Matchmaker Wait Tuning (DELIVERED)
+
+**Task:** Implement the three approved server-side fixes for the hot-zone connection ceiling: relax WebSocket heartbeats, slim `ZoneRoom.onJoin()`, and stop duplicate zone-room creation during burst joins.
+
+**Outcome:** ✅ DELIVERED — `npm run build`, `npm run lint`, and `npm test` all passed in `packages/server` after the changes.
+
+**Architecture / design decisions:**
+- `packages/server/src/index.ts` now sets `COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME` before dynamically importing Colyseus, so the runtime actually picks up the longer wait budget instead of the library's 0.5 s default.
+- The WebSocket transport is now configured from centralized config with `WS_PING_INTERVAL` / `WS_PING_MAX_RETRIES` defaults of `6000` ms and `4`, which gives overloaded replicas a much wider pong budget before forced termination.
+- `packages/server/src/rooms/ZoneRoom.ts` keeps only identity resolution, room placement, lightweight player creation, and immediate client bootstrap in `onJoin()`. Profile, faction, character, flags, posture, inventory, exploration, loadout, and combat-stat hydration now run in a deferred async phase with `setTimeout(..., 0)` plus `setImmediate()` yields between heavy steps.
+- Deferred join hydration is tracked per player and awaited during cleanup so a fast disconnect cannot persist half-hydrated default state back to storage.
+
+**Patterns / user-relevant notes:**
+- For Colyseus config sourced from env-backed constants, set the env var before importing the package or the default is frozen too early.
+- The client already treats the connection as established once the room object is set; that makes staged post-join hydration safe as long as room header/look/zone state/player state arrive immediately and fuller inventory/loadout/map data follows quickly.
+- `joinOrCreate('zone:<slug>')` relies on room-name matching, not `filterBy()`, so the duplicate-room fix here is startup tuning of the Colyseus concurrent-create wait rather than room-definition filters.
+
+**Key file paths:**
+- `packages/server/src/index.ts`
+- `packages/server/src/config.ts`
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/__tests__/wave3-redis-contracts.test.ts`
+- `node_modules/@colyseus/core/src/MatchMaker.ts`
+- `node_modules/@colyseus/core/src/utils/Utils.ts`
+- `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`
