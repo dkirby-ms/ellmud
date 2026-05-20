@@ -47,3 +47,18 @@
 
 **Assignment:** Minsc (QA) to rewrite tests with real assertions. Decision logged to .squad/decisions/inbox/elminster-corpse-re-review-442.md.
 
+## Learnings
+
+### 2026-05-19T23:05:13.930+00:00: UAT load-test evaluation
+- `packages/e2e/src/load-test.ts` is the authoritative Playwright load harness: AUTO mode self-registers `loadtest{n}` accounts, creates/selects characters in `the-reliquary`, then joins `/zone` with stress traffic enabled by default.
+- `scripts/load-test.sh` is the operator wrapper for UAT and targets `https://ellmud-test.kirbytoso.xyz` at 200 connections with `--action-interval 3000`.
+- `packages/server/src/config.ts` defines persistent shared-zone capacity separately from procedural tiers: `getMaxPlayersForZone()` defaults persistent rooms to 100 players, while `getMaxPlayersForTier()` keeps procedural tiers at 3/4/6 unless `MAX_PLAYERS_PER_ZONE` overrides them.
+- For UAT capacity claims, a load run only proves the concurrency it actually reached and held; with the current default ramp of 2 connections/sec, a 200-connection target needs roughly 100 seconds of ramp time before hold time is even measured.
+
+### 2026-05-20T00:04:53.502+00:00: Colyseus 100-player zone viability
+- `packages/server/src/rooms/ZoneRoom.ts` uses Colyseus as room/session transport but deliberately sends gameplay via typed `client.send()` / `broadcast()` messages; `ZoneState` is tiny server-side Schema (`zoneId`, `tier`, `lifecycle`, `stability`, `tick`, `playerCount`) rather than a full replicated entity graph.
+- The room runs a 1-second simulation tick (`setSimulationInterval(..., 1000)`), which is MUD-scale, not action-game frame sync. That sharply lowers synchronization pressure compared with typical Colyseus realtime games.
+- The real scaling risk in a 100-player shared zone is not Schema patch size; it is application-level fanout in `ZoneRoom` hot paths such as room-occupant refreshes, movement narration, room-local social broadcasts, and per-encounter combat snapshots, many of which iterate `this.players` directly.
+- For Ellmud's text/discrete-command model, 100 players in one Colyseus room is architecturally viable on stronger CPU (2-4 vCPU preferred) and may be acceptable on 1 vCPU for mostly social traffic, but large same-room combat/social churn should be treated as the practical ceiling to test and optimize rather than evidence that Colyseus itself must be replaced.
+- Key files for future review: `packages/server/src/rooms/ZoneRoom.ts`, `packages/server/src/state.ts`, `packages/server/src/config.ts`, `packages/server/src/index.ts`, `packages/shared/src/index.ts`.
+

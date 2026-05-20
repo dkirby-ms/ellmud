@@ -43,6 +43,27 @@
 
 ## Learnings
 
+### 2026-05-19T23:09:36.915+00:00: UAT WebSocket Ceiling Investigation (INVESTIGATED)
+
+**Task:** Investigate why a live UAT load test plateaued around 54 connected players with one shared zone room and no server-side crash logs.
+
+**Findings / patterns:**
+- `infra/modules/container-apps.bicep` gives each ACA replica `1.0` vCPU and `2Gi` memory, with `minReplicas: 1`, `maxReplicas: 4`, and an HTTP scale rule at `concurrentRequests: '30'`. That rule is an autoscaling threshold, not a hard cap, and it does not scale on long-lived WebSocket connections.
+- A single hot Colyseus room still lives on one replica/process. Even with Redis presence/driver and ACA sticky sessions enabled, `maxReplicas` does not raise one room's per-process ceiling; only per-replica resources (or room sharding) do.
+- `packages/server/src/index.ts` uses the default `WebSocketTransport({ server: httpServer })` with no explicit WebSocket connection cap, and `packages/server/src/rooms/ZoneRoom.ts` now caps persistent zones at 100 players via `maxClients`, so the observed ~54 ceiling is not coming from a server-configured room limit.
+- The load test is client-heavy but not 54 separate Chromium processes: `packages/e2e/src/load-test.ts` launches one headless Chromium browser and creates many isolated contexts/pages inside it. The ramp also waits for every batch to finish (`Promise.allSettled(batch)`) and each user can sit for 30 s on `waitForSelector`, which makes the run appear frozen once new connects start timing out.
+- UAT deployments currently set `ALLOW_LOCAL_AUTH=true` and `ENABLE_LLM_NARRATION=true` in `.github/workflows/ci-cd.yml`, so this load path is local-auth enabled and uses production narration wiring unless operators override it.
+
+**Key file paths:**
+- `infra/modules/container-apps.bicep`
+- `.github/workflows/ci-cd.yml`
+- `packages/server/src/index.ts`
+- `packages/server/src/config.ts`
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/auth/routes.ts`
+- `packages/e2e/src/load-test.ts`
+
+
 ### 2026-05-18: External Load Test Tool (DELIVERED)
 
 **Task:** Create an external load testing script in `packages/e2e/` that drives real browser contexts via Playwright to generate WebSocket connections against the deployed server, triggering KEDA autoscaling.
