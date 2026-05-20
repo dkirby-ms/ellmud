@@ -224,7 +224,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             name: 'websocket-connections'
             http: {
               metadata: {
-                concurrentRequests: '30'
+                concurrentRequests: '50'
               }
             }
           }

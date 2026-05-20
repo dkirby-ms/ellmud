@@ -293,3 +293,25 @@
 - `node_modules/@colyseus/sdk/src/Client.ts`
 - `node_modules/@colyseus/sdk/src/HTTP.ts`
 - `node_modules/@colyseus/sdk/src/transport/WebSocketTransport.ts`
+
+### 2026-05-20T19:33:31.586+00:00: Zone Room Operational Metrics (DELIVERED)
+
+**Task:** Add room-level operational metrics for joins, leaves, chat traffic, and throttled snapshots so Grafana can track live Colyseus room behavior during load tests and production.
+
+**Architecture / design decisions:**
+- `packages/server/src/metrics/MetricsService.ts` now supports `room_join`, `room_leave`, `chat_message`, and `room_snapshot` while preserving the fire-and-forget write path.
+- `packages/server/src/db/migrations/023_room_metrics_nullable_player_id.sql` drops the `NOT NULL` requirement on `game_metrics.player_id`, allowing true room-scoped snapshots without inventing a synthetic player identity.
+- `packages/server/src/rooms/ZoneRoom.ts` reports room metrics using the Colyseus room identity (`roomId`, `roomName`, optional `zoneSlug`) and throttles snapshots to every 60 ticks from the 1-second simulation loop.
+
+**Patterns / user-relevant notes:**
+- Join metrics should only fire for real occupancy changes; duplicate-session displacement is a transport event, not a new room occupant.
+- Transfer leave metrics are best latched before emitting `MessageTypes.ZONE_TRANSFER`, so the later `onLeave()` cleanup can classify the exit correctly without blocking the handoff.
+- Chat metrics can piggyback on successful `speech` command results (`say`, `emote`, `whisper`, `gsay`) and stay operational rather than content-analytic.
+
+**Key file paths:**
+- `packages/server/src/metrics/MetricsService.ts`
+- `packages/server/src/metrics/index.ts`
+- `packages/server/src/metrics/metrics-provider.ts`
+- `packages/server/src/rooms/ZoneRoom.ts`
+- `packages/server/src/db/migrations/023_room_metrics_nullable_player_id.sql`
+- `packages/server/src/__tests__/metrics-service.test.ts`

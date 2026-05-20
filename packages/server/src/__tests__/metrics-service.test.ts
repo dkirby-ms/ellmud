@@ -14,6 +14,10 @@ import type {
   KillMetadata,
   LootPickupMetadata,
   CombatStatsMetadata,
+  RoomJoinMetadata,
+  RoomLeaveMetadata,
+  ChatMessageMetadata,
+  RoomSnapshotMetadata,
 } from '../metrics/MetricsService.js';
 
 // ─── Mock pg pool ────────────────────────────────────────────────────────────
@@ -368,6 +372,141 @@ describe('MetricsService', () => {
     });
   });
 
+  describe('recordRoomJoin', () => {
+    const baseMeta: RoomJoinMetadata = {
+      roomId: 'zone-room-1',
+      roomName: 'zone:warrens',
+      zoneSlug: 'warrens',
+      playerCount: 12,
+    };
+
+    it('should insert a room_join event with occupancy metadata', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomJoin('player-1', baseMeta);
+      await flush();
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO game_metrics'),
+        expect.arrayContaining(['player-1', 'room_join']),
+      );
+    });
+
+    it('should serialize room join metadata', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomJoin('player-1', baseMeta);
+      await flush();
+
+      const [, params] = queryMock.mock.calls[0];
+      const parsed = JSON.parse(params![2] as string);
+      expect(parsed.roomName).toBe('zone:warrens');
+      expect(parsed.playerCount).toBe(12);
+      expect(parsed.zoneSlug).toBe('warrens');
+    });
+  });
+
+  describe('recordRoomLeave', () => {
+    const baseMeta: RoomLeaveMetadata = {
+      roomId: 'zone-room-1',
+      roomName: 'zone:warrens',
+      zoneSlug: 'warrens',
+      playerCount: 11,
+      reason: 'transfer',
+    };
+
+    it('should insert a room_leave event with leave reason', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomLeave('player-1', baseMeta);
+      await flush();
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO game_metrics'),
+        expect.arrayContaining(['player-1', 'room_leave']),
+      );
+    });
+
+    it('should serialize leave reason and next occupancy', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomLeave('player-1', baseMeta);
+      await flush();
+
+      const [, params] = queryMock.mock.calls[0];
+      const parsed = JSON.parse(params![2] as string);
+      expect(parsed.reason).toBe('transfer');
+      expect(parsed.playerCount).toBe(11);
+    });
+  });
+
+  describe('recordChatMessage', () => {
+    const baseMeta: ChatMessageMetadata = {
+      roomId: 'zone-room-1',
+      roomName: 'zone:warrens',
+      zoneSlug: 'warrens',
+      channelType: 'group',
+    };
+
+    it('should insert a chat_message event with channel metadata', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordChatMessage('player-1', baseMeta);
+      await flush();
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO game_metrics'),
+        expect.arrayContaining(['player-1', 'chat_message']),
+      );
+    });
+
+    it('should serialize chat channel metadata', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordChatMessage('player-1', baseMeta);
+      await flush();
+
+      const [, params] = queryMock.mock.calls[0];
+      const parsed = JSON.parse(params![2] as string);
+      expect(parsed.channelType).toBe('group');
+      expect(parsed.roomName).toBe('zone:warrens');
+    });
+  });
+
+  describe('recordRoomSnapshot', () => {
+    const baseMeta: RoomSnapshotMetadata = {
+      roomId: 'zone-room-1',
+      roomName: 'zone:warrens',
+      zoneSlug: 'warrens',
+      playerCount: 10,
+      uptimeSeconds: 60,
+    };
+
+    it('should insert a room_snapshot event without requiring player scope', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomSnapshot(baseMeta);
+      await flush();
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO game_metrics'),
+        [null, 'room_snapshot', JSON.stringify(baseMeta)],
+      );
+    });
+
+    it('should serialize snapshot uptime metadata', async () => {
+      queryMock.mockResolvedValueOnce(mockInsertResult());
+
+      service.recordRoomSnapshot(baseMeta);
+      await flush();
+
+      const [, params] = queryMock.mock.calls[0];
+      const parsed = JSON.parse(params![2] as string);
+      expect(parsed.playerCount).toBe(10);
+      expect(parsed.uptimeSeconds).toBe(60);
+    });
+  });
+
   // ─── Metadata JSONB serialization ─────────────────────────────────────────
 
   describe('JSONB metadata', () => {
@@ -513,13 +652,17 @@ describe('MetricsService', () => {
       );
     });
 
-    it('should correctly distinguish all four event types', async () => {
+    it('should correctly distinguish all supported event types', async () => {
       queryMock.mockResolvedValue(mockInsertResult());
 
       service.recordDeath('p1', { roomId: 'r1', isPvP: false, itemsLost: 0 });
       service.recordKill('p1', { victimId: 'c1', victimName: 'G', roomId: 'r1', isCreature: true });
       service.recordLootPickup('p1', { itemId: 'i1', itemName: 'I', roomId: 'r1', source: 'room' });
       service.recordCombatStats('p1', { roomId: 'r1', damageDealt: 1, damageTaken: 1, hits: 1, misses: 0 });
+      service.recordRoomJoin('p1', { roomId: 'zone-1', roomName: 'zone:warrens', playerCount: 2 });
+      service.recordRoomLeave('p1', { roomId: 'zone-1', roomName: 'zone:warrens', playerCount: 1, reason: 'disconnect' });
+      service.recordChatMessage('p1', { roomId: 'zone-1', roomName: 'zone:warrens', channelType: 'say' });
+      service.recordRoomSnapshot({ roomId: 'zone-1', roomName: 'zone:warrens', playerCount: 1, uptimeSeconds: 60 });
       await flush();
 
       const eventTypes = queryMock.mock.calls.map((c) => (c[1] as unknown[])[1]);
@@ -527,6 +670,10 @@ describe('MetricsService', () => {
       expect(eventTypes).toContain('kill');
       expect(eventTypes).toContain('loot_pickup');
       expect(eventTypes).toContain('combat_stats');
+      expect(eventTypes).toContain('room_join');
+      expect(eventTypes).toContain('room_leave');
+      expect(eventTypes).toContain('chat_message');
+      expect(eventTypes).toContain('room_snapshot');
     });
   });
 

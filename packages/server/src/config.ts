@@ -98,7 +98,7 @@ export const TIER_MAX_PLAYERS: Record<number, number> = {
 };
 
 /** Default max players for persistent shared zones (non-procedural). */
-export const ZONE_DEFAULT_MAX_PLAYERS = 100;
+export const ZONE_DEFAULT_MAX_PLAYERS = 50;
 
 /** Default number of fake WebSocket clients when load simulation is toggled on. */
 export const LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS = 50;
@@ -119,7 +119,7 @@ export function getMaxPlayersForTier(tier: ZoneTier, config: ServerConfig): numb
 
 /**
  * Get max players for a persistent zone room.
- * Priority: env override > per-zone DB value > ZONE_DEFAULT_MAX_PLAYERS (100).
+ * Priority: env override > per-zone DB value > ZONE_DEFAULT_MAX_PLAYERS (50).
  */
 export function getMaxPlayersForZone(config: ServerConfig, dbMaxPlayers?: number): number {
   // Env override trumps everything (ops/testing knob)

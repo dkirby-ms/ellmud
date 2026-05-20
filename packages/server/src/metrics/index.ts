@@ -9,6 +9,13 @@ export type {
   KillMetadata,
   LootPickupMetadata,
   CombatStatsMetadata,
+  RoomMetricMetadata,
+  RoomJoinMetadata,
+  RoomLeaveReason,
+  RoomLeaveMetadata,
+  ChatChannelType,
+  ChatMessageMetadata,
+  RoomSnapshotMetadata,
 } from './MetricsService.js';
 export {
   initMetricsProvider,
