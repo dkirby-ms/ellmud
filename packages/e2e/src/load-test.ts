@@ -14,8 +14,8 @@
  *   --token            <jwt>  Shared auth token for all contexts
  *   --player-id        <id>   Player UUID matching the token above
  *   --username         <str>  Display name stored in localStorage          (default: "load-tester")
- *   --action-interval  <ms>   Base interval between stress actions         (default: 3000)
- *   --stress                  Enable movement/chat stress traffic          (default)
+ *   --action-interval  <ms>   Base interval between stress actions         (default: 2000)
+ *   --stress                  Enable gameplay stress traffic               (default)
  *   --no-stress               Keep connections idle after joining
  *
  * AUTH NOTE
@@ -71,7 +71,7 @@ function parseArgs(argv: string[]): {
   }
 
   const connectionsRaw = get('--connections');
-  const connections = connectionsRaw ? parseInt(connectionsRaw, 10) : 10;
+  const connections = connectionsRaw ? parseInt(connectionsRaw, 10) : 20;
   if (!Number.isFinite(connections) || connections <= 0) {
     console.error('Error: --connections must be a positive integer.');
     process.exit(1);
@@ -85,7 +85,7 @@ function parseArgs(argv: string[]): {
   }
 
   const actionIntervalRaw = get('--action-interval');
-  const actionInterval = actionIntervalRaw ? parseInt(actionIntervalRaw, 10) : 3_000;
+  const actionInterval = actionIntervalRaw ? parseInt(actionIntervalRaw, 10) : 2_000;
   if (!Number.isFinite(actionInterval) || actionInterval <= 0) {
     console.error('Error: --action-interval must be a positive integer (milliseconds).');
     process.exit(1);
@@ -188,13 +188,18 @@ async function selectCharacter(baseUrl: string, token: string, characterId: stri
 const COMMAND_INPUT_SELECTOR = 'input[aria-label="Command input"]';
 const CONNECTED_COMMAND_INPUT_SELECTOR = `${COMMAND_INPUT_SELECTOR}:not([disabled])`;
 const MOVEMENT_COMMANDS = ['north', 'south', 'east', 'west', 'up', 'down'] as const;
+const HUB_ESCAPE_SEQUENCE = ['down', 'east', 'east', 'east', 'east', 'east'] as const;
+const MOB_TARGETS = ['rat', 'skeleton', 'goblin', 'spider', 'zombie'] as const;
+const LOOT_COMMANDS = ['loot', ...MOB_TARGETS.map((target) => `loot ${target}`)] as const;
+const TAKE_TARGETS = ['gold', 'potion', 'gem', 'key'] as const;
+const STATE_COMMANDS = ['inventory', 'stats'] as const;
 const CHAT_MESSAGES = [
-  'status check from the load test',
-  'watching websocket pressure rise',
-  'keda should see this crowd soon',
-  'roaming the reliquary for science',
-  'colyseus is getting a proper workout',
-  'another synthetic traveler arrives',
+  'These halls smell of old bones and fresh trouble.',
+  'Keep your blades sharp and your torches dry.',
+  'I hear skittering in the dark ahead.',
+  'Another delve, another chance at glory.',
+  'Mind the shadows — something is hunting here.',
+  'The reliquary is lively tonight.',
 ] as const;
 
 function randomItem<T>(items: readonly T[]): T {
@@ -231,11 +236,39 @@ async function waitWithAbort(ms: number, signal: AbortSignal): Promise<boolean> 
 }
 
 function buildStressCommand(userIndex: number): string {
-  if (Math.random() < 0.5) {
+  const roll = Math.random();
+
+  if (roll < 0.25) {
     return randomItem(MOVEMENT_COMMANDS);
   }
 
-  return `say ${randomItem(CHAT_MESSAGES)} [lt-${userIndex}]`;
+  if (roll < 0.5) {
+    const verb = Math.random() < 0.8 ? 'attack' : 'kill';
+    return `${verb} ${randomItem(MOB_TARGETS)}`;
+  }
+
+  if (roll < 0.65) {
+    return randomItem(LOOT_COMMANDS);
+  }
+
+  if (roll < 0.75) {
+    return 'look';
+  }
+
+  if (roll < 0.85) {
+    return `say ${randomItem(CHAT_MESSAGES)} [lt-${userIndex}]`;
+  }
+
+  if (roll < 0.9) {
+    return randomItem(STATE_COMMANDS);
+  }
+
+  if (roll < 0.95) {
+    const verb = Math.random() < 0.8 ? 'take' : 'get';
+    return `${verb} ${randomItem(TAKE_TARGETS)}`;
+  }
+
+  return 'who';
 }
 
 type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'closed';
@@ -259,16 +292,59 @@ function startStressLoop(page: Page, user: VirtualUser, actionIntervalMs: number
   const controller = new AbortController();
   const input = page.locator(COMMAND_INPUT_SELECTOR);
 
+  const runCommand = async (command: string): Promise<void> => {
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    await input.fill(command);
+    await input.press('Enter');
+  };
+
+  const runHubEscapeSequence = async (): Promise<void> => {
+    for (const [index, command] of HUB_ESCAPE_SEQUENCE.entries()) {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      try {
+        await runCommand(command);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[load-test] User ${user.index} hub escape step '${command}' failed: ${message}`);
+      }
+
+      const isZoneTransferStep = index === HUB_ESCAPE_SEQUENCE.length - 1;
+      const delayMs = isZoneTransferStep ? 3_000 : 500 + Math.floor(Math.random() * 301);
+      const shouldContinue = await waitWithAbort(delayMs, controller.signal);
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    try {
+      await runCommand('look');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[load-test] User ${user.index} post-transfer look failed: ${message}`);
+    }
+  };
+
   const done = (async () => {
+    await runCommand('look');
+    await runHubEscapeSequence();
+
     while (!controller.signal.aborted) {
       const shouldContinue = await waitWithAbort(nextActionDelay(actionIntervalMs), controller.signal);
       if (!shouldContinue) {
         break;
       }
 
-      const command = buildStressCommand(user.index);
-      await input.fill(command);
-      await input.press('Enter');
+      await runCommand(buildStressCommand(user.index));
     }
   })().catch((err) => {
     if (controller.signal.aborted) {

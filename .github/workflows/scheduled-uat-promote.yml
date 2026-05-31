@@ -71,6 +71,8 @@ jobs:
       - name: Merge dev → uat (strip forbidden paths)
         id: merge
         if: steps.check.outputs.commits_ahead != '0'
+        env:
+          HUSKY: '0'
         run: |
           git checkout uat
 

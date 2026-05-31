@@ -179,7 +179,20 @@ module containerAppsApp 'modules/container-apps.bicep' = {
   }
 }
 
-// 7. AI Foundry — GPT-4o-mini serverless endpoint
+// 7. Managed Grafana — reads Azure Monitor/App Insights data via managed identity
+module grafana 'modules/grafana.bicep' = {
+  name: 'grafana'
+  params: {
+    resourcePrefix: resourcePrefix
+    location: location
+    tags: tags
+  }
+  dependsOn: [
+    containerAppsApp
+  ]
+}
+
+// 8. AI Foundry — GPT-4o-mini serverless endpoint
 // AI Foundry disabled — using external OpenAI endpoint instead
 // module aiFoundry 'modules/ai-foundry.bicep' = {
 //   name: 'ai-foundry'
@@ -221,6 +234,8 @@ output acrLoginServer string = acr.outputs.acrLoginServer
 output containerAppName string = containerAppsApp.outputs.containerAppName
 output containerAppFqdn string = containerAppsApp.outputs.containerAppFqdn
 output containerAppEnvironmentName string = containerAppsEnv.outputs.environmentName
+output grafanaName string = grafana.outputs.grafanaName
+output grafanaEndpoint string = grafana.outputs.grafanaEndpoint
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
 // output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint

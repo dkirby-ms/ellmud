@@ -7,7 +7,10 @@ RESOURCE_GROUP="${1:-ellmud-rg}"
 LOCATION="${2:-eastus2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENVIRONMENT_NAME="${3:-$(sed -n "s/^param environmentName = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)}"
+DEFAULT_POSTGRES_ADMIN_USERNAME="$(sed -n "s/^param postgresAdminUsername = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)"
+DEFAULT_POSTGRES_DATABASE_NAME="$(sed -n "s/^param postgresDatabaseName = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)"
 CONTAINER_APP_NAME="${CONTAINER_APP_NAME:-ellmud-${ENVIRONMENT_NAME}-app}"
+CONFIGURE_GRAFANA_POSTGRES_DATASOURCE="${CONFIGURE_GRAFANA_POSTGRES_DATASOURCE:-false}"
 
 # ─── Preflight checks ───────────────────────────────────────────────────────
 
@@ -111,3 +114,16 @@ az deployment group show \
   --name "${DEPLOYMENT_NAME}" \
   --query 'properties.outputs' \
   --output table 2>/dev/null || echo "(outputs available via: az deployment group show --resource-group ${RESOURCE_GROUP} --name ${DEPLOYMENT_NAME} --query properties.outputs)"
+
+echo ""
+if [ "${CONFIGURE_GRAFANA_POSTGRES_DATASOURCE}" = "true" ]; then
+  echo "📈 Configuring Grafana PostgreSQL data source..."
+  GRAFANA_POSTGRES_USER="${GRAFANA_POSTGRES_USER:-${DEFAULT_POSTGRES_ADMIN_USERNAME:-pgadmin}}" \
+  GRAFANA_POSTGRES_DATABASE="${GRAFANA_POSTGRES_DATABASE:-${DEFAULT_POSTGRES_DATABASE_NAME:-ellmud}}" \
+  POSTGRES_ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD}" \
+  "${SCRIPT_DIR}/configure-grafana-postgres-datasource.sh" "${RESOURCE_GROUP}" "${ENVIRONMENT_NAME}"
+else
+  echo "📈 Grafana PostgreSQL data source not configured automatically."
+  echo "   Run: ./infra/configure-grafana-postgres-datasource.sh ${RESOURCE_GROUP} ${ENVIRONMENT_NAME}"
+  echo "   Or redeploy with CONFIGURE_GRAFANA_POSTGRES_DATASOURCE=true"
+fi

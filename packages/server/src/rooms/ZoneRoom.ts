@@ -74,7 +74,7 @@ import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
 import { GroupManager } from '../systems/GroupManager.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
-import { type MetricsService, getMetricsService } from '../metrics/index.js';
+import { type MetricsService, type ChatChannelType, type RoomLeaveReason, getMetricsService } from '../metrics/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -133,6 +133,7 @@ import {
 } from '../progression/index.js';
 
 const TICK_INTERVAL_MS = 1000;
+const ROOM_SNAPSHOT_INTERVAL_TICKS = 60;
 
 interface ZoneRoomOptions {
   state: ZoneState;
@@ -218,6 +219,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private knownZoneSlugs = new Set<string>();
   /** Deferred post-join hydration tasks keyed by character ID. */
   private joinHydrationTasks = new Map<string, Promise<void>>();
+  /** Pending room-leave reasons for players transitioning out of this room. */
+  private pendingRoomLeaveReasons = new Map<string, RoomLeaveReason>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -515,6 +518,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // If the player is already present, displace the old session rather than corrupting state.
     // Preserve the player's current room so reconnection doesn't reset position (#355).
     let preservedRoomId: string | undefined;
+    let joinedPlayer = false;
     if (this.players.has(playerId)) {
       const existingState = this.players.get(playerId)!;
       preservedRoomId = existingState.currentRoomId;
@@ -540,6 +544,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         throw new Error(`Instance is full (${maxPlayers}/${maxPlayers} players).`);
       }
       this.state.playerCount++;
+      joinedPlayer = true;
     }
 
     this.updateMetadata();
@@ -581,6 +586,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.players.set(playerId, playerState);
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
+
+    if (joinedPlayer) {
+      this.metricsService.recordRoomJoin(this.dbPlayerId(playerId), {
+        ...this.roomMetricsBase(),
+        playerCount: this.state.playerCount,
+      });
+    }
 
     // Send initial system narration using NarrationService (async, don't block join)
     this.generateNarration('event', playerId, startRoom, 'You step through the rift into a fragment of the dying world...')
@@ -889,6 +901,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
       const roomId = this.players.get(playerId)!.currentRoomId;
+      const leaveReason = this.resolveRoomLeaveReason(playerId, code);
 
       const hydrationTask = this.joinHydrationTasks.get(playerId);
       if (hydrationTask) {
@@ -908,7 +921,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Record run (player left or timed out)
       await this.recordRunHistory(playerId, this.players.get(playerId), false);
 
-      this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+      const nextPlayerCount = Math.max(0, this.state.playerCount - 1);
+      this.metricsService.recordRoomLeave(this.dbPlayerId(playerId), {
+        ...this.roomMetricsBase(),
+        playerCount: nextPlayerCount,
+        reason: leaveReason,
+      });
+
+      this.state.playerCount = nextPlayerCount;
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
       this.ownerPlayerIds.delete(playerId);
@@ -1011,6 +1031,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   private update(_deltaTime: number): void {
     this.state.tick++;
+    this.recordRoomSnapshotIfDue();
 
     // Hub/social/dev zones skip collapse and combat ticking
     const isNonCombatZone = this.isZone && this.zoneData &&
@@ -1105,6 +1126,47 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig()),
       players: playerList,
       ...(this.isZone ? { zoneSlug: this.zoneSlug, zoneName: this.zoneData?.zone.name } : {}),
+    });
+  }
+
+  private roomMetricsBase(): { roomId: string; roomName: string; zoneSlug?: string } {
+    return {
+      roomId: this.roomId,
+      roomName: this.roomName,
+      ...(this.zoneSlug ? { zoneSlug: this.zoneSlug } : {}),
+    };
+  }
+
+  private resolveRoomLeaveReason(playerId: string, code?: number): RoomLeaveReason {
+    const pendingReason = this.pendingRoomLeaveReasons.get(playerId);
+    if (pendingReason) {
+      this.pendingRoomLeaveReasons.delete(playerId);
+      return pendingReason;
+    }
+
+    if (code === 4001) {
+      return 'kicked';
+    }
+
+    return 'disconnect';
+  }
+
+  private recordChatMetric(playerId: string, channelType: ChatChannelType): void {
+    this.metricsService.recordChatMessage(this.dbPlayerId(playerId), {
+      ...this.roomMetricsBase(),
+      channelType,
+    });
+  }
+
+  private recordRoomSnapshotIfDue(): void {
+    if (this.state.tick % ROOM_SNAPSHOT_INTERVAL_TICKS !== 0) {
+      return;
+    }
+
+    this.metricsService.recordRoomSnapshot({
+      ...this.roomMetricsBase(),
+      playerCount: this.state.playerCount,
+      uptimeSeconds: this.state.tick,
     });
   }
 
@@ -1230,6 +1292,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         });
         return;
       }
+      this.pendingRoomLeaveReasons.set(playerId, 'transfer');
       this.deliverResult(client, result);
       client.send(MessageTypes.ZONE_TRANSFER, {
         targetZoneSlug: result.zoneTransfer.targetZoneSlug,
@@ -1363,6 +1426,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    const didSendSpeech = result.narrations.some((narration) => narration.type === 'speech');
     const gsay = (result as import('../commands/index.js').CommandResult & {
       _gsay?: { groupId: string; senderId: string; senderName: string; message: string; memberIds: string[] };
     })._gsay;
@@ -1378,6 +1442,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           });
         }
       }
+      if (didSendSpeech) {
+        this.recordChatMetric(playerId, 'group');
+      }
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1386,9 +1453,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const isWhisper = verb === 'whisper';
 
     if (isSocialBroadcast) {
+      if (didSendSpeech) {
+        this.recordChatMetric(playerId, verb === 'say' ? 'say' : 'emote');
+      }
       // Broadcast to all players in the same room (including sender)
       this.broadcastToRoom(player.currentRoomId, result);
     } else if (isWhisper) {
+      if (didSendSpeech) {
+        this.recordChatMetric(playerId, 'whisper');
+      }
       // Deliver whisper: sender gets confirmation, target gets the message
       this.deliverWhisper(client, player, result, ctx.otherPlayersInRoom);
     } else {
