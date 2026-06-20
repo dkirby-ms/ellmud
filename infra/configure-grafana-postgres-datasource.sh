@@ -3,7 +3,7 @@
 # Usage: ./infra/configure-grafana-postgres-datasource.sh [resource-group] [environment-name]
 set -euo pipefail
 
-RESOURCE_GROUP="${1:-ellmud-rg}"
+RESOURCE_GROUP="${1:-${RESOURCE_GROUP:-rg-ellmud}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENVIRONMENT_NAME="${2:-$(sed -n "s/^param environmentName = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)}"
 DEFAULT_POSTGRES_USER="$(sed -n "s/^param postgresAdminUsername = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)"

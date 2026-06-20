@@ -41,7 +41,7 @@ chmod +x infra/deploy.sh infra/configure-grafana-postgres-datasource.sh
 CONFIGURE_GRAFANA_POSTGRES_DATASOURCE=true ./infra/deploy.sh
 ```
 
-This creates resource group `ellmud-rg` in `eastus2` and deploys all infrastructure. Use the optional flag when your Azure identity also has Grafana Editor/Admin access and you want dashboards to query PostgreSQL immediately.
+This creates resource group `rg-ellmud` in `eastus2` by default (or `$RESOURCE_GROUP` / the first script argument if supplied) and deploys all infrastructure. Use the optional flag when your Azure identity also has Grafana Editor/Admin access and you want dashboards to query PostgreSQL immediately.
 
 ### Custom resource group or region
 
@@ -55,12 +55,12 @@ If you prefer to run the Azure CLI commands directly:
 
 ```bash
 # Create resource group
-az group create --name ellmud-rg --location eastus2
+az group create --name rg-ellmud --location eastus2
 
 # Deploy infrastructure
 export POSTGRES_ADMIN_PASSWORD='<your-password>'
 az deployment group create \
-  --resource-group ellmud-rg \
+  --resource-group rg-ellmud \
   --template-file infra/main.bicep \
   --parameters infra/main.bicepparam
 ```
@@ -102,7 +102,7 @@ All resources follow the pattern `ellmud-{env}-{resource-type}`:
 
 | Resource | Name Pattern | Example (UAT) |
 |----------|-------------|---------|
-| Resource Group | `ellmud-rg` | `ellmud-rg` |
+| Resource Group | User-supplied | `rg-ellmud` |
 | Container App | `ellmud-{env}-app` | `ellmud-uat-app` |
 | Container App Env | `ellmud-{env}-cae` | `ellmud-uat-cae` |
 | PostgreSQL | `ellmud-{env}-pg` | `ellmud-uat-pg` |
@@ -131,13 +131,13 @@ After infrastructure is deployed:
 
 1. **Push a container image** — CI/CD will build and push to ACR, then update the Container App
 2. **Verify health** — The bootstrap placeholder responds on `/` with `{"status":"ok","mode":"placeholder"}`
-3. **Check logs** — `az containerapp logs show --name ellmud-uat-app --resource-group ellmud-rg`
+3. **Check logs** — `az containerapp logs show --name ellmud-uat-app --resource-group rg-ellmud`
 4. **Open Grafana** — use the deployment output `grafanaEndpoint`; the instance can read Azure Monitor/App Insights data through its managed identity's `Monitoring Reader` role on the resource group
 5. **Configure PostgreSQL as a Grafana data source** — generic Grafana data sources are not exposed as ARM/Bicep resources, so use the helper script (or the underlying `az grafana data-source create/update` flow) after deployment:
 
 ```bash
 export POSTGRES_ADMIN_PASSWORD='<your-secure-password>'
-./infra/configure-grafana-postgres-datasource.sh ellmud-rg uat
+./infra/configure-grafana-postgres-datasource.sh rg-ellmud uat
 ```
 
 The helper is idempotent: it creates the `Ellmud PostgreSQL` data source if missing and updates it if it already exists. It never stores credentials in git; supply them through `POSTGRES_ADMIN_PASSWORD` or `GRAFANA_POSTGRES_PASSWORD`. If you have a dedicated read-only database login, prefer passing `GRAFANA_POSTGRES_USER` / `GRAFANA_POSTGRES_PASSWORD`. Your Azure identity needs Grafana Editor or Grafana Admin access on the workspace for the CLI call to succeed.
@@ -158,7 +158,7 @@ This creates `uat` and `prod` environments in GitHub with the required Azure sec
 ## Tearing Down
 
 ```bash
-az group delete --name ellmud-rg --yes --no-wait
+az group delete --name rg-ellmud --yes --no-wait
 ```
 
 ## Phase 1 Constraints

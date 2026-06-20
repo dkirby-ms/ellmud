@@ -3,7 +3,7 @@
 //
 // Usage:
 //   az deployment group create \
-//     --resource-group ellmud-rg \
+//     --resource-group rg-ellmud \
 //     --template-file infra/main.bicep \
 //     --parameters infra/main.bicepparam
 
