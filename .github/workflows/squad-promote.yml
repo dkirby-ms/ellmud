@@ -40,8 +40,6 @@ jobs:
 
       - name: Merge dev → preview (strip forbidden paths)
         if: ${{ inputs.dry_run == 'false' }}
-        env:
-          HUSKY: '0'
         run: |
           git checkout preview
           git merge origin/dev --no-commit --no-ff -X theirs || true

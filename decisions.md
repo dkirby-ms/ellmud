@@ -1,0 +1,1 @@
+- 2026-06-20T13:59:31Z: Resource group generalized to RESOURCE_GROUP env var with generic placeholder default (rg-ellmud).

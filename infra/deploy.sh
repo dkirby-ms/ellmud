@@ -3,7 +3,7 @@
 # Usage: ./infra/deploy.sh [resource-group] [location] [environment-name]
 set -euo pipefail
 
-RESOURCE_GROUP="${1:-ellmud-rg}"
+RESOURCE_GROUP="${1:-${RESOURCE_GROUP:-rg-ellmud}}"
 LOCATION="${2:-eastus2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENVIRONMENT_NAME="${3:-$(sed -n "s/^param environmentName = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)}"
