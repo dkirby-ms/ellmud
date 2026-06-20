@@ -147,12 +147,57 @@ jobs:
       - name: Capture current revision (for rollback)
         id: pre-deploy
         run: |
-          CURRENT_REVISION=$(az containerapp revision list \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+          set -euo pipefail
+
+          APP="${{ secrets.CONTAINER_APP_NAME }}"
+          RG="${{ secrets.RESOURCE_GROUP }}"
+
+          az_retry() {
+            local max_attempts="$1"
+            shift
+            local attempt=1
+            local delay=5
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              local rc=$?
+
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "::warning::az command failed after $attempt attempts: $*" >&2
+                return "$rc"
+              fi
+
+              echo "az command failed (attempt $attempt/$max_attempts), retrying in ${delay}s: $*" >&2
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+              if [ "$delay" -gt 30 ]; then
+                delay=30
+              fi
+            done
+          }
+
+          CURRENT_REVISION=$(az_retry 5 az containerapp revision list \
+            --name "$APP" \
+            --resource-group "$RG" \
             --query "[?properties.active].name | [0]" -o tsv)
+          CURRENT_IMAGE=$(az_retry 5 az containerapp revision list \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "[?properties.active].properties.template.containers[0].image | [0]" -o tsv)
+          REVISION_MODE=$(az_retry 5 az containerapp show \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "properties.configuration.activeRevisionsMode" -o tsv)
+
           echo "revision=$CURRENT_REVISION" >> "$GITHUB_OUTPUT"
+          echo "image=$CURRENT_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "mode=$REVISION_MODE" >> "$GITHUB_OUTPUT"
           echo "Current active revision: $CURRENT_REVISION"
+          echo "Current active image: $CURRENT_IMAGE"
+          echo "Current revision mode: $REVISION_MODE"
 
       - name: Configure container app registry
         run: |
@@ -203,34 +248,79 @@ jobs:
 
       - name: Monitor revision deployment
         run: |
+          set -euo pipefail
+
           APP="${{ secrets.CONTAINER_APP_NAME }}"
           RG="${{ secrets.RESOURCE_GROUP }}"
-          
-          # Get the latest revision created by the update
-          LATEST_REV=$(az containerapp revision list \
+
+          az_retry() {
+            local max_attempts="$1"
+            shift
+            local attempt=1
+            local delay=5
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              local rc=$?
+
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "::warning::az command failed after $attempt attempts: $*" >&2
+                return "$rc"
+              fi
+
+              echo "az command failed (attempt $attempt/$max_attempts), retrying in ${delay}s: $*" >&2
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+              if [ "$delay" -gt 30 ]; then
+                delay=30
+              fi
+            done
+          }
+
+          revision_field() {
+            python3 -c 'import json, sys; data=json.load(sys.stdin) or {}; print(((data.get("properties") or {}).get(sys.argv[1])) or "")' "$1"
+          }
+
+          # Get the latest revision created by the update.
+          LATEST_REV=$(az_retry 5 az containerapp revision list \
             --name "$APP" \
             --resource-group "$RG" \
             --query "sort_by(@, &properties.createdTime)[-1].name" -o tsv)
-          
+
           echo "Monitoring revision: $LATEST_REV"
-          
-          # Poll until revision reaches a terminal state
+
+          STATUS=""
+          HEALTH=""
+
+          # Poll until the revision is Running and Healthy, tolerating transient az/network failures.
           for i in $(seq 1 30); do
-            STATUS=$(az containerapp revision show \
+            if ! REVISION_JSON=$(az_retry 3 az containerapp revision show \
               --name "$APP" \
               --resource-group "$RG" \
               --revision "$LATEST_REV" \
-              --query "properties.runningState" -o tsv)
-            
+              -o json); then
+              echo "Revision status unavailable due to transient az error (attempt $i/30); retrying in 10s..."
+              sleep 10
+              continue
+            fi
+
+            STATUS=$(printf '%s' "$REVISION_JSON" | revision_field runningState)
+            HEALTH=$(printf '%s' "$REVISION_JSON" | revision_field healthState)
+
             case "$STATUS" in
               Running|RunningAtMaxScale)
-                echo "✓ Revision $LATEST_REV is running (state: $STATUS)"
-                break
+                if [ "$HEALTH" = "Healthy" ] || [ -z "$HEALTH" ]; then
+                  echo "✓ Revision $LATEST_REV is running and healthy (state: $STATUS, health: ${HEALTH:-unknown})"
+                  exit 0
+                fi
                 ;;
               Failed|Degraded)
-                echo "✗ Revision $LATEST_REV failed with status: $STATUS"
-                # Show provisioning errors if available
-                az containerapp revision show \
+                echo "✗ Revision $LATEST_REV failed with status: $STATUS, health: ${HEALTH:-unknown}"
+                echo "Container details:"
+                az_retry 3 az containerapp revision show \
                   --name "$APP" \
                   --resource-group "$RG" \
                   --revision "$LATEST_REV" \
@@ -238,17 +328,21 @@ jobs:
                   -o json || true
                 exit 1
                 ;;
-              *)
-                echo "Revision status: $STATUS (attempt $i/30)"
-                sleep 10
+            esac
+
+            case "$HEALTH" in
+              Unhealthy|Degraded)
+                echo "Revision $LATEST_REV is not healthy yet (state: ${STATUS:-unknown}, health: $HEALTH; attempt $i/30)"
                 ;;
             esac
+
+            echo "Revision status: ${STATUS:-unknown}, health: ${HEALTH:-unknown} (attempt $i/30)"
+            sleep 10
           done
-          
-          if [ "$STATUS" != "Running" ] && [ "$STATUS" != "RunningAtMaxScale" ]; then
-            echo "✗ Revision did not reach Running state after 5 minutes"
-            exit 1
-          fi
+
+          echo "✗ Revision did not reach Running/Healthy state after 5 minutes"
+          echo "Last observed status: ${STATUS:-unknown}, health: ${HEALTH:-unknown}"
+          exit 1
 
       - name: Health check
         id: healthcheck
@@ -297,53 +391,161 @@ jobs:
       - name: Rollback on failure
         if: failure() && steps.pre-deploy.outputs.revision != ''
         run: |
-          echo "Rolling back to revision: ${{ steps.pre-deploy.outputs.revision }}"
-          FAILED_REVISION=$(az containerapp revision list \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --query "[?properties.active].name | [0]" -o tsv)
+          set -euo pipefail
 
-          # Log failed revision details for debugging
+          APP="${{ secrets.CONTAINER_APP_NAME }}"
+          RG="${{ secrets.RESOURCE_GROUP }}"
+          PREVIOUS_REVISION="${{ steps.pre-deploy.outputs.revision }}"
+          PREVIOUS_IMAGE="${{ steps.pre-deploy.outputs.image }}"
+          PREVIOUS_MODE="${{ steps.pre-deploy.outputs.mode }}"
+
+          az_retry() {
+            local max_attempts="$1"
+            shift
+            local attempt=1
+            local delay=5
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              local rc=$?
+
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "::warning::az command failed after $attempt attempts: $*" >&2
+                return "$rc"
+              fi
+
+              echo "az command failed (attempt $attempt/$max_attempts), retrying in ${delay}s: $*" >&2
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+              if [ "$delay" -gt 30 ]; then
+                delay=30
+              fi
+            done
+          }
+
+          revision_field() {
+            python3 -c 'import json, sys; data=json.load(sys.stdin) or {}; print(((data.get("properties") or {}).get(sys.argv[1])) or "")' "$1"
+          }
+
+          monitor_active_revision() {
+            local label="$1"
+            local status=""
+            local health=""
+            local revision_json
+
+            for i in $(seq 1 30); do
+              if ! revision_json=$(az_retry 3 az containerapp revision list \
+                --name "$APP" \
+                --resource-group "$RG" \
+                --query "[?properties.active] | [0]" -o json); then
+                echo "$label status unavailable due to transient az error (attempt $i/30); retrying in 10s..."
+                sleep 10
+                continue
+              fi
+
+              status=$(printf '%s' "$revision_json" | revision_field runningState)
+              health=$(printf '%s' "$revision_json" | revision_field healthState)
+
+              if { [ "$status" = "Running" ] || [ "$status" = "RunningAtMaxScale" ]; } \
+                && { [ "$health" = "Healthy" ] || [ -z "$health" ]; }; then
+                echo "✓ $label is running and healthy (state: $status, health: ${health:-unknown})"
+                return 0
+              fi
+
+              case "$status" in
+                Failed|Degraded)
+                  echo "✗ $label failed with status: $status, health: ${health:-unknown}"
+                  return 1
+                  ;;
+              esac
+              case "$health" in
+                Unhealthy|Degraded)
+                  echo "$label is not healthy yet (state: ${status:-unknown}, health: $health; attempt $i/30)"
+                  ;;
+              esac
+
+              echo "$label status: ${status:-unknown}, health: ${health:-unknown} (attempt $i/30)"
+              sleep 10
+            done
+
+            echo "✗ $label did not reach Running/Healthy state after 5 minutes"
+            echo "Last observed status: ${status:-unknown}, health: ${health:-unknown}"
+            return 1
+          }
+
+          echo "Rolling back to revision: $PREVIOUS_REVISION"
+          echo "Previous image: $PREVIOUS_IMAGE"
+
+          FAILED_REVISION=$(az_retry 3 az containerapp revision list \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "[?properties.active].name | [0]" -o tsv || true)
+
+          # Log failed revision details for debugging.
           if [ -n "$FAILED_REVISION" ]; then
             echo "Failed revision: $FAILED_REVISION"
-            FAILED_STATUS=$(az containerapp revision show \
-              --name ${{ secrets.CONTAINER_APP_NAME }} \
-              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            FAILED_STATUS=$(az_retry 3 az containerapp revision show \
+              --name "$APP" \
+              --resource-group "$RG" \
               --revision "$FAILED_REVISION" \
               --query "properties.runningState" -o tsv || echo "unknown")
             echo "Failed revision status: $FAILED_STATUS"
-            
-            # Try to get provisioning errors
+
             echo "Container details:"
-            az containerapp revision show \
-              --name ${{ secrets.CONTAINER_APP_NAME }} \
-              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            az_retry 3 az containerapp revision show \
+              --name "$APP" \
+              --resource-group "$RG" \
               --revision "$FAILED_REVISION" \
               --query "{command: properties.template.containers[0].command, args: properties.template.containers[0].args, image: properties.template.containers[0].image}" \
               -o json || true
           fi
 
-          az containerapp revision set-mode \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --mode single
+          REVISION_MODE=$(az_retry 5 az containerapp show \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "properties.configuration.activeRevisionsMode" -o tsv || echo "$PREVIOUS_MODE")
+          REVISION_MODE=${REVISION_MODE:-$PREVIOUS_MODE}
+          REVISION_MODE=${REVISION_MODE:-Single}
+          REVISION_MODE_LOWER=$(printf '%s' "$REVISION_MODE" | tr '[:upper:]' '[:lower:]')
+          echo "Active revisions mode: $REVISION_MODE"
 
-          az containerapp ingress traffic set \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --revision-weight "${{ steps.pre-deploy.outputs.revision }}=100"
+          if [ "$REVISION_MODE_LOWER" = "single" ]; then
+            if [ -z "$PREVIOUS_IMAGE" ]; then
+              echo "✗ Cannot roll back single-revision app because previous image was not captured."
+              exit 1
+            fi
 
-          if [ -n "$FAILED_REVISION" ] && [ "$FAILED_REVISION" != "${{ steps.pre-deploy.outputs.revision }}" ]; then
-            az containerapp revision deactivate \
-              --name ${{ secrets.CONTAINER_APP_NAME }} \
-              --resource-group ${{ secrets.RESOURCE_GROUP }} \
-              --revision "$FAILED_REVISION"
+            echo "Single revision mode detected; redeploying previous image without traffic-splitting commands."
+            az_retry 5 az containerapp update \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --image "$PREVIOUS_IMAGE" \
+              --container-name ellmud \
+              --command "node" "packages/server/dist/index.js"
+            az_retry 5 az containerapp ingress update \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --target-port 2567
+            monitor_active_revision "Rollback revision"
+          else
+            echo "Multiple revision mode detected; routing traffic back to $PREVIOUS_REVISION."
+            az_retry 5 az containerapp ingress traffic set \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --revision-weight "$PREVIOUS_REVISION=100"
+
+            if [ -n "$FAILED_REVISION" ] && [ "$FAILED_REVISION" != "$PREVIOUS_REVISION" ]; then
+              if ! az_retry 5 az containerapp revision deactivate \
+                --name "$APP" \
+                --resource-group "$RG" \
+                --revision "$FAILED_REVISION"; then
+                echo "::warning::Rollback traffic was restored, but failed to deactivate $FAILED_REVISION."
+              fi
+            fi
           fi
-
-          az containerapp revision set-mode \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --mode single
 
           echo "✓ Rollback complete"
 
