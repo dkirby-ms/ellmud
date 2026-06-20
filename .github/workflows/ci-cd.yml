@@ -7,6 +7,11 @@ name: CI/CD
 
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact commit SHA to build/test/deploy
+        required: false
+        type: string
   pull_request:
     branches: [uat, prod]
     paths-ignore:
@@ -37,6 +42,9 @@ on:
 permissions:
   contents: read
 
+env:
+  BUILD_SHA: ${{ github.event.inputs.sha || github.sha }}
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -49,6 +57,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_SHA }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -91,6 +101,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_SHA }}
 
       - name: Azure login via OIDC
         uses: azure/login@v2
@@ -103,7 +115,7 @@ jobs:
         run: |
           az acr build \
             --registry ${{ secrets.ACR_NAME }} \
-            --image ellmud-${{ github.ref_name }}:${{ github.sha }} \
+            --image ellmud-${{ github.ref_name }}:${{ env.BUILD_SHA }} \
             --image ellmud-${{ github.ref_name }}:latest \
             --file Dockerfile \
             .
@@ -122,6 +134,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_SHA }}
 
       - name: Azure login via OIDC
         uses: azure/login@v2
@@ -156,7 +170,7 @@ jobs:
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ env.BUILD_SHA }} \
             --set-env-vars \
               "NODE_ENV=production" \
               "PORT=2567" \
@@ -344,12 +358,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.BUILD_SHA }}
 
       - name: Extract changelog from commits
         id: changelog
         env:
           BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
+          AFTER_SHA: ${{ env.BUILD_SHA }}
         run: |
           NOISE_FILTERS='grep -v "^\• chore(release):" | grep -v "^\• chore:" | grep -v "^\• chore(" | grep -v "^\• \[Scribe\]" | grep -v "^\• squad"'
 
@@ -464,7 +479,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          SHORT_SHA="${GITHUB_SHA::7}"
+          EFFECTIVE_SHA="${BUILD_SHA:-$GITHUB_SHA}"
+          SHORT_SHA="${EFFECTIVE_SHA::7}"
           BRANCH="${GITHUB_REF_NAME}"
           TITLE="CI/CD failure on ${BRANCH} (${SHORT_SHA})"
 
@@ -485,7 +501,7 @@ jobs:
           CI/CD failure detected on \`${BRANCH}\`.
 
           - Workflow run: ${RUN_URL}
-          - Commit: ${GITHUB_SHA}
+          - Commit: ${EFFECTIVE_SHA}
           - Commit message: ${COMMIT_MESSAGE}
           - Commit author: ${COMMIT_AUTHOR}
           EOF

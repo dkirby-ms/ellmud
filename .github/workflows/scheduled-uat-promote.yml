@@ -109,6 +109,7 @@ jobs:
             git push origin uat
             echo "✅ Merged dev into uat and pushed"
             echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "merge_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
             echo "ℹ️ Nothing to deploy — all changes were in stripped paths"
             echo "pushed=false" >> "$GITHUB_OUTPUT"
@@ -118,6 +119,6 @@ jobs:
       # Explicitly dispatch CI/CD after a successful push to uat.
       - name: Trigger CI/CD
         if: steps.merge.outputs.pushed == 'true'
-        run: gh workflow run ci-cd.yml --ref uat
+        run: gh workflow run ci-cd.yml --ref uat -f sha=${{ steps.merge.outputs.merge_sha }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
