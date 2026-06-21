@@ -4,11 +4,10 @@
 
 Explore hand-crafted zones filled with creatures, danger, and other adventurers. Earn gear through combat and discovery. Manage your persistent stash between adventures. **Permadeath is permanent** — every decision carries weight. Your legend lives on in the Hall of Fame.
 
-Ellmud is a multiplayer MUD/MMORPG with permadeath consequences and rich prose narration powered by LLM generation. Play via web browser with text-primary interface, or use the standalone **Unity client** for full 3D graphics. Both clients connect to the same persistent server-authoritative world.
+Ellmud is a multiplayer MUD/MMORPG with permadeath consequences and rich prose narration powered by LLM generation. Play via web browser with a text-primary interface connected to the persistent server-authoritative world.
 
 **Server:** TypeScript + Colyseus for real-time multiplayer, PostgreSQL for persistence.  
 **Web Client:** React + Vite for modern browser experience.  
-**Unity Client:** Standalone 3D graphics client for Windows/Mac/Linux.
 
 ---
 
@@ -77,8 +76,6 @@ packages/
 - **client:** Vite + React SPA; runs in the browser.
 - **e2e:** Vitest integration tests; runs against a live server.
 
-**Unity Client:** The standalone 3D graphics client (Unity + C#) is maintained in a separate repository and connects to the same WebSocket server.
-
 ---
 
 ## 🛠️ Tech Stack
@@ -88,7 +85,6 @@ packages/
 | **Runtime** | Node.js 22 / TypeScript | Server and shared code |
 | **Real-Time** | Colyseus 0.17 | WebSocket multiplayer framework |
 | **Web Client** | React 18 + Vite | Browser UI (game + admin dashboard) |
-| **Graphics Client** | Unity + C# | Standalone 3D client for cross-platform desktop |
 | **Database** | PostgreSQL 18 | Player state, stash, progression, content |
 | **Cache** | Redis 8 | Narration cache, session presence |
 | **Auth** | Microsoft Entra External ID + bcrypt | Production OAuth/OIDC + local dev login |
@@ -209,7 +205,6 @@ See `.env.example` for a complete template. Key variables:
 - **Deploy Pipeline:** Preview changes, promote content between staging and production
 
 ### 🔄 Phase 3 — Planned
-- **Unity 3D Client:** Standalone graphics client for Windows/Mac/Linux; isometric or third-person perspective; same gameplay as web client
 - **Advanced Creature AI:** Behavior trees, multi-phase boss fights, pack mechanics
 - **Content Expansion:** Siltgate, Lost Catacombs, and other biomes; expanded creature roster
 - **Faction System:** Strongholds, faction vendors, contracts, reputation tracking
