@@ -128,12 +128,12 @@ info "Repository: ${BOLD}${REPO}${RESET}"
 # Based on the Bicep naming convention: resourcePrefix = ellmud-{env}
 #   ACR names are alphanumeric-only:  ellmud{env}acr  → e.g. ellmuduatacr
 #   Container App:                    ellmud-{env}-app
-#   Resource Group:                   ellmud-rg
+#   Resource Group:                   rg-ellmud
 declare -A DEFAULTS
 for env in "${ENVIRONMENTS[@]}"; do
   DEFAULTS["${env}_ACR_NAME"]="ellmud${env}acr"
   DEFAULTS["${env}_CONTAINER_APP_NAME"]="ellmud-${env}-app"
-  DEFAULTS["${env}_RESOURCE_GROUP"]="ellmud-rg"
+  DEFAULTS["${env}_RESOURCE_GROUP"]="rg-ellmud"
   # No sensible default for Azure identity values — leave blank
   DEFAULTS["${env}_AZURE_CLIENT_ID"]=""
   DEFAULTS["${env}_AZURE_TENANT_ID"]=""
