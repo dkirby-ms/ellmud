@@ -23660,3 +23660,47 @@ Kept as barrel exporting AppState, appReducer, useAppStore, resetAppStore, initi
 - ✅ 391 tests pass (3 todo, baseline)
 - ✅ TypeScript clean (`tsc --noEmit`)
 - ✅ ESLint clean (lint-staged passed)
+
+<!-- Archived by Scribe on 2026-06-21T16:37:39Z; cutoff: entries dated before 2026-05-22 -->
+
+# Decision: Default load-test sessions to active stress traffic
+
+**Status:** Implemented  
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-05-19
+
+## Context
+
+The existing Playwright load test only held Colyseus connections open after entering `/zone`. That exercised connection count and autoscaling, but it did not apply sustained in-game command pressure through the same command-input path that real users use for chat and navigation.
+
+## Decision
+
+Make stress traffic the default behavior for the Playwright load test and expose controls to tune or disable it.
+
+### Implementation
+
+- Keep the workspace-owned load test in `packages/e2e/src/load-test.ts`, but expose it from the repo root with `npm run load-test`.
+- Add `scripts/load-test.sh` as the convenience wrapper for the shared endpoint (`https://ellmud-test.kirbytoso.xyz`) at 200 connections.
+- After each browser context reaches the enabled command input, start a jittered loop that submits either:
+  - a movement command (`north`, `south`, `east`, `west`, `up`, `down`), or
+  - a chat command (`say <message>`)
+- Use `--action-interval` (default `3000`) as the base cadence and randomize each delay so users do not synchronize.
+- Support `--no-stress` for idle-connection runs.
+
+## Rationale
+
+- Exercises the authoritative server path more realistically than idle sockets alone.
+- Adds pressure on Colyseus/websocket traffic, command parsing, room movement, and chat broadcast with no special test-only protocol.
+- Keeps the tool easy to invoke for operators while preserving tunability for follow-up runs.
+
+## Impact
+
+- Engine/load testing now measures both connection scale and steady-state gameplay command traffic.
+- Root-level invocation removes the need to cd into `packages/e2e` for routine stress runs.
+- Operators can still opt out of active behavior when they only want connection fan-out.
+
+## Related Files
+
+- `package.json`
+- `scripts/load-test.sh`
+- `packages/e2e/src/load-test.ts`

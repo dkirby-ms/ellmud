@@ -4,335 +4,71 @@
 
 ---
 
-### 2026-05-19: Load-Test Stress Behavior & Root npm Script (DELIVERED)
+## Condensed prior work (through 2026-05-20T17:17Z)
 
-**Task:** Enhance the Playwright load test with active stress behavior (movement & chat commands) and expose it via root npm script.
+- **Permadeath / Hall of Fame:** Added migration 017, permadeath config, and Hall of Fame stats/leaderboard APIs. The threshold model was simplified to a boolean toggle, while backward-compatible config remained.
+- **Browser load testing:** Created `packages/e2e/src/load-test.ts`, e2e package script, root `npm run load-test`, and `scripts/load-test.sh`. The harness supports auto-register/token auth, Playwright browser contexts, status reporting, and active stress traffic with jittered movement/chat commands.
+- **Player profile schema drift:** `player_profile` remains account-scoped, while `player_skills` moved to character scope in migration 021. `ZoneRoom` must bridge character IDs to backing player IDs; tests should assert `ON CONFLICT (character_id, skill_name)` and validate both original and migration constraints.
+- **ACA / Colyseus baseline:** Production multi-replica safety requires Redis presence, Redis driver, and ACA sticky sessions. Sticky ingress was added in `infra/modules/container-apps.bicep`; local dev still falls back to in-memory presence/driver.
+- **Hot-zone ceiling diagnosis:** The ACA HTTP concurrent-request scale rule is not a WebSocket cap. Practical limits came from single hot-room per process, heavy `ZoneRoom.onJoin()` hydration, short Colyseus heartbeat defaults, duplicate room creation during burst joins, and load-harness ramp stalls.
+- **Hot-zone fixes:** `packages/server/src/index.ts` sets the Colyseus concurrent-create wait before importing Colyseus; config adds `WS_PING_INTERVAL`/`WS_PING_MAX_RETRIES` defaults; `ZoneRoom.onJoin()` was slimmed and expensive hydration deferred with cleanup awaiting pending hydration.
+- **Browser-free WS harness:** Added `packages/e2e/src/load-test-ws.ts` to perform auth, character selection, `/api/spawn-zone`, and Colyseus room joins without Playwright. It sends protocol `MessageTypes.COMMAND` traffic and ramps without waiting for every batch to settle.
+- **WS harness resilience:** Registered sink handlers for known server messages, added join timeout/retry, optional reconnect-on-unexpected-leave, and `--quiet` noise filtering. Use workspace import `@ellmud/shared` rather than relative shared source imports.
+- **Grafana game metrics:** Dashboard JSON lives in `infra/grafana/dashboards/game-metrics.json` and references PostgreSQL by `${DS_POSTGRESQL}`. Use JSONB metadata queries, Grafana time macros, hourly/5-minute groupings as appropriate, and explicit windows for fixed leaderboards.
 
-**Outcome:** ✅ DELIVERED — All tests, lint, and build passed.
-
-**Deliverables:**
-- **Enhanced load-test.ts:** Configurable stress behavior (jittered movement/chat commands, default enabled, `--no-stress` flag supported)
-- **scripts/load-test.sh:** Convenience wrapper for shared endpoint (200 concurrent connections)
-- **Root npm script:** `npm run load-test` for operator access without cd into packages/e2e
-
-**Design decisions:**
-- Default stress mode exercises command-input path (more realistic than idle sockets)
-- Jittered delays prevent command synchronization across clients
-- Operators can opt out with `--no-stress` for connection-only testing
-- Base action interval: 3000ms with randomization
-
-**Integration:** Engine now measures both connection scale and steady-state gameplay traffic.
+Key paths repeatedly touched or referenced: `packages/server/src/index.ts`, `packages/server/src/config.ts`, `packages/server/src/rooms/ZoneRoom.ts`, `packages/e2e/src/load-test.ts`, `packages/e2e/src/load-test-ws.ts`, `infra/modules/container-apps.bicep`, `infra/grafana/dashboards/game-metrics.json`, `packages/server/src/metrics/MetricsService.ts`.
 
 ---
 
-
-### 2026-04-13: Permadeath DB Schema & Hall of Fame API (DELIVERED)
-
-**Task:** Build permadeath database schema, server config, and Hall of Fame REST API.
-
-**Outcome:** ✅ DELIVERED — Migration 017 created, config integrated, leaderboard API ready.
-
-**Deliverable:** 
-- **Migration 017:** `hall_of_fame` table with character/player metadata, survival metrics, death info
-- **Config:** Permadeath env vars integrated (PERMADEATH_ENABLED, PERMADEATH_THRESHOLD)
-- **API Endpoints:** `GET /api/hall-of-fame` paginated leaderboard + `/api/hall-of-fame/stats` aggregate stats
-
-**Design Note:** Initial implementation used threshold model (multiple deaths before permadeath). User directive simplified to boolean toggle — removed threshold from active logic, kept config field for backward compatibility.
-
-**Integration:** System ready for Jarlaxle death handler, Regis UI, and Minsc test coverage.
-
-## Learnings
-
-### 2026-05-20T16:54:33.072+00:00: Portable Grafana Dashboard for game_metrics (DELIVERED)
-
-**Task:** Create an importable Grafana dashboard JSON model for PostgreSQL-backed gameplay metrics.
-
-**Architecture / design decisions:**
-- Store Grafana dashboard JSON under `infra/grafana/dashboards/` so Azure Managed Grafana can import a checked-in artifact directly.
-- Keep datasource wiring portable by referencing PostgreSQL via `${DS_POSTGRESQL}` instead of hard-coded datasource UIDs.
-- Query `game_metrics.metadata` with PostgreSQL JSONB operators and Grafana time macros so dashboard panels stay aligned with the engine event schema.
-
-**Patterns / user-relevant notes:**
-- Hourly grouping works well for deaths, kills, loot, and active-player trend panels on short default ranges like the last 6 hours.
-- Fixed-window leaderboard panels should declare their own time window explicitly (the top-killers table is pinned to the last 24 hours).
-- Combat efficiency is best visualized as aggregated hit ratio from `combat_stats.hits` and `combat_stats.misses`, not raw hit/miss event counts.
-
-**Key file paths:**
-- `infra/grafana/dashboards/game-metrics.json`
-- `packages/server/src/metrics/MetricsService.ts`
-- `packages/server/src/metrics/index.ts`
-- `packages/server/src/metrics/metrics-provider.ts`
-
-
-### 2026-05-19T23:09:36.915+00:00: UAT WebSocket Ceiling Investigation (INVESTIGATED)
-
-**Task:** Investigate why a live UAT load test plateaued around 54 connected players with one shared zone room and no server-side crash logs.
-
-**Findings / patterns:**
-- `infra/modules/container-apps.bicep` gives each ACA replica `1.0` vCPU and `2Gi` memory, with `minReplicas: 1`, `maxReplicas: 4`, and an HTTP scale rule at `concurrentRequests: '30'`. That rule is an autoscaling threshold, not a hard cap, and it does not scale on long-lived WebSocket connections.
-- A single hot Colyseus room still lives on one replica/process. Even with Redis presence/driver and ACA sticky sessions enabled, `maxReplicas` does not raise one room's per-process ceiling; only per-replica resources (or room sharding) do.
-- `packages/server/src/index.ts` uses the default `WebSocketTransport({ server: httpServer })` with no explicit WebSocket connection cap, and `packages/server/src/rooms/ZoneRoom.ts` now caps persistent zones at 100 players via `maxClients`, so the observed ~54 ceiling is not coming from a server-configured room limit.
-- The load test is client-heavy but not 54 separate Chromium processes: `packages/e2e/src/load-test.ts` launches one headless Chromium browser and creates many isolated contexts/pages inside it. The ramp also waits for every batch to finish (`Promise.allSettled(batch)`) and each user can sit for 30 s on `waitForSelector`, which makes the run appear frozen once new connects start timing out.
-- UAT deployments currently set `ALLOW_LOCAL_AUTH=true` and `ENABLE_LLM_NARRATION=true` in `.github/workflows/ci-cd.yml`, so this load path is local-auth enabled and uses production narration wiring unless operators override it.
-
-**Key file paths:**
-- `infra/modules/container-apps.bicep`
-- `.github/workflows/ci-cd.yml`
-- `packages/server/src/index.ts`
-- `packages/server/src/config.ts`
-- `packages/server/src/rooms/ZoneRoom.ts`
-- `packages/server/src/auth/routes.ts`
-- `packages/e2e/src/load-test.ts`
-
-
-### 2026-05-18: External Load Test Tool (DELIVERED)
-
-**Task:** Create an external load testing script in `packages/e2e/` that drives real browser contexts via Playwright to generate WebSocket connections against the deployed server, triggering KEDA autoscaling.
-
-**Outcome:** ✅ DELIVERED
-
-**Deliverables:**
-- **Script:** `packages/e2e/src/load-test.ts` — standalone tsx script (not a test)
-- **package.json entry:** `"load-test": "tsx src/load-test.ts"` in `packages/e2e/package.json`
-- **tsx** added as devDependency to `packages/e2e/package.json`
-
-**Design decisions:**
-- Two auth modes: AUTO (self-registers a unique user per connection via `/auth/register`) and TOKEN (shared pre-seeded JWT injected into every context's localStorage).
-- Auto-registered accounts are NOT cleaned up — by design, since clean-up would drop WS connections.
-- Ramp logic: spawns `--ramp-rate` (default 2) contexts per second, waits for each batch to settle before spawning the next.
-- Connection alive signal: Playwright holds the browser page open; SIGINT/SIGTERM triggers graceful close of all contexts then `browser.close()`.
-- Reporter fires every 5 s: prints connected / connecting / failed / closed counts.
-
-**Key patterns learned:**
-- `packages/e2e/src/fixtures/player-fixture.ts` shows the full auth flow: register → inject localStorage → goto('/zone') → wait for `input[aria-label="Command input"]:not([disabled])`.
-- tsx is available globally at v4.21.0 and declared as `^4.19.0` in `packages/server/package.json`; safe to declare same range in e2e.
-- `packages/e2e/playwright.config.ts` uses `baseURL: http://localhost:3000` for tests, but the load-test passes its own `--url` and sets `baseURL` per context — no config coupling needed.
-- Colyseus WS join is confirmed live when the command input element becomes enabled.
-
-- Disconnect and death cleanup both persist progression through `packages/server/src/rooms/ZoneRoom.ts`, which calls `savePlayerProfile()` before player state is removed.
-- `packages/server/src/player/PgPlayerProfileRepository.ts` still treats profile persistence as player-scoped: it loads by `player_id`, saves skills with `ON CONFLICT (player_id, skill_name)`, and never writes `character_id` for those skill rows.
-- The schema drift is in `player_skills`, not `player_profile`: `packages/server/src/db/migrations/001_schema.sql` defines `uq_player_skill` on `(player_id, skill_name)`, but `packages/server/src/db/migrations/021_fix_player_skills_unique_constraint.sql` replaces that with `uq_character_skill` on `(character_id, skill_name)` for multi-character support.
-- Existing guardrails missed this drift: `packages/server/src/__tests__/pg-profile-repository.test.ts` and `packages/server/src/__tests__/persistence-schema-validation.test.ts` still assert the old player-scoped skill uniqueness, so repo tests pass even when runtime schema and save code disagree.
-- `packages/server/src/player/PlayerProfileRepository.ts` now needs both IDs: `playerId` for `player_profile` rows and `characterId` for `player_skills` rows, because profile data stayed account-scoped while skills moved to character scope in migration 021.
-- `packages/server/src/rooms/ZoneRoom.ts` is the bridge between runtime IDs and persistence IDs: room-level `playerId` is the character ID, while `dbPlayerId(characterId)` resolves the owning `players.id` UUID before calling persistence repositories.
-- Guardrails now need to validate both layers together: repo tests should assert `ON CONFLICT (character_id, skill_name)` in `PgPlayerProfileRepository`, and schema validation should treat `001_schema.sql` as the original constraint plus `021_fix_player_skills_unique_constraint.sql` as the migration that flips skills to character scope.
-
-### 2026-05-19T13:28:21.097+00:00: Root-Invokable Load Test Stress Traffic (DELIVERED)
-
-**Task:** Make the Playwright load test runnable from the repo root, add a shell wrapper for the shared test endpoint, and keep virtual users active with chat plus movement traffic.
-
-**Outcome:** ✅ DELIVERED
-
-**Deliverables:**
-- **Root script:** `package.json` now exposes `npm run load-test`, delegating to `@ellmud/e2e` with CLI passthrough.
-- **Wrapper:** `scripts/load-test.sh` targets `https://ellmud-test.kirbytoso.xyz` with 200 connections and default stress traffic.
-- **Stress behavior:** `packages/e2e/src/load-test.ts` now defaults to active post-connect behavior, sending jittered movement commands plus `say ...` chat messages through the command input.
-
-**Key patterns learned:**
-- Root workspace delegation supports reusable tooling entrypoints; adding a trailing `--` keeps extra CLI flags flowing into the workspace script.
-- The load test can safely stress Colyseus via the same browser command path used by players: locate `input[aria-label="Command input"]`, `fill()`, then `press('Enter')`.
-- A jittered per-user action loop with default `--action-interval 3000` avoids synchronized bursts while still creating sustained websocket and game-command pressure.
-- Key paths for this workflow: `package.json`, `scripts/load-test.sh`, and `packages/e2e/src/load-test.ts`.
-
-### 2026-05-19T15:02:22.910+00:00: Colyseus Multi-Replica Affinity & Character-ID Fallback (DELIVERED)
-
-**Task:** Fix Azure Container Apps multi-replica Colyseus routing (`seat reservation expired`) and investigate the `player_skills.character_id` foreign-key save failure during disconnect cleanup.
-
-**Outcome:** ✅ DELIVERED
-
-**Architecture / design decisions:**
-- `packages/server/src/index.ts` already had Redis presence + Redis driver support; the missing infra piece was ACA ingress sticky sessions. Container Apps must keep the Colyseus HTTP matchmake request and follow-up WebSocket on the same replica.
-- `infra/modules/container-apps.bicep` now enables `ingress.stickySessions.affinity = 'sticky'` so ARR affinity is explicit in IaC.
-- `packages/server/src/rooms/ZoneRoom.ts` now resolves the active character server-side when a client sends only `playerId`; room state is keyed to `characters.id`, while `ownerPlayerIds` keeps the backing `players.id` for persistence.
-- Profile saves now skip unresolved player/character pairs instead of attempting a `player_skills` write with an invalid `character_id`.
-- Startup logging now reports the actual Redis driver state, not just the env toggle, and warns when multi-replica startup is not cluster-safe.
-
-**Patterns / user-relevant notes:**
-- For Colyseus on ACA, the safe production trio is: RedisPresence + RedisDriver + sticky ingress sessions.
-- Local dev still falls back cleanly: if Redis is disabled or unreachable, Presence/driver stay local/in-memory.
-
-**Key file paths:**
-- `packages/server/src/index.ts`
-- `packages/server/src/rooms/ZoneRoom.ts`
-- `packages/server/src/__tests__/zoneroom-player-id.test.ts`
-- `infra/modules/container-apps.bicep`
-
-### 2026-05-20T12:16:21.884+00:00: Hot-Zone Load Ceiling Diagnosis (INVESTIGATED)
-
-**Task:** Diagnose the ~50-user UAT ceiling, duplicate zone-room creation, and mid-session disconnects seen during external load testing against ACA.
-
-**Findings / patterns:**
-- The ACA `concurrentRequests: '30'` rule in `infra/modules/container-apps.bicep` is only an HTTP autoscale trigger; it is not a WebSocket hard cap. The app still runs one hot Colyseus room per process/replica, with `1.0` vCPU and `2Gi` RAM per replica.
-- There is no explicit app-side socket cap: `packages/server/src/index.ts` passes a plain `http.createServer(app)` into `new WebSocketTransport({ server: httpServer })`, `packages/server/src/config.ts` gives persistent zones a 100-player default, and `packages/server/src/rooms/ZoneRoom.ts` applies that value to `this.maxClients` for zone rooms.
-- The practical ceiling is the join/runtime workload on one replica. `ZoneRoom.onJoin()` performs a long serial hydration path (active character/profile/faction/character/base stats/flags/last inn/posture/starter kit/inventory/loadout/stats/exploration) before the client is fully ready, so one 1-vCPU replica can bog down well below the configured 100-player room limit.
-- Duplicate rooms are explained by Colyseus matchmaking timing, not `filterBy()`. The client joins zone-specific room names directly (`joinOrCreate('zone:<slug>')`), but Colyseus only waits `COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME` (default 0.5 s) for a concurrent creator before creating another room. `handleCreateRoom()` does not publish/persist the room until after `ZoneRoom.onCreate()` finishes, and that `onCreate()` does async zone loading plus initialization work, so burst joins can legitimately create parallel rooms for the same zone and even spread them across replicas.
-- Existing connection drops line up with the transport heartbeat being too aggressive for a saturated replica. The server does not override Colyseus WS heartbeat settings, so the transport default is `pingInterval=3000` ms and `pingMaxRetries=2`; under load that means roughly ~6 s of missed pong budget before `terminate()`. Combined with the heavy join path, 1-second sim tick, and stress-command traffic, that is a plausible trigger for the observed mid-session socket loss.
-- The load-test "stall at 50" is amplified by the harness: it waits for each ramp batch with `Promise.allSettled(batch)`, and each failed user can sit up to 30 s in `waitForSelector(...)`, so two stuck joins freeze the visible ramp for ~30 s even though the real issue is backend saturation/timeouts.
-
-**Key file paths:**
-- `infra/modules/container-apps.bicep`
-- `packages/server/src/index.ts`
-- `packages/server/src/config.ts`
-- `packages/server/src/rooms/ZoneRoom.ts`
-- `packages/client/src/services/connection.ts`
-- `packages/client/src/pages/ZoneExploration.tsx`
-- `packages/client/src/hooks/useZoneConnection.ts`
-- `packages/e2e/src/load-test.ts`
-- `packages/e2e/src/fixtures/player-fixture.ts`
-- `node_modules/@colyseus/core/src/MatchMaker.ts`
-- `node_modules/@colyseus/core/src/matchmaker/RegisteredHandler.ts`
-- `node_modules/@colyseus/core/src/Room.ts`
-- `node_modules/@colyseus/core/src/utils/Utils.ts`
-- `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`
-
-### 2026-05-20T13:34:19.228+00:00: Zone Join Deferral, Heartbeat Relaxation, and Matchmaker Wait Tuning (DELIVERED)
-
-**Task:** Implement the three approved server-side fixes for the hot-zone connection ceiling: relax WebSocket heartbeats, slim `ZoneRoom.onJoin()`, and stop duplicate zone-room creation during burst joins.
-
-**Outcome:** ✅ DELIVERED — `npm run build`, `npm run lint`, and `npm test` all passed in `packages/server` after the changes.
-
-**Architecture / design decisions:**
-- `packages/server/src/index.ts` now sets `COLYSEUS_MAX_CONCURRENT_CREATE_ROOM_WAIT_TIME` before dynamically importing Colyseus, so the runtime actually picks up the longer wait budget instead of the library's 0.5 s default.
-- The WebSocket transport is now configured from centralized config with `WS_PING_INTERVAL` / `WS_PING_MAX_RETRIES` defaults of `6000` ms and `4`, which gives overloaded replicas a much wider pong budget before forced termination.
-- `packages/server/src/rooms/ZoneRoom.ts` keeps only identity resolution, room placement, lightweight player creation, and immediate client bootstrap in `onJoin()`. Profile, faction, character, flags, posture, inventory, exploration, loadout, and combat-stat hydration now run in a deferred async phase with `setTimeout(..., 0)` plus `setImmediate()` yields between heavy steps.
-- Deferred join hydration is tracked per player and awaited during cleanup so a fast disconnect cannot persist half-hydrated default state back to storage.
-
-**Patterns / user-relevant notes:**
-- For Colyseus config sourced from env-backed constants, set the env var before importing the package or the default is frozen too early.
-- The client already treats the connection as established once the room object is set; that makes staged post-join hydration safe as long as room header/look/zone state/player state arrive immediately and fuller inventory/loadout/map data follows quickly.
-- `joinOrCreate('zone:<slug>')` relies on room-name matching, not `filterBy()`, so the duplicate-room fix here is startup tuning of the Colyseus concurrent-create wait rather than room-definition filters.
-
-**Key file paths:**
-- `packages/server/src/index.ts`
-- `packages/server/src/config.ts`
-- `packages/server/src/rooms/ZoneRoom.ts`
-- `packages/server/src/__tests__/wave3-redis-contracts.test.ts`
-- `node_modules/@colyseus/core/src/MatchMaker.ts`
-- `node_modules/@colyseus/core/src/utils/Utils.ts`
-- `node_modules/@colyseus/ws-transport/src/WebSocketTransport.ts`
-
-### 2026-05-20T15:22:42.185+00:00: Browser-Free Colyseus Load Test Harness (DELIVERED)
-
-**Task:** Build a lightweight e2e load test path that skips Playwright browsers and drives auth plus zone joins through raw HTTP + WebSocket.
-
-**Architecture / design decisions:**
-- `packages/e2e/src/load-test-ws.ts` now performs the full player bootstrap with HTTP calls (`/auth/login`, `/auth/register`, `/api/characters`, `/api/characters/:id/select`, `/api/spawn-zone`) and then joins the returned `zone:<slug>` room via the Colyseus JS SDK with `{ token, characterId }`.
-- The WS harness reuses the same command pressure shape as the browser load test, but sends protocol-native `MessageTypes.COMMAND` payloads directly after parsing direction aliases into `go <dir>`.
-- Local/dev websocket resolution now tries both the app host and the Colyseus dev port (`:2567`) so one CLI flag (`--url`) still works against browser-served local stacks and same-origin deployed stacks.
-- The WS ramp no longer waits for each batch to finish connecting before spawning the next batch, avoiding the Playwright harness stall pattern when a subset of joins hang or time out.
-
-**Patterns / user-relevant notes:**
-- `/api/spawn-zone` is the canonical way to resolve which persistent zone room a selected character should join; it reflects the active character's starting zone and keeps the load harness aligned with the real client flow.
-- For protocol-level load tests, joining `joinOrCreate(spawnTarget, { token, characterId })` plus sending `MessageTypes.COMMAND` traffic is enough; no DOM, localStorage, or browser navigation is required.
-
-**Key file paths:**
-- `packages/e2e/src/load-test-ws.ts`
-- `packages/e2e/package.json`
-- `package.json`
-- `scripts/load-test-ws.cmd`
-- `packages/client/src/services/connection.ts`
-- `packages/client/src/pages/ZoneExploration.tsx`
-- `packages/server/src/api/characters.ts`
-- `packages/server/src/api/spawn-zone.ts`
-
-### 2026-05-20T17:17:22.953+00:00: WS Load Harness Resilience & Noise Suppression (DELIVERED)
-
-**Task:** Harden the raw Colyseus load harness for 200-connection test-environment runs.
-
-**Architecture / design decisions:**
-- `packages/e2e/src/load-test-ws.ts` now registers no-op handlers for every known server→client `MessageTypes` payload immediately after join so Colyseus stops flooding the console with unregistered-message warnings.
-- Join resilience now defaults to a 30s timeout with one retry per join attempt, plus optional reconnect-on-unexpected-leave backoff so close code `4002` is counted and can be recovered without losing the virtual user immediately.
-- A `--quiet` flag now filters the remaining known Colyseus SDK noise while preserving the harness's own status, failure, and summary output.
-
-**Patterns / user-relevant notes:**
-- For protocol-only Colyseus load tests, intentionally registering sink handlers is a valid strategy when the harness only needs connection pressure, not payload inspection.
-- The clean workspace import path for shared protocol contracts in e2e is `@ellmud/shared`; `../../shared/src/...` breaks standalone TypeScript checks under the e2e tsconfig.
-
-**Key file paths:**
-- `packages/e2e/src/load-test-ws.ts`
-- `packages/e2e/package.json`
-- `.squad/agents/drizzt/history.md`
+## Recent detailed entries
 
 ### 2026-05-20T17:59:23.199+00:00: ACA Multi-Replica Seat Reservation Diagnosis (INVESTIGATED)
 
 **Task:** Diagnose why the UAT WebSocket load test starts failing as soon as ACA scales `ellmud-uat-app` above one replica.
 
 **Findings / patterns:**
-- UAT is deployed with the intended multi-replica server stack: `infra/modules/container-apps.bicep` enables `ingress.stickySessions.affinity = 'sticky'`, and recent replica startup logs show `Cache: Redis, Presence: Redis` plus `Matchmaker driver: Redis` on every scaled-out replica.
-- The HTTP auth and `/api/spawn-zone` calls are not the seat-reservation boundary. `packages/server/src/api/spawn-zone.ts` only returns a zone slug/target; the actual Colyseus seat reservation is created by `joinOrCreate()` during `POST /matchmake/joinOrCreate/:roomName`, then consumed on the follow-up WebSocket handshake.
-- Colyseus still keeps reserved seats inside the room process (`node_modules/@colyseus/core/src/Room.ts` stores `_reservedSeats` in memory, and `Transport.ts` throws `seat reservation expired.` when the handshake reaches a room instance without that reservation). Redis presence/driver share room discovery and matchmaker coordination, but they do not make seat consumption replica-agnostic.
-- The current raw Node load harness is not affinity-safe on ACA. `packages/e2e/src/load-test-ws.ts` does REST calls with `fetch`, then `@colyseus/sdk` performs its own matchmake HTTP request and separate WebSocket upgrade. In Node, the SDK does not persist `Set-Cookie` affinity from the matchmake response into the WebSocket handshake; it only forwards static configured headers. That makes ACA sticky sessions ineffective for this harness once more than one replica is live.
-- Log Analytics confirms the failure window coincides with scale-out (`17:48:21Z` → 2 replicas, `17:48:36Z` → 3, `17:49:06Z` → 4), and gameplay join logs were emitted by more than one container group during that window, proving traffic was actually landing on multiple replicas.
+- UAT had the intended stack: sticky ingress, Redis presence, and Redis matchmaker driver on each replica.
+- `/api/spawn-zone` is not the seat-reservation boundary. The Colyseus reservation is created by `POST /matchmake/joinOrCreate/:roomName` and consumed by the WebSocket handshake.
+- Colyseus stores reserved seats in the room process. Redis shares discovery/coordination, but does not make seat consumption replica-agnostic.
+- The raw Node load harness was not affinity-safe on ACA because fetch and the SDK matchmake/WS steps did not share ACA affinity cookies.
+- Log Analytics showed failures began with scale-out and that gameplay joins landed on multiple container groups.
 
-**Key file paths:**
-- `infra/modules/container-apps.bicep`
-- `packages/server/src/index.ts`
-- `packages/server/src/api/spawn-zone.ts`
-- `packages/e2e/src/load-test-ws.ts`
-- `node_modules/@colyseus/sdk/src/Client.ts`
-- `node_modules/@colyseus/sdk/src/HTTP.ts`
-- `node_modules/@colyseus/sdk/src/transport/WebSocketTransport.ts`
-- `node_modules/@colyseus/core/src/Room.ts`
-- `node_modules/@colyseus/core/src/Transport.ts`
+**Key paths:** `infra/modules/container-apps.bicep`, `packages/server/src/index.ts`, `packages/server/src/api/spawn-zone.ts`, `packages/e2e/src/load-test-ws.ts`, Colyseus SDK/core transport files.
 
 ### 2026-05-20T18:12:16.280+00:00: ACA Affinity Cookie Passthrough for WS Load Testing (DELIVERED)
 
 **Task:** Patch the raw Colyseus WebSocket load harness so ACA affinity survives the matchmake-to-WebSocket handoff during multi-replica scale-out.
 
 **Architecture / design decisions:**
-- `packages/e2e/src/load-test-ws.ts` now performs the Colyseus `POST /matchmake/joinOrCreate/:roomName` step manually for each websocket candidate, captures `ARRAffinity` and `ARRAffinity_SameSite` from `Set-Cookie`, and then calls `Client.consumeSeatReservation()` instead of relying on `client.joinOrCreate()`.
-- The harness injects the captured cookie pair into the Node websocket upgrade as a `Cookie` header via Colyseus `Client` options, which keeps the seat-reservation consume step pinned to the same ACA replica.
-- Cookie passthrough is conditional; local/dev endpoints still work when no ACA affinity cookies are present.
+- `packages/e2e/src/load-test-ws.ts` manually performs `POST /matchmake/joinOrCreate/:roomName`, captures `ARRAffinity` / `ARRAffinity_SameSite`, and then calls `Client.consumeSeatReservation()`.
+- The harness injects the captured cookie pair into the Node WebSocket upgrade via Colyseus `Client` options.
+- Cookie passthrough is conditional so local/dev endpoints still work without ACA cookies.
 
-**Patterns / user-relevant notes:**
-- In Node, the Colyseus SDK can forward static websocket headers from `Client` options, but it does not automatically persist matchmake response cookies into the websocket handshake.
-- For ACA sticky-session safety, the critical boundary is Colyseus matchmake HTTP to websocket consume-seat, not the earlier auth or `/api/spawn-zone` REST calls.
-
-**Key file paths:**
-- `packages/e2e/src/load-test-ws.ts`
-- `node_modules/@colyseus/sdk/src/Client.ts`
-- `node_modules/@colyseus/sdk/src/HTTP.ts`
-- `node_modules/@colyseus/sdk/src/transport/WebSocketTransport.ts`
+**Patterns:** In Node, Colyseus can forward static WebSocket headers but does not automatically persist matchmake response cookies into the WebSocket handshake. The critical sticky-session boundary is matchmake HTTP to consume-seat WS.
 
 ### 2026-05-20T19:33:31.586+00:00: Zone Room Operational Metrics (DELIVERED)
 
-**Task:** Add room-level operational metrics for joins, leaves, chat traffic, and throttled snapshots so Grafana can track live Colyseus room behavior during load tests and production.
+**Task:** Add room-level metrics for joins, leaves, chat traffic, and throttled snapshots.
 
 **Architecture / design decisions:**
-- `packages/server/src/metrics/MetricsService.ts` now supports `room_join`, `room_leave`, `chat_message`, and `room_snapshot` while preserving the fire-and-forget write path.
-- `packages/server/src/db/migrations/023_room_metrics_nullable_player_id.sql` drops the `NOT NULL` requirement on `game_metrics.player_id`, allowing true room-scoped snapshots without inventing a synthetic player identity.
-- `packages/server/src/rooms/ZoneRoom.ts` reports room metrics using the Colyseus room identity (`roomId`, `roomName`, optional `zoneSlug`) and throttles snapshots to every 60 ticks from the 1-second simulation loop.
+- `MetricsService` supports `room_join`, `room_leave`, `chat_message`, and `room_snapshot` with fire-and-forget writes.
+- Migration 023 makes `game_metrics.player_id` nullable for room-scoped snapshots.
+- `ZoneRoom` reports Colyseus room identity (`roomId`, `roomName`, optional `zoneSlug`) and throttles snapshots to every 60 ticks.
 
-**Patterns / user-relevant notes:**
-- Join metrics should only fire for real occupancy changes; duplicate-session displacement is a transport event, not a new room occupant.
-- Transfer leave metrics are best latched before emitting `MessageTypes.ZONE_TRANSFER`, so the later `onLeave()` cleanup can classify the exit correctly without blocking the handoff.
-- Chat metrics can piggyback on successful `speech` command results (`say`, `emote`, `whisper`, `gsay`) and stay operational rather than content-analytic.
+**Patterns:** Join metrics should reflect real occupancy changes; transfer leave metrics should be latched before `ZONE_TRANSFER`; chat metrics can piggyback on successful speech commands without content analysis.
 
-**Key file paths:**
-- `packages/server/src/metrics/MetricsService.ts`
-- `packages/server/src/metrics/index.ts`
-- `packages/server/src/metrics/metrics-provider.ts`
-- `packages/server/src/rooms/ZoneRoom.ts`
-- `packages/server/src/db/migrations/023_room_metrics_nullable_player_id.sql`
-- `packages/server/src/__tests__/metrics-service.test.ts`
+### 2026-05-20T20:00:00.902+00:00: Grafana Room & Connection Metrics (DELIVERED)
 
-## Learnings
-
-**Date:** 2026-05-20T20:00:00.902+00:00
-**Task:** Add Grafana dashboard panels for room metrics (room_snapshot, room_join, room_leave, chat_message) in a new "Room & Connection Metrics" row.
+**Task:** Add dashboard panels for `room_snapshot`, `room_join`, `room_leave`, and `chat_message`.
 
 **Architecture / design decisions:**
-- New row section "Room & Connection Metrics" placed at y=26, immediately after the "Leaderboards & Hotspots" row which ends at y=26.
-- Panel IDs 200–204 reserved for this row to avoid conflicts with existing 1–7 and 100–101.
-- Active Players panel uses AVG of `playerCount` per 5-minute bucket grouped by `zoneName` — averaging is more accurate than SUM since multiple rooms in the same zone each emit their own snapshot.
-- Room Population Table uses `DISTINCT ON (metadata->>'roomId') ORDER BY ... created_at DESC` to get the latest snapshot per room without a lateral join or window function — clean and performant for small room counts.
-- Join/Leave Rate uses `event_type AS metric` directly so both series emerge from one query target (the `room_join`/`room_leave` label names self-document).
-- Chat Messages panel uses bar chart draw style (consistent with the existing "Loot activity" panel style for count-per-bucket data).
+- Added a "Room & Connection Metrics" row after "Leaderboards & Hotspots" with panel IDs 200–204.
+- Active Players uses AVG of `playerCount` per 5-minute bucket grouped by `zoneName`, not SUM, because multiple rooms in a zone each emit snapshots.
+- Room Population uses `DISTINCT ON (metadata->>'roomId') ORDER BY created_at DESC` for the latest snapshot per room.
+- Join/Leave Rate uses `event_type AS metric`; Chat Messages uses a bar chart style.
 
-**Patterns / user-relevant notes:**
-- `$__timeGroupAlias` with `'5m'` is appropriate for room metrics since snapshots fire every 60 seconds — 5-minute buckets give enough granularity without noise.
-- The table panel for room population intentionally omits `$__timeFilter` because it always wants the latest snapshot regardless of the dashboard time window.
-- Thresholds on the Room Population Table (green → yellow at 5 → red at 10) give at-a-glance congestion signals.
+**Patterns:** `$__timeGroupAlias(..., '5m')` fits 60-second room snapshots; latest-room tables intentionally omit `$__timeFilter`; population thresholds provide congestion signals.
 
-**Key file paths:**
-- `infra/grafana/dashboards/game-metrics.json`
+---
+
+_Last summarized by Scribe on 2026-06-21T16:37:39Z._
