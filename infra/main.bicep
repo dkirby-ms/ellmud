@@ -193,15 +193,14 @@ module grafana 'modules/grafana.bicep' = {
 }
 
 // 8. AI Foundry — GPT-4o-mini serverless endpoint
-// AI Foundry disabled — using external OpenAI endpoint instead
-// module aiFoundry 'modules/ai-foundry.bicep' = {
-//   name: 'ai-foundry'
-//   params: {
-//     resourcePrefix: resourcePrefix
-//     location: location
-//     tags: tags
-//   }
-// }
+module aiFoundry 'modules/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  params: {
+    resourcePrefix: resourcePrefix
+    location: location
+    tags: tags
+  }
+}
 
 // ─── RBAC: Container App → ACR Pull ─────────────────────────────────────────
 
@@ -238,5 +237,5 @@ output grafanaName string = grafana.outputs.grafanaName
 output grafanaEndpoint string = grafana.outputs.grafanaEndpoint
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
-// output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
+output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString
