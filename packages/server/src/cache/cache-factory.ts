@@ -2,7 +2,7 @@
  * Cache factory — selects the correct NarrationCache implementation
  * based on server configuration.
  *
- * When Redis is enabled and reachable: RedisNarrationCache
+ * When Redis is enabled: RedisNarrationCache connects in the background.
  * Otherwise: InMemoryNarrationCache (LRU, max 1000 entries)
  */
 
@@ -12,8 +12,9 @@ import { RedisNarrationCache } from './redis-client.js';
 import type { ServerConfig } from '../config.js';
 
 /**
- * Build a NarrationCache from config. If Redis is enabled, attempts
- * to connect. Falls back to in-memory if connection fails.
+ * Build a NarrationCache from config. If Redis is enabled, do not block boot on
+ * Redis connectivity; the Redis cache retries in the background and cache
+ * operations are no-ops until Redis is ready.
  *
  * @returns The cache instance and whether it's Redis-backed.
  */
@@ -29,12 +30,7 @@ export async function createNarrationCache(
     silent: false,
   });
 
-  const connected = await redisCache.connect();
-  if (connected) {
-    console.log('[Cache] Redis narration cache connected');
-    return { cache: redisCache, isRedis: true };
-  }
-
-  console.warn('[Cache] Redis unavailable — falling back to in-memory cache');
-  return { cache: new InMemoryNarrationCache(), isRedis: false };
+  redisCache.startBackgroundConnect();
+  console.log('[Cache] Redis narration cache enabled (non-blocking startup)');
+  return { cache: redisCache, isRedis: true };
 }

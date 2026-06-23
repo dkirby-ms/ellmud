@@ -105,8 +105,8 @@ var createEnvironment = existingEnvironmentId == ''
 var containerAppName = '${resourcePrefix}-app'
 
 // Bootstrap defaults keep first deploys greenfield-safe until CI/CD publishes
-// the real server image. Brownfield infra redeploys should pass the current
-// image/entrypoint back into these params so ACA state stays unchanged.
+// the real server image. The root template requires an explicit image so
+// brownfield redeploys cannot silently reset ACA to this placeholder.
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (createEnvironment) {
   name: '${resourcePrefix}-cae'
   location: location

@@ -9,6 +9,8 @@ import { Router, type Request, type Response } from 'express';
 export interface HealthRouterDeps {
   isCacheRedis?: boolean;
   isPresenceRedis?: boolean;
+  cacheStatus?: () => string;
+  presenceStatus?: () => string;
   isStashPg?: boolean;
 }
 
@@ -21,8 +23,8 @@ export function createHealthRouter(deps: HealthRouterDeps = {}): Router {
       uptime: process.uptime(),
       timestamp: Date.now(),
       redis: {
-        cache: deps.isCacheRedis ? 'redis' : 'in-memory',
-        presence: deps.isPresenceRedis ? 'redis' : 'local',
+        cache: deps.cacheStatus ? deps.cacheStatus() : (deps.isCacheRedis ? 'redis' : 'in-memory'),
+        presence: deps.presenceStatus ? deps.presenceStatus() : (deps.isPresenceRedis ? 'redis' : 'local'),
       },
       persistence: {
         stash: deps.isStashPg ? 'postgresql' : 'in-memory',

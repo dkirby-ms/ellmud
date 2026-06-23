@@ -11,6 +11,9 @@ DEFAULT_POSTGRES_ADMIN_USERNAME="$(sed -n "s/^param postgresAdminUsername = '\(.
 DEFAULT_POSTGRES_DATABASE_NAME="$(sed -n "s/^param postgresDatabaseName = '\(.*\)'$/\1/p" "${SCRIPT_DIR}/main.bicepparam" | head -1)"
 CONTAINER_APP_NAME="${CONTAINER_APP_NAME:-ellmud-${ENVIRONMENT_NAME}-app}"
 CONFIGURE_GRAFANA_POSTGRES_DATASOURCE="${CONFIGURE_GRAFANA_POSTGRES_DATASOURCE:-false}"
+BOOTSTRAP_CONTAINER_IMAGE="node:22-alpine"
+BOOTSTRAP_CONTAINER_COMMAND_JSON='["/bin/sh","-c"]'
+BOOTSTRAP_CONTAINER_ARGS_JSON='["node -e \"require(\\\"http\\\").createServer((q,s)=>{s.writeHead(200,{\\\"Content-Type\\\":\\\"application/json\\\"});s.end(JSON.stringify({status:\\\"ok\\\",mode:\\\"placeholder\\\"}))}).listen(2567,\\\"0.0.0.0\\\")\""]'
 
 # ─── Preflight checks ───────────────────────────────────────────────────────
 
@@ -78,6 +81,16 @@ PYEOF
   fi
 else
   echo "🆕 No existing container app found for ${CONTAINER_APP_NAME}; bootstrap placeholder will be used on first deploy"
+  CURRENT_IMAGE="${BOOTSTRAP_CONTAINER_IMAGE}"
+  CURRENT_COMMAND_JSON="${BOOTSTRAP_CONTAINER_COMMAND_JSON}"
+  CURRENT_ARGS_JSON="${BOOTSTRAP_CONTAINER_ARGS_JSON}"
+fi
+
+if [ -z "${CURRENT_IMAGE}" ]; then
+  echo "🆕 Existing container spec had no image; bootstrap placeholder will be used on first deploy"
+  CURRENT_IMAGE="${BOOTSTRAP_CONTAINER_IMAGE}"
+  CURRENT_COMMAND_JSON="${BOOTSTRAP_CONTAINER_COMMAND_JSON}"
+  CURRENT_ARGS_JSON="${BOOTSTRAP_CONTAINER_ARGS_JSON}"
 fi
 
 # ─── Deploy Bicep ────────────────────────────────────────────────────────────
@@ -92,13 +105,11 @@ DEPLOY_ARGS=(
   --verbose
 )
 
-if [ -n "${CURRENT_IMAGE}" ]; then
-  DEPLOY_ARGS+=(
-    --parameters "containerImage=${CURRENT_IMAGE}"
-    --parameters "containerCommand=${CURRENT_COMMAND_JSON}"
-    --parameters "containerArgs=${CURRENT_ARGS_JSON}"
-  )
-fi
+DEPLOY_ARGS+=(
+  --parameters "containerImage=${CURRENT_IMAGE}"
+  --parameters "containerCommand=${CURRENT_COMMAND_JSON}"
+  --parameters "containerArgs=${CURRENT_ARGS_JSON}"
+)
 
 az deployment group create "${DEPLOY_ARGS[@]}"
 

@@ -209,12 +209,20 @@ jobs:
 
       - name: Deploy to Container App
         run: |
+          set -euo pipefail
+
+          APP="${{ secrets.CONTAINER_APP_NAME }}"
+          RG="${{ secrets.RESOURCE_GROUP }}"
+
           # Setting --command fully replaces the Bicep bootstrap entrypoint.
           # The command array ["node", "packages/server/dist/index.js"] specifies
           # the complete execution, no args needed.
+          # The Redis service bind is owned by Bicep; az containerapp update
+          # should preserve properties.template.serviceBinds, and we verify it
+          # immediately after creating the new revision.
           az containerapp update \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --name "$APP" \
+            --resource-group "$RG" \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ env.BUILD_SHA }} \
             --set-env-vars \
               "NODE_ENV=production" \
@@ -238,6 +246,18 @@ jobs:
               "ENABLE_LLM_NARRATION=true" \
             --container-name ellmud \
             --command "node" "packages/server/dist/index.js"
+
+          REDIS_BIND_COUNT=$(az containerapp show \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "length(properties.template.serviceBinds[?name=='redis'] || \`[]\`)" -o tsv)
+          if [ "${REDIS_BIND_COUNT:-0}" -lt 1 ]; then
+            echo "✗ Redis service bind is missing after az containerapp update."
+            echo "Expected verification command: az containerapp show --name \"$APP\" --resource-group \"$RG\" --query properties.template.serviceBinds -o json"
+            echo "Re-run infra/deploy.sh to restore the Bicep-owned Redis service bind before deploying."
+            exit 1
+          fi
+          echo "✓ Redis service bind preserved after az containerapp update."
 
       - name: Update ingress target port
         run: |
@@ -296,13 +316,13 @@ jobs:
           HEALTH=""
 
           # Poll until the revision is Running and Healthy, tolerating transient az/network failures.
-          for i in $(seq 1 30); do
+          for i in $(seq 1 72); do
             if ! REVISION_JSON=$(az_retry 3 az containerapp revision show \
               --name "$APP" \
               --resource-group "$RG" \
               --revision "$LATEST_REV" \
               -o json); then
-              echo "Revision status unavailable due to transient az error (attempt $i/30); retrying in 10s..."
+              echo "Revision status unavailable due to transient az error (attempt $i/72); retrying in 10s..."
               sleep 10
               continue
             fi
@@ -332,15 +352,15 @@ jobs:
 
             case "$HEALTH" in
               Unhealthy|Degraded)
-                echo "Revision $LATEST_REV is not healthy yet (state: ${STATUS:-unknown}, health: $HEALTH; attempt $i/30)"
+                echo "Revision $LATEST_REV is not healthy yet (state: ${STATUS:-unknown}, health: $HEALTH; attempt $i/72)"
                 ;;
             esac
 
-            echo "Revision status: ${STATUS:-unknown}, health: ${HEALTH:-unknown} (attempt $i/30)"
+            echo "Revision status: ${STATUS:-unknown}, health: ${HEALTH:-unknown} (attempt $i/72)"
             sleep 10
           done
 
-          echo "✗ Revision did not reach Running/Healthy state after 5 minutes"
+          echo "✗ Revision did not reach Running/Healthy state after 12 minutes"
           echo "Last observed status: ${STATUS:-unknown}, health: ${HEALTH:-unknown}"
           exit 1
 
@@ -430,18 +450,26 @@ jobs:
             python3 -c 'import json, sys; data=json.load(sys.stdin) or {}; print(((data.get("properties") or {}).get(sys.argv[1])) or "")' "$1"
           }
 
+          is_valid_rollback_image() {
+            local image="$1"
+            case "$image" in
+              *.azurecr.io/ellmud-*:*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
           monitor_active_revision() {
             local label="$1"
             local status=""
             local health=""
             local revision_json
 
-            for i in $(seq 1 30); do
+            for i in $(seq 1 72); do
               if ! revision_json=$(az_retry 3 az containerapp revision list \
                 --name "$APP" \
                 --resource-group "$RG" \
                 --query "[?properties.active] | [0]" -o json); then
-                echo "$label status unavailable due to transient az error (attempt $i/30); retrying in 10s..."
+                echo "$label status unavailable due to transient az error (attempt $i/72); retrying in 10s..."
                 sleep 10
                 continue
               fi
@@ -463,21 +491,27 @@ jobs:
               esac
               case "$health" in
                 Unhealthy|Degraded)
-                  echo "$label is not healthy yet (state: ${status:-unknown}, health: $health; attempt $i/30)"
+                  echo "$label is not healthy yet (state: ${status:-unknown}, health: $health; attempt $i/72)"
                   ;;
               esac
 
-              echo "$label status: ${status:-unknown}, health: ${health:-unknown} (attempt $i/30)"
+              echo "$label status: ${status:-unknown}, health: ${health:-unknown} (attempt $i/72)"
               sleep 10
             done
 
-            echo "✗ $label did not reach Running/Healthy state after 5 minutes"
+            echo "✗ $label did not reach Running/Healthy state after 12 minutes"
             echo "Last observed status: ${status:-unknown}, health: ${health:-unknown}"
             return 1
           }
 
           echo "Rolling back to revision: $PREVIOUS_REVISION"
           echo "Previous image: $PREVIOUS_IMAGE"
+
+          if ! is_valid_rollback_image "$PREVIOUS_IMAGE"; then
+            echo "::error::Refusing rollback to unsafe image '$PREVIOUS_IMAGE'. Rollback images must be real ACR app images matching *.azurecr.io/ellmud-*:<tag>."
+            echo "::error::Leaving the failed deployment state untouched instead of pinning ACA to a bootstrap or non-app image."
+            exit 1
+          fi
 
           FAILED_REVISION=$(az_retry 3 az containerapp revision list \
             --name "$APP" \
@@ -525,6 +559,15 @@ jobs:
               --image "$PREVIOUS_IMAGE" \
               --container-name ellmud \
               --command "node" "packages/server/dist/index.js"
+            REDIS_BIND_COUNT=$(az_retry 5 az containerapp show \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --query "length(properties.template.serviceBinds[?name=='redis'] || \`[]\`)" -o tsv || echo 0)
+            if [ "${REDIS_BIND_COUNT:-0}" -lt 1 ]; then
+              echo "✗ Redis service bind is missing after rollback update."
+              echo "Expected verification command: az containerapp show --name \"$APP\" --resource-group \"$RG\" --query properties.template.serviceBinds -o json"
+              exit 1
+            fi
             az_retry 5 az containerapp ingress update \
               --name "$APP" \
               --resource-group "$RG" \

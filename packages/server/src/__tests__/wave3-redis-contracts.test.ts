@@ -161,22 +161,24 @@ describe('Cache Factory Fallback (Issue #2)', () => {
     expect(cache).toBeInstanceOf(InMemoryNarrationCache);
   });
 
-  it('returns Redis cache when cacheEnabled is true and Redis connects', async () => {
+  it('returns Redis cache immediately when cacheEnabled is true and Redis connects in background', async () => {
     mockRedisInstance.shouldConnectFail = false;
     const config = makeServerConfig({ cacheEnabled: true });
     const { cache, isRedis } = await createNarrationCache(config);
 
     expect(isRedis).toBe(true);
     expect(cache).toBeInstanceOf(RedisNarrationCache);
+    await (cache as RedisNarrationCache).disconnect();
   });
 
-  it('falls back to in-memory when cacheEnabled is true but Redis connect fails', async () => {
+  it('keeps Redis cache enabled when Redis is unavailable at boot', async () => {
     mockRedisInstance.shouldConnectFail = true;
     const config = makeServerConfig({ cacheEnabled: true });
     const { cache, isRedis } = await createNarrationCache(config);
 
-    expect(isRedis).toBe(false);
-    expect(cache).toBeInstanceOf(InMemoryNarrationCache);
+    expect(isRedis).toBe(true);
+    expect(cache).toBeInstanceOf(RedisNarrationCache);
+    expect((cache as RedisNarrationCache).connected).toBe(false);
   });
 
   it('uses custom connection string from config', async () => {
@@ -185,8 +187,9 @@ describe('Cache Factory Fallback (Issue #2)', () => {
       connectionString: 'redis://custom-host:6380',
     });
     // Connect will succeed (default mock behavior)
-    const { isRedis } = await createNarrationCache(config);
+    const { cache, isRedis } = await createNarrationCache(config);
     expect(isRedis).toBe(true);
+    await (cache as RedisNarrationCache).disconnect();
   });
 });
 
@@ -367,6 +370,27 @@ describe('Redis Connection Lifecycle (Issue #2)', () => {
     const result = await cache.connect();
     expect(result).toBe(false);
     expect(cache.connected).toBe(false);
+  });
+
+  it('can connect later after Redis was unavailable at startup', async () => {
+    mockRedisInstance.shouldConnectFail = true;
+    const cache = new RedisNarrationCache({
+      url: 'redis://localhost:6379',
+      silent: true,
+    });
+
+    cache.startBackgroundConnect();
+    await Promise.resolve();
+    expect(cache.connected).toBe(false);
+
+    mockRedisInstance.shouldConnectFail = false;
+    const connected = await cache.connect();
+    expect(connected).toBe(true);
+    expect(cache.connected).toBe(true);
+
+    await cache.set('late-key', 'late value', 60000);
+    expect(await cache.get('late-key')).toBe('late value');
+    await cache.disconnect();
   });
 
   it('disconnect() sets connected=false after quit', async () => {

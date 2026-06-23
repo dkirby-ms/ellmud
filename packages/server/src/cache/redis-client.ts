@@ -18,29 +18,38 @@ export interface RedisNarrationCacheConfig {
   keyPrefix?: string;
   /** If true, suppress connection error logs (useful for tests). */
   silent?: boolean;
+  /** Redis TCP connect timeout in milliseconds. */
+  connectTimeoutMs?: number;
 }
 
 export class RedisNarrationCache implements NarrationCache {
   private readonly client: Redis;
   private readonly keyPrefix: string;
   private readonly silent: boolean;
+  private readonly connectTimeoutMs: number;
   private _connected = false;
+  private backgroundConnectStarted = false;
 
   constructor(config: RedisNarrationCacheConfig) {
     this.keyPrefix = config.keyPrefix ?? 'narration:';
     this.silent = config.silent ?? false;
+    this.connectTimeoutMs = config.connectTimeoutMs ?? 1000;
 
     this.client = new Redis(config.url, {
+      connectTimeout: this.connectTimeoutMs,
+      enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
       retryStrategy: (times: number) => {
-        if (times > 3) return null; // stop retrying
-        return Math.min(times * 200, 2000);
+        return Math.min(250 * 2 ** Math.min(times, 5), 5000);
       },
       lazyConnect: true,
     });
 
-    this.client.on('connect', () => {
+    this.client.on('ready', () => {
       this._connected = true;
+      if (!this.silent) {
+        console.log('[RedisCache] Connected');
+      }
     });
 
     this.client.on('error', (err: Error) => {
@@ -53,12 +62,25 @@ export class RedisNarrationCache implements NarrationCache {
     this.client.on('close', () => {
       this._connected = false;
     });
+
+    this.client.on('reconnecting', () => {
+      this._connected = false;
+    });
   }
 
-  /** Attempt to connect. Returns true if successful. */
-  async connect(): Promise<boolean> {
+  /** Attempt to connect, time-bounded so callers never wedge startup. */
+  async connect(timeoutMs = this.connectTimeoutMs): Promise<boolean> {
+    if (this.client.status === 'ready') {
+      this._connected = true;
+      return true;
+    }
+
     try {
-      await this.client.connect();
+      const connectPromise = this.client.connect().catch((err) => {
+        this._connected = false;
+        throw err;
+      });
+      await withTimeout(connectPromise, timeoutMs);
       this._connected = true;
       return true;
     } catch {
@@ -67,30 +89,47 @@ export class RedisNarrationCache implements NarrationCache {
     }
   }
 
+  /** Start Redis connection/reconnect in the background without blocking boot. */
+  startBackgroundConnect(): void {
+    if (this.backgroundConnectStarted) return;
+    this.backgroundConnectStarted = true;
+
+    void this.connect().then((connected) => {
+      if (connected) {
+        if (!this.silent) console.log('[RedisCache] Background connection ready');
+      } else if (!this.silent) {
+        console.warn('[RedisCache] Redis not ready yet — retrying in background');
+      }
+    });
+  }
+
   get connected(): boolean {
     return this._connected;
   }
 
   async get(key: string): Promise<string | null> {
+    if (!this.connected) return null;
     try {
-      return await this.client.get(this.keyPrefix + key);
+      return await withTimeout(this.client.get(this.keyPrefix + key), 250);
     } catch {
       return null;
     }
   }
 
   async set(key: string, value: string, ttlMs: number): Promise<void> {
+    if (!this.connected) return;
     try {
       const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
-      await this.client.set(this.keyPrefix + key, value, 'EX', ttlSeconds);
+      await withTimeout(this.client.set(this.keyPrefix + key, value, 'EX', ttlSeconds), 250);
     } catch {
       // Swallow — cache set failure is non-fatal
     }
   }
 
   async del(key: string): Promise<void> {
+    if (!this.connected) return;
     try {
-      await this.client.del(this.keyPrefix + key);
+      await withTimeout(this.client.del(this.keyPrefix + key), 250);
     } catch {
       // Swallow
     }
@@ -110,5 +149,19 @@ export class RedisNarrationCache implements NarrationCache {
   /** Expose underlying client for advanced operations (e.g. presence). */
   getClient(): Redis {
     return this.client;
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Redis operation timed out')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
