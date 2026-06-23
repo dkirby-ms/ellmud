@@ -62,3 +62,8 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 ### 2026-06-23T11:22:00Z: Redis-resilient narration cache
 
 - Narration cache Redis is now enabled but non-blocking: server boot and `/health` remain resilient while Redis connects/retries in the background. Relevant for future LLM narration cache work.
+
+### 2026-06-23T12:10:00Z: Issue #510 Azure OpenAI Entra token auth
+
+- Established the server LLM Azure provider pattern: use `DefaultAzureCredential` with scope `https://cognitiveservices.azure.com/.default`, lazy/cached bearer tokens, and five-minute pre-expiry refresh; no Azure LLM API key is used.
+- Runtime selection is `LLM_PROVIDER=azure` plus `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, and `AZURE_OPENAI_API_VERSION`; `ENABLE_LLM_NARRATION=false` still forces template-only narration.

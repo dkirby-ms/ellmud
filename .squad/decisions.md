@@ -186,3 +186,40 @@ Because `az containerapp update` should preserve the Bicep-owned template servic
 
 - `az bicep build --file infra/main.bicep` succeeded.
 - Workflow YAML parsed successfully with Python/PyYAML.
+---
+
+# Issue #510 — LLM Entra managed-identity token auth
+
+**Date:** 2026-06-23T12:10:00-05:00  
+**Requested by:** dkirby-ms  
+**Branch/PR:** `squad/510-llm-entra-token-auth` / PR #528  
+**Related:** #510 depends on #509 / PR #525 endpoint provisioning
+
+## Decision
+
+Server-side LLM narration for Azure OpenAI / AI Foundry uses Entra bearer-token authentication through the Azure Container App system-assigned managed identity. It must not use or require an API key for the Azure provider path.
+
+Runtime/provider configuration now uses:
+
+- `LLM_PROVIDER=azure`
+- `AZURE_OPENAI_ENDPOINT` from the Bicep `aiServicesEndpoint` output
+- `AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini`
+- `AZURE_OPENAI_API_VERSION=2024-10-21`
+- `ENABLE_LLM_NARRATION=true`
+
+## Implementation
+
+Volo implemented the Azure OpenAI transport with `DefaultAzureCredential`, scoped to `https://cognitiveservices.azure.com/.default`. Tokens are acquired lazily, cached, and refreshed five minutes before expiry; the transport calls the deployment chat-completions URL with `Authorization: Bearer` and never reads an Azure LLM key. Provider resolution selects Azure when explicit Azure config is present, while `ENABLE_LLM_NARRATION=false` still forces template-only narration.
+
+Khelben wired Container Apps and CI/CD to pass endpoint/deployment/provider/api-version env vars, removed the old `OPENAI_LLM_ENDPOINT` / `OPENAI_LLM_KEY` / `OPENAI_LLM_MODEL` wiring for this path, and documented the required `Cognitive Services OpenAI User` role on the ACA managed identity rather than creating RBAC in Bicep.
+
+## Validation and security
+
+- Volo tests cover Azure token acquisition, refresh behavior, provider resolution, and factory wiring.
+- Khelben validated `az bicep build --file infra/main.bicep` and workflow YAML parsing.
+- Security review was clean: no key/secret is introduced, bearer tokens are not logged, scope is correct, expired tokens are not served, endpoint URL components are trusted/encoded, and the managed identity follows least privilege.
+
+## Follow-up
+
+Out of scope for #510: consider hardening `ai-foundry.bicep` by disabling local key auth and public network access where operationally feasible.
+

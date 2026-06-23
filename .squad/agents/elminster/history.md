@@ -62,3 +62,7 @@
 - For Ellmud's text/discrete-command model, 100 players in one Colyseus room is architecturally viable on stronger CPU (2-4 vCPU preferred) and may be acceptable on 1 vCPU for mostly social traffic, but large same-room combat/social churn should be treated as the practical ceiling to test and optimize rather than evidence that Colyseus itself must be replaced.
 - Key files for future review: `packages/server/src/rooms/ZoneRoom.ts`, `packages/server/src/state.ts`, `packages/server/src/config.ts`, `packages/server/src/index.ts`, `packages/shared/src/index.ts`.
 
+### 2026-06-23T12:10:00Z: PR #528 security review — LLM Entra token auth
+
+- Clean review for #510: Azure OpenAI auth uses managed-identity bearer tokens, introduces no API key/secret, avoids token logging, refreshes before expiry, and keeps least-privilege RBAC expectations.
+- Open follow-up for a future hardening review: `ai-foundry.bicep` still allows local key auth and public network access out of scope for PR #528.
