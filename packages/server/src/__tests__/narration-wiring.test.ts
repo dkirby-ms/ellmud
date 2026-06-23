@@ -3,12 +3,15 @@
  * Issue #277 — Verify LLM client is instantiated and called for narrations.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MessageTypes } from '@ellmud/shared';
 import { createNarrationService } from '../narrative/factory.js';
+import { NarrationService } from '../narrative/NarrationService.js';
 import type { LLMTransport, LLMResponse, LLMRequest } from '../narrative/llm-client.js';
 import { LLMClient } from '../narrative/llm-client.js';
 import { InMemoryNarrationCache } from '../narrative/cache.js';
 import { resetConfig, getConfig } from '../config.js';
+import { bootTestServer, connectTestClient, makeCommand, waitUntil } from './helpers/index.js';
 
 // Mock transport that tracks calls
 function createMockTransport(response: string = 'A dark chamber with water pooling at your feet.'): LLMTransport {
@@ -270,5 +273,39 @@ describe('NarrationService factory integration', () => {
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((service as any).llmClient).toBeDefined();
+  });
+
+  it('routes player look room descriptions through NarrationService', async () => {
+    const narrateSpy = vi.spyOn(NarrationService.prototype, 'narrate');
+    const colyseus = await bootTestServer();
+
+    try {
+      const { client } = await connectTestClient(colyseus, 'zone');
+      const roomDescriptionCallsBefore = narrateSpy.mock.calls
+        .filter(([context]) => context.narration_type === 'room_description')
+        .length;
+
+      client.send(MessageTypes.COMMAND, makeCommand('look'));
+
+      const sawRoomDescription = await waitUntil(
+        () => narrateSpy.mock.calls
+          .filter(([context]) => context.narration_type === 'room_description')
+          .length > roomDescriptionCallsBefore,
+        2000,
+        50,
+      );
+
+      expect(sawRoomDescription).toBe(true);
+      const roomDescriptionContext = narrateSpy.mock.calls
+        .map(([context]) => context)
+        .reverse()
+        .find((context) => context.narration_type === 'room_description');
+      expect(roomDescriptionContext?.room.id).toBeTypeOf('string');
+
+      await client.leave();
+    } finally {
+      narrateSpy.mockRestore();
+      await colyseus.shutdown();
+    }
   });
 });
