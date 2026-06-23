@@ -77,3 +77,4 @@ _Last summarized by Scribe on 2026-06-21T16:37:39Z._
 
 - Made Redis cache, presence, and driver connect asynchronously so HTTP/Colyseus bind promptly and `/health` stays 200 during Redis cold start.
 - Commit `520b575` supports PR #527 and preserves Redis-enabled deploys.
+- 2026-06-23T12:58:00-05:00: Wired issue #514 no-target, non-dark `look` through `generateNarration('room_description', …)` with static fallback; PR #529 merged as `2a444c3`.
