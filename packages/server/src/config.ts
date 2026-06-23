@@ -68,11 +68,21 @@ export interface ServerConfig {
   /** Corpse persistence duration in seconds. GDD §6.8. */
   corpseTTLSeconds: number;
 
-  /** OpenAI-compatible LLM endpoint for narration (OpenAI, Azure OpenAI, LM Studio, Ollama, etc.). */
+  /** Selected LLM provider for narration when configured. */
+  llmProvider?: 'azure' | 'openai';
+
+  /** OpenAI-compatible LLM endpoint for narration (OpenAI, LM Studio, Ollama, etc.). */
   openaiLLM?: {
     endpoint: string;
     apiKey: string;
     model: string;
+  };
+
+  /** Azure OpenAI endpoint for Entra token-auth narration. No API key is used. */
+  azureOpenAILLM?: {
+    endpoint: string;
+    deployment: string;
+    apiVersion: string;
   };
 
   /** Explicit toggle for LLM narration. When false, template-only mode is used even if LLM credentials are configured. */
@@ -157,6 +167,18 @@ function envStr(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+function envOptionalStr(key: string): string | undefined {
+  const value = process.env[key];
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function envLLMProvider(): 'azure' | 'openai' | undefined {
+  const value = envOptionalStr('LLM_PROVIDER')?.toLowerCase();
+  if (value === 'azure' || value === 'openai') return value;
+  return undefined;
+}
+
 function envLoadSimulator(): ServerConfig['loadSimulator'] {
   const raw = process.env['SIMULATE_LOAD'];
   if (raw === undefined) {
@@ -197,8 +219,30 @@ function envLoadSimulator(): ServerConfig['loadSimulator'] {
 }
 
 export function loadConfig(): ServerConfig {
-  const openaiEndpoint = process.env.OPENAI_LLM_ENDPOINT;
-  const openaiKey = process.env.OPENAI_LLM_KEY;
+  const requestedProvider = envLLMProvider();
+  const openaiEndpoint = envOptionalStr('OPENAI_LLM_ENDPOINT');
+  const openaiKey = envOptionalStr('OPENAI_LLM_KEY');
+  const azureEndpoint = envOptionalStr('AZURE_OPENAI_ENDPOINT');
+  const azureDeployment = envOptionalStr('AZURE_OPENAI_DEPLOYMENT');
+  const openaiLLM = openaiEndpoint && openaiKey ? {
+    endpoint: openaiEndpoint,
+    apiKey: openaiKey,
+    model: process.env.OPENAI_LLM_MODEL ?? 'gpt-4o',
+  } : undefined;
+  const azureOpenAILLM = azureEndpoint && azureDeployment ? {
+    endpoint: azureEndpoint,
+    deployment: azureDeployment,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
+  } : undefined;
+  const llmProvider = requestedProvider === 'azure'
+    ? (azureOpenAILLM ? 'azure' : undefined)
+    : requestedProvider === 'openai'
+      ? (openaiLLM ? 'openai' : undefined)
+      : azureOpenAILLM && (!openaiKey || azureEndpoint)
+        ? 'azure'
+        : openaiLLM
+          ? 'openai'
+          : undefined;
 
   return {
     maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
@@ -235,11 +279,9 @@ export function loadConfig(): ServerConfig {
     devModeEnabled: envBool('DEV_MODE_ENABLED', false),
     enableProceduralGeneration: envBool('ENABLE_PROCEDURAL_GENERATION', false),
     corpseTTLSeconds: envInt('CORPSE_TTL_SECONDS', 43200), // 12 hours default (#409)
-    openaiLLM: openaiEndpoint && openaiKey ? {
-      endpoint: openaiEndpoint,
-      apiKey: openaiKey,
-      model: process.env.OPENAI_LLM_MODEL ?? 'gpt-4o',
-    } : undefined,
+    llmProvider,
+    openaiLLM,
+    azureOpenAILLM,
     enableLLMNarration: envBool('ENABLE_LLM_NARRATION', true),
     permadeath: {
       enabled: envBool('PERMADEATH_ENABLED', false),

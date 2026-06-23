@@ -12,6 +12,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@azure/identity": "4.13.1",
     "@colyseus/core": "~0.17.0",
     "@colyseus/monitor": "~0.17.0",
     "@colyseus/redis-driver": "^0.17.6",
