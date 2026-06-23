@@ -70,8 +70,8 @@ param adminToken string = ''
 @description('Require authentication to join rooms (true for production)')
 param authRequired string = 'true'
 
-@description('Container image to run (defaults to bootstrap placeholder until CI/CD deploys the real image)')
-param containerImage string = 'node:22-alpine'
+@description('Container image to run. Required so brownfield infra redeploys cannot silently reset ACA to the bootstrap placeholder.')
+param containerImage string
 
 @description('Container command array (defaults to the bootstrap placeholder entrypoint)')
 param containerCommand array = [

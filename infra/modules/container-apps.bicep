@@ -105,8 +105,8 @@ var createEnvironment = existingEnvironmentId == ''
 var containerAppName = '${resourcePrefix}-app'
 
 // Bootstrap defaults keep first deploys greenfield-safe until CI/CD publishes
-// the real server image. Brownfield infra redeploys should pass the current
-// image/entrypoint back into these params so ACA state stays unchanged.
+// the real server image. The root template requires an explicit image so
+// brownfield redeploys cannot silently reset ACA to this placeholder.
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (createEnvironment) {
   name: '${resourcePrefix}-cae'
   location: location
@@ -197,9 +197,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'PORT', value: '2567' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DATABASE_URL', value: 'postgresql://${postgresAdminUsername}:${postgresAdminPassword}@${postgresServerFqdn}:5432/${postgresDatabaseName}?sslmode=require' }
-            { name: 'REDIS_CACHE_ENABLED', value: 'true' }
-            { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
-            { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
+            { name: 'REDIS_CACHE_ENABLED', value: 'false' }
+            { name: 'REDIS_PRESENCE_ENABLED', value: 'false' }
+            { name: 'REDIS_DRIVER_ENABLED', value: 'false' }
             { name: 'ENTRA_CLIENT_ID', value: entraClientId }
             { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
