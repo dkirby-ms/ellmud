@@ -8,6 +8,7 @@
  */
 
 import type { NarrationContext, NarrationModelConfig } from '@ellmud/shared';
+import { DefaultAzureCredential } from '@azure/identity';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -198,12 +199,36 @@ export interface OpenAITransportConfig {
   model: string;
 }
 
+/** Azure Cognitive Services scope accepted by Azure OpenAI for Entra bearer auth. */
+export const AZURE_OPENAI_TOKEN_SCOPE = 'https://cognitiveservices.azure.com/.default';
+
+/** Refresh cached Azure tokens before they are close to expiry. */
+const AZURE_TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+export interface AzureOpenAIToken {
+  token: string;
+  expiresOnTimestamp: number;
+}
+
+export type AzureOpenAITokenProvider = () => Promise<AzureOpenAIToken>;
+
+export interface AzureOpenAITransportConfig {
+  endpoint: string;
+  deployment: string;
+  apiVersion?: string;
+  tokenProvider?: AzureOpenAITokenProvider;
+}
+
+function trimTrailingSlash(endpoint: string): string {
+  return endpoint.replace(/\/+$/, '');
+}
+
 /**
  * Create a transport function that calls any OpenAI-compatible endpoint.
  * Works with OpenAI, LM Studio, Ollama, Mistral, and other compatible APIs.
  */
 export function createOpenAITransport(config: OpenAITransportConfig): LLMTransport {
-  const url = `${config.endpoint}/v1/chat/completions`;
+  const url = `${trimTrailingSlash(config.endpoint)}/v1/chat/completions`;
 
   return async (request: LLMRequest, signal: AbortSignal): Promise<LLMResponse> => {
     const response = await fetch(url, {
@@ -223,6 +248,73 @@ export function createOpenAITransport(config: OpenAITransportConfig): LLMTranspo
 
     if (!response.ok) {
       throw new Error(`OpenAI-compatible LLM error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<LLMResponse>;
+  };
+}
+
+function createDefaultAzureOpenAITokenProvider(): AzureOpenAITokenProvider {
+  const credential = new DefaultAzureCredential();
+
+  return async () => {
+    const accessToken = await credential.getToken(AZURE_OPENAI_TOKEN_SCOPE);
+    if (!accessToken) {
+      throw new Error('Azure OpenAI token acquisition failed');
+    }
+    return {
+      token: accessToken.token,
+      expiresOnTimestamp: accessToken.expiresOnTimestamp,
+    };
+  };
+}
+
+/**
+ * Create an Azure OpenAI chat-completions transport using Entra bearer tokens.
+ * DefaultAzureCredential supports ACA managed identity in production and local
+ * developer credentials such as Azure CLI sign-in.
+ */
+export function createAzureOpenAITransport(config: AzureOpenAITransportConfig): LLMTransport {
+  const apiVersion = config.apiVersion ?? '2024-10-21';
+  const url = `${trimTrailingSlash(config.endpoint)}/openai/deployments/${encodeURIComponent(config.deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+  const tokenProvider = config.tokenProvider ?? createDefaultAzureOpenAITokenProvider();
+  let cachedToken: AzureOpenAIToken | undefined;
+  let refreshPromise: Promise<AzureOpenAIToken> | undefined;
+
+  async function getToken(): Promise<string> {
+    const now = Date.now();
+    if (cachedToken && cachedToken.expiresOnTimestamp - AZURE_TOKEN_REFRESH_MARGIN_MS > now) {
+      return cachedToken.token;
+    }
+
+    refreshPromise ??= tokenProvider().then((token) => {
+      cachedToken = token;
+      return token;
+    }).finally(() => {
+      refreshPromise = undefined;
+    });
+
+    return (await refreshPromise).token;
+  }
+
+  return async (request: LLMRequest, signal: AbortSignal): Promise<LLMResponse> => {
+    const token = await getToken();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        messages: request.messages,
+        max_tokens: request.max_tokens,
+        temperature: request.temperature,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Azure OpenAI LLM error: ${response.status} ${response.statusText}`);
     }
 
     return response.json() as Promise<LLMResponse>;

@@ -24,6 +24,14 @@ function createMockTransport(response: string = 'A dark chamber with water pooli
 
 describe('NarrationService factory integration', () => {
   beforeEach(() => {
+    delete process.env.LLM_PROVIDER;
+    delete process.env.OPENAI_LLM_ENDPOINT;
+    delete process.env.OPENAI_LLM_KEY;
+    delete process.env.OPENAI_LLM_MODEL;
+    delete process.env.AZURE_OPENAI_ENDPOINT;
+    delete process.env.AZURE_OPENAI_DEPLOYMENT;
+    delete process.env.AZURE_OPENAI_API_VERSION;
+    delete process.env.ENABLE_LLM_NARRATION;
     resetConfig();
   });
 
@@ -63,6 +71,39 @@ describe('NarrationService factory integration', () => {
     const config = getConfig();
     
     expect(config.openaiLLM?.model).toBe('gpt-4o');
+  });
+
+  it('selects Azure OpenAI token-auth provider without an API key', () => {
+    process.env.LLM_PROVIDER = 'azure';
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://ellmud-ai.openai.azure.com';
+    process.env.AZURE_OPENAI_DEPLOYMENT = 'gpt-4o-mini';
+    process.env.AZURE_OPENAI_API_VERSION = '2024-10-21';
+
+    resetConfig();
+    const config = getConfig();
+
+    expect(config.llmProvider).toBe('azure');
+    expect(config.azureOpenAILLM).toEqual({
+      endpoint: 'https://ellmud-ai.openai.azure.com',
+      deployment: 'gpt-4o-mini',
+      apiVersion: '2024-10-21',
+    });
+    expect(config.openaiLLM).toBeUndefined();
+
+    const service = createNarrationService();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((service as any).llmClient).toBeDefined();
+  });
+
+  it('auto-selects Azure OpenAI when endpoint and deployment are present with no OpenAI key', () => {
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://ellmud-ai.openai.azure.com';
+    process.env.AZURE_OPENAI_DEPLOYMENT = 'gpt-4o-mini';
+
+    resetConfig();
+    const config = getConfig();
+
+    expect(config.llmProvider).toBe('azure');
+    expect(config.azureOpenAILLM?.apiVersion).toBe('2024-10-21');
   });
 
   it('narrates with mock LLM transport', async () => {
@@ -173,6 +214,24 @@ describe('NarrationService factory integration', () => {
     const service = createNarrationService();
     
     // Service should be created without LLM client (null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((service as any).llmClient).toBeNull();
+  });
+
+  it('disables LLM narration when ENABLE_LLM_NARRATION=false even with Azure config', () => {
+    process.env.LLM_PROVIDER = 'azure';
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://ellmud-ai.openai.azure.com';
+    process.env.AZURE_OPENAI_DEPLOYMENT = 'gpt-4o-mini';
+    process.env.ENABLE_LLM_NARRATION = 'false';
+
+    resetConfig();
+    const config = getConfig();
+
+    expect(config.llmProvider).toBe('azure');
+    expect(config.azureOpenAILLM).toBeDefined();
+    expect(config.enableLLMNarration).toBe(false);
+
+    const service = createNarrationService();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((service as any).llmClient).toBeNull();
   });

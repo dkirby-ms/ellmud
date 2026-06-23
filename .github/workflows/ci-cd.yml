@@ -207,6 +207,35 @@ jobs:
             --server ${{ secrets.ACR_NAME }}.azurecr.io \
             --identity system
 
+      - name: Resolve Azure OpenAI endpoint
+        id: llm-config
+        run: |
+          set -euo pipefail
+
+          RG="${{ secrets.RESOURCE_GROUP }}"
+          AI_SERVICES_ACCOUNT="ellmud-${{ github.ref_name }}-ai-services"
+
+          ENDPOINT=$(az deployment group list \
+            --resource-group "$RG" \
+            --query "[?properties.outputs.aiServicesEndpoint.value != null] | sort_by(@, &properties.timestamp)[-1].properties.outputs.aiServicesEndpoint.value" \
+            -o tsv)
+
+          if [ -z "$ENDPOINT" ]; then
+            ENDPOINT=$(az cognitiveservices account show \
+              --name "$AI_SERVICES_ACCOUNT" \
+              --resource-group "$RG" \
+              --query properties.endpoint \
+              -o tsv)
+          fi
+
+          if [ -z "$ENDPOINT" ]; then
+            echo "✗ Could not resolve Azure OpenAI endpoint from deployment outputs or $AI_SERVICES_ACCOUNT."
+            exit 1
+          fi
+
+          echo "azure_openai_endpoint=$ENDPOINT" >> "$GITHUB_OUTPUT"
+          echo "Resolved Azure OpenAI endpoint from Bicep deployment output/resource metadata."
+
       - name: Deploy to Container App
         run: |
           set -euo pipefail
@@ -240,9 +269,10 @@ jobs:
               "REDIS_PRESENCE_ENABLED=true" \
               "REDIS_CACHE_ENABLED=true" \
               "REDIS_DRIVER_ENABLED=true" \
-              "OPENAI_LLM_ENDPOINT=${{ secrets.OPENAI_LLM_ENDPOINT }}" \
-              "OPENAI_LLM_KEY=${{ secrets.OPENAI_LLM_KEY }}" \
-              "OPENAI_LLM_MODEL=${{ secrets.OPENAI_LLM_MODEL }}" \
+              "LLM_PROVIDER=azure" \
+              "AZURE_OPENAI_ENDPOINT=${{ steps.llm-config.outputs.azure_openai_endpoint }}" \
+              "AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini" \
+              "AZURE_OPENAI_API_VERSION=2024-10-21" \
               "ENABLE_LLM_NARRATION=true" \
             --container-name ellmud \
             --command "node" "packages/server/dist/index.js"
