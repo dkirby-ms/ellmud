@@ -185,3 +185,7 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 - Re-enabled the `aiFoundry` module block and `output aiServicesEndpoint` in `infra/main.bicep` on branch `squad/509-provision-ai-foundry-endpoint`; PR #525 is open against `dev` and closes issue #509.
 - Verified with `az bicep build --file infra/main.bicep`; what-if was skipped because Azure CLI was unauthenticated.
 - Deferred `aiServicesEndpoint` → `openaiLlmEndpoint` Container App wiring until the Azure auth/key/managed-identity decision is settled.
+
+### 2026-06-23T11:22:00Z: ACA placeholder rollback and Redis bind guards
+
+- PR #527 commits `6c262586` and `b4bfbc7` preserve live ACR images, reject placeholder rollback targets, extend ACA revision monitoring, keep Redis flags enabled, and fail deploy/rollback if the ACA Redis service bind is missing.

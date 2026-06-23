@@ -58,3 +58,7 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 
 - Khelben PR #525 re-enables AI Foundry provisioning in `infra/main.bicep` and restores the `aiServicesEndpoint` stack output for issue #509.
 - This is relevant to Volo's LLM provider wiring: the endpoint can now exist from infra, but Container App auth/env wiring is still deferred pending the Azure auth decision.
+
+### 2026-06-23T11:22:00Z: Redis-resilient narration cache
+
+- Narration cache Redis is now enabled but non-blocking: server boot and `/health` remain resilient while Redis connects/retries in the background. Relevant for future LLM narration cache work.

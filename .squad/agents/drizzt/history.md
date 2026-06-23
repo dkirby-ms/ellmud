@@ -72,3 +72,8 @@ Key paths repeatedly touched or referenced: `packages/server/src/index.ts`, `pac
 ---
 
 _Last summarized by Scribe on 2026-06-21T16:37:39Z._
+
+### 2026-06-23T11:22:00Z: Redis non-blocking boot
+
+- Made Redis cache, presence, and driver connect asynchronously so HTTP/Colyseus bind promptly and `/health` stays 200 during Redis cold start.
+- Commit `520b575` supports PR #527 and preserves Redis-enabled deploys.
