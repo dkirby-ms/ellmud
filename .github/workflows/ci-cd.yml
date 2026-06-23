@@ -209,12 +209,20 @@ jobs:
 
       - name: Deploy to Container App
         run: |
+          set -euo pipefail
+
+          APP="${{ secrets.CONTAINER_APP_NAME }}"
+          RG="${{ secrets.RESOURCE_GROUP }}"
+
           # Setting --command fully replaces the Bicep bootstrap entrypoint.
           # The command array ["node", "packages/server/dist/index.js"] specifies
           # the complete execution, no args needed.
+          # The Redis service bind is owned by Bicep; az containerapp update
+          # should preserve properties.template.serviceBinds, and we verify it
+          # immediately after creating the new revision.
           az containerapp update \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --name "$APP" \
+            --resource-group "$RG" \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ env.BUILD_SHA }} \
             --set-env-vars \
               "NODE_ENV=production" \
@@ -229,15 +237,27 @@ jobs:
               "AUTH_REQUIRED=true" \
               "ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }}" \
               "DEV_MODE_ENABLED=false" \
-              "REDIS_PRESENCE_ENABLED=false" \
-              "REDIS_CACHE_ENABLED=false" \
-              "REDIS_DRIVER_ENABLED=false" \
+              "REDIS_PRESENCE_ENABLED=true" \
+              "REDIS_CACHE_ENABLED=true" \
+              "REDIS_DRIVER_ENABLED=true" \
               "OPENAI_LLM_ENDPOINT=${{ secrets.OPENAI_LLM_ENDPOINT }}" \
               "OPENAI_LLM_KEY=${{ secrets.OPENAI_LLM_KEY }}" \
               "OPENAI_LLM_MODEL=${{ secrets.OPENAI_LLM_MODEL }}" \
               "ENABLE_LLM_NARRATION=true" \
             --container-name ellmud \
             --command "node" "packages/server/dist/index.js"
+
+          REDIS_BIND_COUNT=$(az containerapp show \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "length(properties.template.serviceBinds[?name=='redis'] || \`[]\`)" -o tsv)
+          if [ "${REDIS_BIND_COUNT:-0}" -lt 1 ]; then
+            echo "✗ Redis service bind is missing after az containerapp update."
+            echo "Expected verification command: az containerapp show --name \"$APP\" --resource-group \"$RG\" --query properties.template.serviceBinds -o json"
+            echo "Re-run infra/deploy.sh to restore the Bicep-owned Redis service bind before deploying."
+            exit 1
+          fi
+          echo "✓ Redis service bind preserved after az containerapp update."
 
       - name: Update ingress target port
         run: |
@@ -539,6 +559,15 @@ jobs:
               --image "$PREVIOUS_IMAGE" \
               --container-name ellmud \
               --command "node" "packages/server/dist/index.js"
+            REDIS_BIND_COUNT=$(az_retry 5 az containerapp show \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --query "length(properties.template.serviceBinds[?name=='redis'] || \`[]\`)" -o tsv || echo 0)
+            if [ "${REDIS_BIND_COUNT:-0}" -lt 1 ]; then
+              echo "✗ Redis service bind is missing after rollback update."
+              echo "Expected verification command: az containerapp show --name \"$APP\" --resource-group \"$RG\" --query properties.template.serviceBinds -o json"
+              exit 1
+            fi
             az_retry 5 az containerapp ingress update \
               --name "$APP" \
               --resource-group "$RG" \
