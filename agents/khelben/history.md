@@ -1,1 +1,0 @@
-- 2026-06-20T13:59:31Z: Adopted resource group pattern `RESOURCE_GROUP="${1:-${RESOURCE_GROUP:-rg-ellmud}}"` so infra scripts read `RESOURCE_GROUP` with generic fallback `rg-ellmud`.

@@ -70,8 +70,8 @@ param adminToken string = ''
 @description('Require authentication to join rooms (true for production)')
 param authRequired string = 'true'
 
-@description('Container image to run (defaults to bootstrap placeholder until CI/CD deploys the real image)')
-param containerImage string = 'node:22-alpine'
+@description('Container image to run. Required so brownfield infra redeploys cannot silently reset ACA to the bootstrap placeholder.')
+param containerImage string
 
 @description('Container command array (defaults to the bootstrap placeholder entrypoint)')
 param containerCommand array = [
@@ -193,15 +193,14 @@ module grafana 'modules/grafana.bicep' = {
 }
 
 // 8. AI Foundry — GPT-4o-mini serverless endpoint
-// AI Foundry disabled — using external OpenAI endpoint instead
-// module aiFoundry 'modules/ai-foundry.bicep' = {
-//   name: 'ai-foundry'
-//   params: {
-//     resourcePrefix: resourcePrefix
-//     location: location
-//     tags: tags
-//   }
-// }
+module aiFoundry 'modules/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  params: {
+    resourcePrefix: resourcePrefix
+    location: location
+    tags: tags
+  }
+}
 
 // ─── RBAC: Container App → ACR Pull ─────────────────────────────────────────
 
@@ -238,5 +237,5 @@ output grafanaName string = grafana.outputs.grafanaName
 output grafanaEndpoint string = grafana.outputs.grafanaEndpoint
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
-// output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
+output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

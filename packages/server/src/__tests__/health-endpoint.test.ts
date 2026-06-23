@@ -16,7 +16,12 @@ describe('Health Endpoint', () => {
     if (server) server.close();
   });
 
-  async function createApp(deps?: { isCacheRedis?: boolean; isPresenceRedis?: boolean }): Promise<{ port: number; app: express.Express }> {
+  async function createApp(deps?: {
+    isCacheRedis?: boolean;
+    isPresenceRedis?: boolean;
+    cacheStatus?: () => string;
+    presenceStatus?: () => string;
+  }): Promise<{ port: number; app: express.Express }> {
     const app = express();
     app.use(createHealthRouter(deps));
     server = app.listen(0);
@@ -94,5 +99,19 @@ describe('Health Endpoint', () => {
 
     expect(body.redis.cache).toBe('redis');
     expect(body.redis.presence).toBe('redis');
+  });
+
+  it('reports dynamic Redis status without affecting health status', async () => {
+    const { port } = await createApp({
+      cacheStatus: () => 'redis-connecting',
+      presenceStatus: () => 'redis-reconnecting',
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const body = await res.json() as { status: string; redis: { cache: string; presence: string } };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.redis.cache).toBe('redis-connecting');
+    expect(body.redis.presence).toBe('redis-reconnecting');
   });
 });

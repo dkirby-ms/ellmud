@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LocalPresence } from '@colyseus/core';
 import { createPresence } from '../cache/redis-presence.js';
+import { NonBlockingRedisPresence } from '../cache/nonblocking-redis-presence.js';
 import { loadConfig, resetConfig } from '../config.js';
 
 describe('createPresence', () => {
@@ -46,17 +47,17 @@ describe('createPresence', () => {
     expect(presence).toBeInstanceOf(LocalPresence);
   });
 
-  it('attempts RedisPresence when redis.enabled is true', async () => {
+  it('returns non-blocking Redis presence when redis.enabled is true', async () => {
     process.env['REDIS_PRESENCE_ENABLED'] = 'true';
     process.env['REDIS_CONNECTION_STRING'] = 'redis://localhost:6379';
     const config = loadConfig();
 
-    // This will either connect (if Redis is running) or fall back.
-    // We just verify the factory doesn't throw.
-    const { presence } = await createPresence(config);
+    const { presence, isRedis, getStatus } = await createPresence(config);
+    expect(isRedis).toBe(true);
     expect(presence).toBeDefined();
+    expect(presence).toBeInstanceOf(NonBlockingRedisPresence);
+    expect(getStatus()).toMatch(/^redis-/);
 
-    // Clean up — if RedisPresence was created, shut it down
     if ('shutdown' in presence && typeof presence.shutdown === 'function') {
       presence.shutdown();
     }
