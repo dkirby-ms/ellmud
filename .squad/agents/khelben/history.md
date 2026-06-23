@@ -178,3 +178,10 @@ Test timeouts should account for CI runner variance. When tests rely on async op
 - `infra/modules/postgres.bicep` should keep the Flexible Server on the public-access path and retain the `AllowAzureServices` firewall rule so Managed Grafana can reach the server over the public endpoint.
 - `docs/deployment.md` is the operator-facing place to document the split: Bicep deploys the workspace, Azure CLI finishes the PostgreSQL datasource with credentials supplied from environment variables rather than committed secrets.
 
+
+
+### 2026-06-23T08:07:33-05:00: Issue #509 AI Foundry endpoint provisioning
+
+- Re-enabled the `aiFoundry` module block and `output aiServicesEndpoint` in `infra/main.bicep` on branch `squad/509-provision-ai-foundry-endpoint`; PR #525 is open against `dev` and closes issue #509.
+- Verified with `az bicep build --file infra/main.bicep`; what-if was skipped because Azure CLI was unauthenticated.
+- Deferred `aiServicesEndpoint` → `openaiLlmEndpoint` Container App wiring until the Azure auth/key/managed-identity decision is settled.
