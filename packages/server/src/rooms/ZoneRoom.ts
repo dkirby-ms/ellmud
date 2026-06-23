@@ -1252,6 +1252,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
+    const roomDescriptionFallback = this.getRoomDescriptionNarrationFallback(verb, args, ctx, result);
 
     // Creature assist: if player attacked a creature, check for assisting creatures.
     // Use direct currentTarget lookup instead of iterating creatures (O(1), correct
@@ -1469,6 +1470,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverResult(client, result);
     }
 
+    if (roomDescriptionFallback) {
+      this.generateNarration('room_description', playerId, player.currentRoomId, roomDescriptionFallback)
+        .then((text) => {
+          this.sendNarrate(client, {
+            text,
+            type: 'room',
+            timestamp: Date.now(),
+          });
+        })
+        .catch((err) => {
+          this.log(`Room description narration error: ${err}`);
+        });
+    }
+
     // Send deferred follower arrival notifications AFTER the leader's room description
     if (pendingFollowerArrivals) {
       for (const followerName of pendingFollowerArrivals) {
@@ -1588,6 +1603,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       groupManager: this.groupManager,
       playerEffectiveStats: this.playerStatsCache.get(player.sessionId),
     };
+  }
+
+  private getRoomDescriptionNarrationFallback(
+    verb: string,
+    args: string[],
+    ctx: CommandContext,
+    result: import('../commands/index.js').CommandResult,
+  ): string | undefined {
+    if (verb !== 'look' || args.length !== 0 || ctx.room.illumination === 'dark') {
+      return undefined;
+    }
+
+    const roomNarration = result.narrations.find((narration) => narration.type === 'room');
+    return roomNarration?.text;
   }
 
   private deliverResult(client: Client, result: import('../commands/index.js').CommandResult): void {
