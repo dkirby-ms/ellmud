@@ -28,7 +28,8 @@ import { createVersionRouter } from './api/version.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter, initAdminAuth } from './admin/index.js';
 import { getConfig, LOAD_SIMULATOR_DEFAULT_TARGET_CONNECTIONS, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
-import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
+import { createNarrationCache, createPresence, NonBlockingRedisDriver } from './cache/index.js';
+import type { MatchMakerDriver } from '@colyseus/core/matchmaker/driver';
 import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
 import { initInventoryProvider } from './inventory/index.js';
 import { initProfileProvider } from './player/index.js';
@@ -162,7 +163,7 @@ if (USE_PG) {
 }
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
-const { presence, isRedis: isPresenceRedis } = await createPresence(config);
+const { presence, isRedis: isPresenceRedis, getStatus: getPresenceStatus } = await createPresence(config);
 
 const app = express();
 app.use(express.json());
@@ -248,7 +249,16 @@ console.log('[Ellmud] User Settings API: enabled');
 app.use(createVersionRouter());
 
 // Mount health check endpoint — includes Redis + persistence status
-app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
+app.use(createHealthRouter({
+  isCacheRedis,
+  isPresenceRedis,
+  cacheStatus: () => {
+    if (!isCacheRedis) return 'in-memory';
+    return 'connected' in narrationCache && narrationCache.connected ? 'redis-connected' : 'redis-connecting';
+  },
+  presenceStatus: getPresenceStatus,
+  isStashPg: isStashPg(),
+}));
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, diagnostics dashboard at /monitor
@@ -367,24 +377,14 @@ const httpServer = http.createServer(app);
 // ─── Matchmaker Driver Setup ────────────────────────────────────────────────
 // When Redis driver is enabled, use RedisDriver for matchmaker coordination
 // across replicas. Otherwise, use default local driver (single replica only).
-let driver = undefined;
+let driver: MatchMakerDriver | undefined = undefined;
 let isDriverRedis = false;
 if (config.redis.driverEnabled && config.redis.enabled) {
-  // Pre-validate Redis before constructing RedisDriver — the Colyseus
-  // package emits unhandled ioredis `error` events on connection failure.
-  const driverProbe = await testRedisConnection(config.redis.connectionString);
-  if (!driverProbe.reachable) {
-    console.warn('[Ellmud] Redis unreachable — using local matchmaker driver:', driverProbe.error);
-  } else {
-    try {
-      const { RedisDriver } = await import('@colyseus/redis-driver');
-      driver = new RedisDriver(config.redis.connectionString);
-      isDriverRedis = true;
-      console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
-    } catch (err) {
-      console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
-    }
-  }
+  const redisDriver = new NonBlockingRedisDriver(config.redis.connectionString);
+  redisDriver.start();
+  driver = redisDriver;
+  isDriverRedis = true;
+  console.log('[Ellmud] Matchmaker driver: Redis enabled (non-blocking startup)');
 }
 
 const [{ Server }, { WebSocketTransport }] = await Promise.all([
