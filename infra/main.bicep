@@ -50,15 +50,11 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects')
 param clientUrl string = ''
 
-@description('OpenAI-compatible LLM endpoint URL (OpenAI, Azure OpenAI, LM Studio, etc.)')
-param openaiLlmEndpoint string = ''
+@description('Azure OpenAI / AI Foundry deployment name for LLM narration')
+param azureOpenAiDeployment string = 'gpt-4o-mini'
 
-@secure()
-@description('OpenAI-compatible LLM API key')
-param openaiLlmKey string = ''
-
-@description('OpenAI-compatible LLM model name')
-param openaiLlmModel string = 'gpt-4o'
+@description('Azure OpenAI API version for LLM narration')
+param azureOpenAiApiVersion string = '2024-10-21'
 
 @description('Enable LLM narration (false = template-only mode)')
 param enableLlmNarration string = 'true'
@@ -142,10 +138,20 @@ module containerAppsEnv 'modules/container-apps.bicep' = {
   }
 }
 
-// 5. Redis — deployed as ACA dev service (add-on) inside container-apps module
+// 5. AI Foundry — GPT-4o-mini serverless endpoint
+module aiFoundry 'modules/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  params: {
+    resourcePrefix: resourcePrefix
+    location: location
+    tags: tags
+  }
+}
+
+// 6. Redis — deployed as ACA dev service (add-on) inside container-apps module
 // Created automatically when redisServiceName is provided to the app module.
 
-// 6. Container Apps Game Server (reuses existing environment, deploys the app)
+// 7. Container Apps Game Server (reuses existing environment, deploys the app)
 module containerAppsApp 'modules/container-apps.bicep' = {
   name: 'container-apps-app'
   params: {
@@ -170,16 +176,16 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     entraRedirectUri: entraRedirectUri
     allowLocalAuth: allowLocalAuth
     clientUrl: clientUrl
-    openaiLlmEndpoint: openaiLlmEndpoint
-    openaiLlmKey: openaiLlmKey
-    openaiLlmModel: openaiLlmModel
+    azureOpenAiEndpoint: aiFoundry.outputs.aiServicesEndpoint
+    azureOpenAiDeployment: azureOpenAiDeployment
+    azureOpenAiApiVersion: azureOpenAiApiVersion
     enableLlmNarration: enableLlmNarration
     adminToken: adminToken
     authRequired: authRequired
   }
 }
 
-// 7. Managed Grafana — reads Azure Monitor/App Insights data via managed identity
+// 8. Managed Grafana — reads Azure Monitor/App Insights data via managed identity
 module grafana 'modules/grafana.bicep' = {
   name: 'grafana'
   params: {
@@ -190,16 +196,6 @@ module grafana 'modules/grafana.bicep' = {
   dependsOn: [
     containerAppsApp
   ]
-}
-
-// 8. AI Foundry — GPT-4o-mini serverless endpoint
-module aiFoundry 'modules/ai-foundry.bicep' = {
-  name: 'ai-foundry'
-  params: {
-    resourcePrefix: resourcePrefix
-    location: location
-    tags: tags
-  }
 }
 
 // ─── RBAC: Container App → ACR Pull ─────────────────────────────────────────
